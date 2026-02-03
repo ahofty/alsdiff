@@ -147,6 +147,11 @@
  (modules test_detail_config_json utils)
  (libraries alsdiff_output alcotest))
 
+(test
+ (name test_flowchart_groups)
+ (modules test_flowchart_groups utils)
+ (libraries alsdiff_output alcotest))
+
 ;; Test needing all three libraries
 (test
  (name test_view_model)

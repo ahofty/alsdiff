@@ -4,7 +4,8 @@
  (modules
    view_model
    config
-   text_renderer)
+   text_renderer
+   flowchart)
  (libraries
    alsdiff_base
    alsdiff_live
