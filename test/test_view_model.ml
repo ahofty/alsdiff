@@ -1,6 +1,7 @@
 open Alcotest
 open Alsdiff_base.Diff
 open Alsdiff_live.Clip
+open Alsdiff_live.Device
 open Alsdiff_output.View_model
 
 (* ========== Helper Functions ========== *)
@@ -336,6 +337,193 @@ let test_create_audio_clip_item_added () =
    | _ -> fail "Expected Fstring for File Path")
 
 
+(* ========== DTPluginDesc Tests ========== *)
+
+(** Helper: Create a minimal GenericParam for testing *)
+let make_generic_param name value =
+  { GenericParam.name; value; automation = 0; modulation = 0; mapping = None }
+
+(** Helper: Create a minimal DeviceParam for testing *)
+let make_device_param name value =
+  { DeviceParam.base = make_generic_param name value }
+
+(** Helper: Create a minimal MixerDevice for testing *)
+let make_mixer_device () =
+  {
+    MixerDevice.on = make_device_param "On" (Bool true);
+    speaker = make_device_param "Speaker" (Bool true);
+    volume = make_device_param "Volume" (Float 0.8);
+    pan = make_device_param "Pan" (Float 0.0);
+  }
+
+let test_create_plugin_desc_fields_added () =
+  let desc = {
+    PluginDesc.name = "Serum";
+    uid = "12345-ABCDE";
+    plugin_type = PluginDesc.Vst3;
+    processor_state = "base64encodedstate";
+  } in
+
+  let fields = create_plugin_desc_fields Added desc in
+
+  (* Should return 4 fields: Name, UID, Type, Processor State *)
+  check int "Number of fields" 4 (List.length fields);
+
+  (* Check Name field *)
+  let name_field = get_field (find_view_by_name "Name" fields) in
+  check bool "Name field is Added" true (name_field.change = Added);
+  check bool "Name domain_type is DTPluginDesc" true (name_field.domain_type = DTPluginDesc);
+  (match name_field.newval with
+   | Some (Fstring s) -> check string "Plugin name" "Serum" s
+   | _ -> fail "Expected Fstring for Name");
+
+  (* Check UID field *)
+  let uid_field = get_field (find_view_by_name "UID" fields) in
+  check bool "UID domain_type is DTPluginDesc" true (uid_field.domain_type = DTPluginDesc);
+  (match uid_field.newval with
+   | Some (Fstring s) -> check string "Plugin UID" "12345-ABCDE" s
+   | _ -> fail "Expected Fstring for UID");
+
+  (* Check Type field *)
+  let type_field = get_field (find_view_by_name "Type" fields) in
+  check bool "Type domain_type is DTPluginDesc" true (type_field.domain_type = DTPluginDesc);
+  (match type_field.newval with
+   | Some (Fstring s) -> check string "Plugin type" "VST3" s
+   | _ -> fail "Expected Fstring for Type")
+
+
+let test_create_plugin_desc_fields_removed () =
+  let desc = {
+    PluginDesc.name = "Massive";
+    uid = "67890-FGHIJ";
+    plugin_type = PluginDesc.Vst2;
+    processor_state = "state";
+  } in
+
+  let fields = create_plugin_desc_fields Removed desc in
+
+  (* Check that fields have old values, not new values *)
+  let name_field = get_field (find_view_by_name "Name" fields) in
+  check bool "Name field is Removed" true (name_field.change = Removed);
+  (match name_field.oldval with
+   | Some (Fstring s) -> check string "Old plugin name" "Massive" s
+   | _ -> fail "Expected Fstring for old Name");
+  check bool "No new value" true (name_field.newval = None)
+
+
+let test_create_plugin_desc_patch_fields () =
+  let patch = {
+    PluginDesc.Patch.name = `Modified { oldval = "OldName"; newval = "NewName" };
+    uid = `Unchanged;
+    plugin_type = `Unchanged;
+    state = `Modified { oldval = "oldstate"; newval = "newstate" };
+  } in
+
+  let fields = create_plugin_desc_patch_fields patch in
+
+  (* Should only return modified fields (Name and Processor State) *)
+  check int "Number of modified fields" 2 (List.length fields);
+
+  (* Check Name field *)
+  let name_field = get_field (find_view_by_name "Name" fields) in
+  check bool "Name field is Modified" true (name_field.change = Modified);
+  check bool "Name domain_type is DTPluginDesc" true (name_field.domain_type = DTPluginDesc);
+  (match name_field.oldval, name_field.newval with
+   | Some (Fstring o), Some (Fstring n) ->
+     check string "Old name" "OldName" o;
+     check string "New name" "NewName" n
+   | _ -> fail "Expected Fstring for Name old/new values")
+
+
+(* ========== DTBranch Tests ========== *)
+
+let test_create_branch_item_added () =
+  let mixer = make_mixer_device () in
+  let branch : Branch.t = { id = 42; devices = []; mixer } in
+
+  let change = `Added branch in
+  let item = create_branch_item change in
+
+  (* Verify branch name format *)
+  check string "Branch name" "Branch #42" item.name;
+  check bool "Item is Added" true (item.change = Added);
+  check bool "Item domain_type is DTBranch" true (item.domain_type = DTBranch);
+
+  (* Check Mixer child exists *)
+  let mixer_item = get_item (find_view_by_name "Mixer" item.children) in
+  check bool "Mixer is Added" true (mixer_item.change = Added);
+  check bool "Mixer domain_type is DTMixer" true (mixer_item.domain_type = DTMixer);
+
+  (* Check Mixer has parameter children *)
+  check bool "Mixer has children" true (List.length mixer_item.children > 0);
+
+  (* Check On parameter exists in mixer *)
+  let on_item = get_item (find_view_by_name "On" mixer_item.children) in
+  check bool "On item is Added" true (on_item.change = Added)
+
+
+let test_create_branch_item_removed () =
+  let mixer = make_mixer_device () in
+  let branch : Branch.t = { id = 7; devices = []; mixer } in
+
+  let change = `Removed branch in
+  let item = create_branch_item change in
+
+  check string "Branch name" "Branch #7" item.name;
+  check bool "Item is Removed" true (item.change = Removed);
+  check bool "Item domain_type is DTBranch" true (item.domain_type = DTBranch)
+
+
+let test_create_branch_item_modified () =
+  (* Create a modified branch patch with volume change *)
+  let volume_gp_patch = {
+    GenericParam.Patch.name = "Volume";
+    value = `Modified { oldval = Float 0.5; newval = Float 0.8 };
+    automation = `Unchanged;
+    modulation = `Unchanged;
+  } in
+  let volume_dp_patch = { DeviceParam.Patch.base = `Modified volume_gp_patch } in
+
+  let mixer_patch = {
+    MixerDevice.Patch.on = `Unchanged;
+    speaker = `Unchanged;
+    volume = `Modified volume_dp_patch;
+    pan = `Unchanged;
+  } in
+
+  let branch_patch : Branch.Patch.t = {
+    id = 99;
+    devices = [];
+    mixer = `Modified mixer_patch;
+  } in
+
+  let change = `Modified branch_patch in
+  let item = create_branch_item change in
+
+  (* Verify branch name uses the id from patch *)
+  check string "Branch name" "Branch #99" item.name;
+  check bool "Item is Modified" true (item.change = Modified);
+  check bool "Item domain_type is DTBranch" true (item.domain_type = DTBranch);
+
+  (* Check Mixer child exists and is modified *)
+  let mixer_item = get_item (find_view_by_name "Mixer" item.children) in
+  check bool "Mixer is Modified" true (mixer_item.change = Modified);
+
+  (* Check Volume section exists within Mixer (this tests the fix for Issue 1) *)
+  let volume_item = get_item (find_view_by_name "Volume" mixer_item.children) in
+  check bool "Volume is Modified" true (volume_item.change = Modified);
+  check bool "Volume domain_type is DTMixer" true (volume_item.domain_type = DTMixer);
+
+  (* Check that Volume has the Value field *)
+  let value_field = get_field (find_view_by_name "Value" volume_item.children) in
+  check bool "Value field is Modified" true (value_field.change = Modified);
+  (match value_field.oldval, value_field.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "Old volume" 0.5 o;
+     check (float 0.001) "New volume" 0.8 n
+   | _ -> fail "Expected Ffloat for Volume old/new values")
+
+
 let () =
   run "ViewModel" [
     "ViewBuilder.change_type_of", [
@@ -358,5 +546,15 @@ let () =
     ];
     "create_audio_clip_item", [
       test_case "Create item for Added clip" `Quick test_create_audio_clip_item_added;
+    ];
+    "create_plugin_desc_fields (DTPluginDesc)", [
+      test_case "Create fields for Added plugin desc" `Quick test_create_plugin_desc_fields_added;
+      test_case "Create fields for Removed plugin desc" `Quick test_create_plugin_desc_fields_removed;
+      test_case "Create fields from patch" `Quick test_create_plugin_desc_patch_fields;
+    ];
+    "create_branch_item (DTBranch)", [
+      test_case "Create branch item for Added" `Quick test_create_branch_item_added;
+      test_case "Create branch item for Removed" `Quick test_create_branch_item_removed;
+      test_case "Create branch item for Modified" `Quick test_create_branch_item_modified;
     ];
   ]

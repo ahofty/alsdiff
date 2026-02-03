@@ -1086,7 +1086,7 @@ and max4live_device_patch = {
 }
 
 and branch_patch = {
-  id : int atomic_update;
+  id : int;                    (* immutable identity *)
   devices : (device, device_patch) structured_change list;
   mixer : MixerDevice.Patch.t structured_update;
 }
@@ -1213,7 +1213,6 @@ and  branch_diff (old_branch : branch) (new_branch : branch) =
   if old_branch.id <> new_branch.id then
     failwith (Printf.sprintf "Cannot diff two Branches with different Ids: %d vs %d" old_branch.id new_branch.id)
   else
-    let id_change = `Unchanged in (* IDs must be the same *)
     (* Minimal delegation module to avoid circular dependencies *)
     let module DeviceId = struct
       type t = device
@@ -1257,7 +1256,7 @@ and  branch_diff (old_branch : branch) (new_branch : branch) =
     in
     let mixer_change = diff_complex_value_id (module MixerDevice) old_branch.mixer new_branch.mixer in
     {
-      id = id_change;
+      id = new_branch.id;
       devices = devices_changes;
       mixer = mixer_change;
     }
@@ -1610,7 +1609,7 @@ and is_unchanged_device_change = function
   | `Modified p -> device_patch_is_empty p
 
 and branch_patch_is_empty (p : branch_patch) =
-  is_unchanged_atomic_update p.id &&
+  (* id is immutable identity, no need to check *)
   is_unchanged_update (module MixerDevice.Patch) p.mixer &&
   List.for_all is_unchanged_device_change p.devices
 

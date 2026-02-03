@@ -80,6 +80,10 @@ type domain_type =
   | DTSignature
   | DTSampleRef
   | DTVersion
+  | DTBranch        (* Rack chain branches in GroupDevice *)
+  | DTPluginDesc    (* Plugin description (name, UID, type, state) *)
+  | DTMidiMapping   (* MIDI CC/Macro mappings *)
+  | DTPointee       (* Automation target resolution *)
   | DTOther
 [@@deriving yojson, jsonschema]
 
@@ -1295,28 +1299,28 @@ let create_plugin_desc_fields
     Field {
       name = "Name";
       change = change_type;
-      domain_type = DTDevice;
+      domain_type = DTPluginDesc;
       oldval = if change_type = Removed || change_type = Unchanged then Some (Fstring desc.name) else None;
       newval = if change_type = Added || change_type = Unchanged then Some (Fstring desc.name) else None;
     };
     Field {
       name = "UID";
       change = change_type;
-      domain_type = DTDevice;
+      domain_type = DTPluginDesc;
       oldval = if change_type = Removed || change_type = Unchanged then Some (Fstring desc.uid) else None;
       newval = if change_type = Added || change_type = Unchanged then Some (Fstring desc.uid) else None;
     };
     Field {
       name = "Type";
       change = change_type;
-      domain_type = DTDevice;
+      domain_type = DTPluginDesc;
       oldval = if change_type = Removed || change_type = Unchanged then Some (Fstring (Device.PluginDesc.plugin_type_to_string desc.plugin_type)) else None;
       newval = if change_type = Added || change_type = Unchanged then Some (Fstring (Device.PluginDesc.plugin_type_to_string desc.plugin_type)) else None;
     };
     Field {
       name = "Processor State";
       change = change_type;
-      domain_type = DTDevice;
+      domain_type = DTPluginDesc;
       oldval = if change_type = Removed || change_type = Unchanged then Some (Fstring "<state>") else None;
       newval = if change_type = Added || change_type = Unchanged then Some (Fstring "<state>") else None;
     };
@@ -1326,25 +1330,25 @@ let create_plugin_desc_patch_fields (patch : Device.PluginDesc.Patch.t) : view l
   let name_field = atomic_update_to_field_view
       ~name:"Name"
       ~wrapper:string_value
-      ~domain_type:DTDevice
+      ~domain_type:DTPluginDesc
       patch.name
   in
   let uid_field = atomic_update_to_field_view
       ~name:"UID"
       ~wrapper:string_value
-      ~domain_type:DTDevice
+      ~domain_type:DTPluginDesc
       patch.uid
   in
   let plugin_type_field = atomic_update_to_field_view
       ~name:"Type"
       ~wrapper:(fun pt -> Fstring (Device.PluginDesc.plugin_type_to_string pt))
-      ~domain_type:DTDevice
+      ~domain_type:DTPluginDesc
       patch.plugin_type
   in
   let state_field = atomic_update_to_field_view
       ~name:"Processor State"
       ~wrapper:(fun _ -> Fstring "<state>")
-      ~domain_type:DTDevice
+      ~domain_type:DTPluginDesc
       patch.state
   in
   List.filter_map Fun.id [name_field; uid_field; plugin_type_field; state_field]
@@ -1404,7 +1408,7 @@ let create_plugin_device_item
       ~of_patch:(fun (p : Device.PluginDevice.Patch.t) -> p.desc)
       ~build_value_children:create_plugin_desc_fields
       ~build_patch_children:create_plugin_desc_patch_fields
-      ~domain_type:DTDevice
+      ~domain_type:DTPluginDesc
   in
 
   build_device_view
@@ -1510,6 +1514,104 @@ let create_max4live_device_item
     c
 
 
+(* ==================== Track View Helpers ==================== *)
+
+(** GenericParam field specifications using unified_field_spec system *)
+let generic_param_field_specs : (Device.GenericParam.t, Device.GenericParam.Patch.t) unified_field_spec list = [
+  { name = "Value";
+    get_value = (fun p -> param_value_to_field_value p.value);
+    get_patch = (fun p -> param_value_atomic_to_field_value p.value) };
+  { name = "Automation";
+    get_value = (fun p -> int_value p.automation);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.automation) };
+  { name = "Modulation";
+    get_value = (fun p -> int_value p.modulation);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.modulation) };
+]
+
+let create_generic_param_fields = build_value_field_views generic_param_field_specs ~domain_type:DTParam
+let create_generic_param_patch_fields = build_patch_field_views generic_param_field_specs ~domain_type:DTParam
+
+
+(** MixerDevice view helpers for Branch rendering *)
+let create_mixer_device_fields
+    (change_type : change_type)
+    (mixer : Device.MixerDevice.t)
+  : view list =
+  [
+    Item {
+      name = "On";
+      change = change_type;
+      domain_type = DTMixer;
+      children = create_generic_param_fields change_type mixer.on.base;
+    };
+    Item {
+      name = "Speaker";
+      change = change_type;
+      domain_type = DTMixer;
+      children = create_generic_param_fields change_type mixer.speaker.base;
+    };
+    Item {
+      name = "Volume";
+      change = change_type;
+      domain_type = DTMixer;
+      children = create_generic_param_fields change_type mixer.volume.base;
+    };
+    Item {
+      name = "Pan";
+      change = change_type;
+      domain_type = DTMixer;
+      children = create_generic_param_fields change_type mixer.pan.base;
+    };
+  ]
+
+let create_mixer_device_patch_fields (patch : Device.MixerDevice.Patch.t) : view list =
+  (* DeviceParam patches need special handling - base is a structured_update *)
+  let make_section name (param_update : Device.DeviceParam.Patch.t structured_update) =
+    match param_update with
+    | `Modified dp ->
+      (match dp.base with
+       | `Modified bp ->
+         let fields = create_generic_param_patch_fields bp in
+         if fields = [] then None
+         else Some (Item { name; change = Modified; domain_type = DTMixer; children = fields })
+       | `Unchanged -> None)
+    | `Unchanged -> None
+  in
+  [
+    make_section "On" patch.on;
+    make_section "Speaker" patch.speaker;
+    make_section "Volume" patch.volume;
+    make_section "Pan" patch.pan;
+  ]
+  |> List.filter_map Fun.id
+
+
+(** [create_branch_item] creates a [item] from a Branch structured change.
+    Note: Device rendering within branches requires type conversion that would
+    add significant complexity. For now, we render only the mixer.
+    TODO: Add nested device rendering if needed. *)
+let create_branch_item
+    (c : (Device.Branch.t, Device.Branch.Patch.t) structured_change)
+  : item =
+  (* Mixer config - this we can render easily *)
+  let mixer_config = Spec.child
+      ~name:"Mixer"
+      ~of_value:(fun (b : Device.Branch.t) -> b.mixer)
+      ~of_patch:(fun (p : Device.Branch.Patch.t) -> p.mixer)
+      ~build_value_children:create_mixer_device_fields
+      ~build_patch_children:create_mixer_device_patch_fields
+      ~domain_type:DTMixer
+  in
+  let branch_name = match c with
+    | `Added b -> Printf.sprintf "Branch #%d" b.id
+    | `Removed b -> Printf.sprintf "Branch #%d" b.id
+    | `Modified p -> Printf.sprintf "Branch #%d" p.id
+    | `Unchanged -> "Branch"
+  in
+  build_item_from_specs ~name:branch_name ~domain_type:DTBranch ~specs:[mixer_config] c
+
+
 (** [create_group_device_item] creates a [item] from a GroupDevice structured change (new type system). *)
 let create_group_device_item
     (c : (Device.GroupDevice.t, Device.GroupDevice.Patch.t) structured_change)
@@ -1531,6 +1633,14 @@ let create_group_device_item
       ~domain_type:DTSnapshot
   in
 
+  let branches_config = Spec.collection
+      ~name:"Branches"
+      ~of_value:(fun (d : Device.GroupDevice.t) -> d.branches)
+      ~of_patch:(fun (p : Device.GroupDevice.Patch.t) -> p.branches)
+      ~build_item:create_branch_item
+      ~domain_type:DTBranch
+  in
+
   build_device_view
     ~device_type_name:"GroupDevice"
     ~get_device_name:(fun (d : Device.GroupDevice.t) -> d.device_name)
@@ -1543,28 +1653,9 @@ let create_group_device_item
                             ~of_value:(fun (d : Device.GroupDevice.t) -> d.preset)
                             ~of_patch:(fun (p : Device.GroupDevice.Patch.t) -> p.preset)
                             ~domain_type:DTPreset))
-    ~custom_sections:[macros_config; snapshots_config]
+    ~custom_sections:[branches_config; macros_config; snapshots_config]
     ~domain_type:DTDevice
     c
-
-
-(* ==================== Track View Helpers ==================== *)
-
-(** GenericParam field specifications using unified_field_spec system *)
-let generic_param_field_specs : (Device.GenericParam.t, Device.GenericParam.Patch.t) unified_field_spec list = [
-  { name = "Value";
-    get_value = (fun p -> param_value_to_field_value p.value);
-    get_patch = (fun p -> param_value_atomic_to_field_value p.value) };
-  { name = "Automation";
-    get_value = (fun p -> int_value p.automation);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.automation) };
-  { name = "Modulation";
-    get_value = (fun p -> int_value p.modulation);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.modulation) };
-]
-
-let create_generic_param_fields = build_value_field_views generic_param_field_specs ~domain_type:DTParam
-let create_generic_param_patch_fields = build_patch_field_views generic_param_field_specs ~domain_type:DTParam
 
 
 (** Routing field specifications *)

@@ -684,6 +684,10 @@ let domain_type_to_string (dt : domain_type) : string =
   | DTSignature -> "Signature"
   | DTSampleRef -> "SampleRef"
   | DTVersion -> "Version"
+  | DTBranch -> "Branch"
+  | DTPluginDesc -> "PluginDesc"
+  | DTMidiMapping -> "MidiMapping"
+  | DTPointee -> "Pointee"
   | DTOther -> "Other"
 
 (* Validate config - check for suspicious patterns *)
