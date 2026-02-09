@@ -17,7 +17,8 @@ let test_identical_clips () =
   let is_empty =
     match patch with
     | { id = _; name = `Unchanged; start_time = `Unchanged; end_time = `Unchanged;
-        loop = `Unchanged; signature = `Unchanged; sample_ref = `Unchanged; fade = `Unchanged } -> true
+        loop = `Unchanged; signature = `Unchanged; sample_ref = `Unchanged; fade = `Unchanged;
+        warp_markers = [] } -> true
     | _ -> false
   in
   Alcotest.(check bool) "patch is empty" true is_empty

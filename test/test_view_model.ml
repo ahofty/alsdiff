@@ -309,6 +309,7 @@ let test_create_audio_clip_item_added () =
     signature;
     sample_ref;
     fade = None;
+    warp_markers = [];
   } in
 
   let change = `Added clip in

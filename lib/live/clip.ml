@@ -367,6 +367,45 @@ module Fade = struct
 end
 
 
+module WarpMarker = struct
+  type t = {
+    id : int;
+    sec_time : float;
+    beat_time : float;
+  } [@@deriving eq]
+
+  let has_same_id a b = a.id = b.id
+  let id_hash a = Hashtbl.hash a.id
+
+  let create (xml : Xml.t) : t =
+    match xml with
+    | Xml.Element { name = "WarpMarker"; _ } ->
+      let id = Xml.get_int_attr "Id" xml in
+      let sec_time = Xml.get_float_attr "SecTime" xml in
+      let beat_time = Xml.get_float_attr "BeatTime" xml in
+      { id; sec_time; beat_time }
+    | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating WarpMarker"))
+
+  module Patch = struct
+    type t = {
+      id : int;  (* The ID doesn't change, but we need it for display *)
+      sec_time : float atomic_update;
+      beat_time : float atomic_update;
+    }
+
+    let is_empty p =
+      is_unchanged_atomic_update p.sec_time &&
+      is_unchanged_atomic_update p.beat_time
+  end
+
+  let diff (old_marker : t) (new_marker : t) : Patch.t =
+    (* The id field is the same for both, just include it directly *)
+    let sec_time_change = diff_atomic_value (module Float) old_marker.sec_time new_marker.sec_time in
+    let beat_time_change = diff_atomic_value (module Float) old_marker.beat_time new_marker.beat_time in
+    { id = old_marker.id; sec_time = sec_time_change; beat_time = beat_time_change }
+end
+
+
 module AudioClip = struct
   (* TODO: support warp related settings *)
   type t = {
@@ -378,6 +417,7 @@ module AudioClip = struct
     signature : TimeSignature.t;
     sample_ref : SampleRef.t;
     fade : Fade.t option;
+    warp_markers : WarpMarker.t list;
   } [@@deriving eq]
 
   let create (xml : Xml.t) : t =
@@ -406,7 +446,14 @@ module AudioClip = struct
           None
       in
 
-      { id; name; start_time; end_time; loop; signature; sample_ref; fade }
+      (* Extract warp markers *)
+      let warp_markers = Upath.find_all_seq "/WarpMarkers/WarpMarker" xml
+        |> Seq.map snd
+        |> Seq.map WarpMarker.create
+        |> List.of_seq
+      in
+
+      { id; name; start_time; end_time; loop; signature; sample_ref; fade; warp_markers }
     | _ -> raise (Xml.Xml_error (xml, "Expected AudioClip element"))
 
   let has_same_id a b = a.id = b.id
@@ -414,6 +461,8 @@ module AudioClip = struct
 
 
   module Patch = struct
+    type warp_marker_change = (WarpMarker.t, WarpMarker.Patch.t) structured_change
+
     type t = {
       id : int;
       name : string atomic_update;
@@ -423,6 +472,7 @@ module AudioClip = struct
       signature : TimeSignature.Patch.t structured_update;
       sample_ref : SampleRef.Patch.t structured_update;
       fade : (Fade.t, Fade.Patch.t) structured_change;
+      warp_markers : warp_marker_change list;
     }
 
     let is_empty p =
@@ -432,13 +482,14 @@ module AudioClip = struct
       is_unchanged_update (module Loop.Patch) p.loop &&
       is_unchanged_update (module TimeSignature.Patch) p.signature &&
       is_unchanged_update (module SampleRef.Patch) p.sample_ref &&
-      is_unchanged_change (module Fade.Patch) p.fade
+      is_unchanged_change (module Fade.Patch) p.fade &&
+      List.for_all (is_unchanged_change (module WarpMarker.Patch)) p.warp_markers
   end
 
 
   let diff (old_clip : t) (new_clip : t) : Patch.t =
-    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade } = old_clip in
-    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; sample_ref = new_sample; fade = new_fade } = new_clip in
+    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade; warp_markers = old_markers } = old_clip in
+    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; sample_ref = new_sample; fade = new_fade; warp_markers = new_markers } = new_clip in
 
     (* Only compare clips with the same id *)
     if old_id <> new_id then
@@ -461,6 +512,12 @@ module AudioClip = struct
           if Fade.Patch.is_empty patch then `Unchanged else `Modified patch
       in
 
+      (* Handle warp markers diffing - use ID-based diff *)
+      let warp_markers_change =
+        diff_list_id (module WarpMarker) old_markers new_markers
+        |> filter_changes (module WarpMarker.Patch)
+      in
+
       {
         id = new_id;
         name = name_change;
@@ -470,5 +527,6 @@ module AudioClip = struct
         signature = signature_change;
         sample_ref = sample_ref_change;
         fade = fade_change;
+        warp_markers = warp_markers_change;
       }
 end

@@ -734,6 +734,28 @@ let create_note_item
   build_item_from_specs ~name:note_name ~domain_type:DTNote ~specs:[section_spec] c
 
 
+(** [create_warp_marker_item] builds a [item] for a warp marker change (new type system).
+    @param c the warp marker structured change
+*)
+let create_warp_marker_item
+    (c : (Clip.WarpMarker.t, Clip.WarpMarker.Patch.t) structured_change)
+  : item =
+  let open Clip.WarpMarker in
+  let specs = [
+    make_float "Sec Time" (fun (x : t) -> x.sec_time) (fun (x : Patch.t) -> x.sec_time);
+    make_float "Beat Time" (fun (x : t) -> x.beat_time) (fun (x : Patch.t) -> x.beat_time);
+  ]
+  in
+  let marker_name = match c with
+    | `Added m -> Printf.sprintf "WarpMarker %d" m.id
+    | `Removed m -> Printf.sprintf "WarpMarker %d" m.id
+    | `Modified p -> Printf.sprintf "WarpMarker %d" p.id
+    | `Unchanged -> "WarpMarker"
+  in
+  let section_spec = Spec.inline_fields ~specs ~domain_type:DTClip in
+  build_item_from_specs ~name:marker_name ~domain_type:DTClip ~specs:[section_spec] c
+
+
 (** SampleRef field specifications *)
 let sample_ref_field_specs : (Clip.SampleRef.t, Clip.SampleRef.Patch.t) unified_field_spec list = [
   make_string "File Path" (fun (sr : Clip.SampleRef.t) -> sr.file_path) (fun (p : Clip.SampleRef.Patch.t) -> p.file_path);
@@ -1168,6 +1190,11 @@ let audio_clip_section_specs : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) sectio
     ~of_patch:(fun (p : Clip.AudioClip.Patch.t) -> p.fade)
     ~build_value_children:create_fade_fields
     ~build_patch_children:create_fade_patch_fields
+    ~domain_type:DTClip;
+  Spec.collection ~name:"WarpMarkers"
+    ~of_value:(fun (c : Clip.AudioClip.t) -> c.warp_markers)
+    ~of_patch:(fun (p : Clip.AudioClip.Patch.t) -> p.warp_markers)
+    ~build_item:create_warp_marker_item
     ~domain_type:DTClip;
 ]
 
