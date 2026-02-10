@@ -406,8 +406,86 @@ module WarpMarker = struct
 end
 
 
+module WarpSettings = struct
+  type t = {
+    warp_mode : int;
+    granularity_tones : float;
+    granularity_texture : float;
+    fluctuation_texture : float;
+    transient_resolution : float;
+    transient_loop_mode : int;
+    transient_envelope : float;
+    complex_pro_formants : float;
+    complex_pro_envelope : float;
+  } [@@deriving eq]
+
+  let create (xml : Xml.t) : t =
+    (* WarpSettings elements are direct children of parent, no wrapper element *)
+    let warp_mode = Upath.get_int_attr "/WarpMode" "Value" xml in
+    let granularity_tones = Upath.get_float_attr "/GranularityTones" "Value" xml in
+    let granularity_texture = Upath.get_float_attr "/GranularityTexture" "Value" xml in
+    let fluctuation_texture = Upath.get_float_attr "/FluctuationTexture" "Value" xml in
+    let transient_resolution = Upath.get_float_attr "/TransientResolution" "Value" xml in
+    let transient_loop_mode = Upath.get_int_attr "/TransientLoopMode" "Value" xml in
+    let transient_envelope = Upath.get_float_attr "/TransientEnvelope" "Value" xml in
+    let complex_pro_formants = Upath.get_float_attr "/ComplexProFormants" "Value" xml in
+    let complex_pro_envelope = Upath.get_float_attr "/ComplexProEnvelope" "Value" xml in
+    {
+      warp_mode; granularity_tones; granularity_texture; fluctuation_texture;
+      transient_resolution; transient_loop_mode; transient_envelope;
+      complex_pro_formants; complex_pro_envelope;
+    }
+
+  module Patch = struct
+    type t = {
+      warp_mode : int atomic_update;
+      granularity_tones : float atomic_update;
+      granularity_texture : float atomic_update;
+      fluctuation_texture : float atomic_update;
+      transient_resolution : float atomic_update;
+      transient_loop_mode : int atomic_update;
+      transient_envelope : float atomic_update;
+      complex_pro_formants : float atomic_update;
+      complex_pro_envelope : float atomic_update;
+    }
+
+    let is_empty p =
+      is_unchanged_atomic_update p.warp_mode &&
+      is_unchanged_atomic_update p.granularity_tones &&
+      is_unchanged_atomic_update p.granularity_texture &&
+      is_unchanged_atomic_update p.fluctuation_texture &&
+      is_unchanged_atomic_update p.transient_resolution &&
+      is_unchanged_atomic_update p.transient_loop_mode &&
+      is_unchanged_atomic_update p.transient_envelope &&
+      is_unchanged_atomic_update p.complex_pro_formants &&
+      is_unchanged_atomic_update p.complex_pro_envelope
+  end
+
+  let diff (old_settings : t) (new_settings : t) : Patch.t =
+    let warp_mode_change = diff_atomic_value (module Int) old_settings.warp_mode new_settings.warp_mode in
+    let granularity_tones_change = diff_atomic_value (module Float) old_settings.granularity_tones new_settings.granularity_tones in
+    let granularity_texture_change = diff_atomic_value (module Float) old_settings.granularity_texture new_settings.granularity_texture in
+    let fluctuation_texture_change = diff_atomic_value (module Float) old_settings.fluctuation_texture new_settings.fluctuation_texture in
+    let transient_resolution_change = diff_atomic_value (module Float) old_settings.transient_resolution new_settings.transient_resolution in
+    let transient_loop_mode_change = diff_atomic_value (module Int) old_settings.transient_loop_mode new_settings.transient_loop_mode in
+    let transient_envelope_change = diff_atomic_value (module Float) old_settings.transient_envelope new_settings.transient_envelope in
+    let complex_pro_formants_change = diff_atomic_value (module Float) old_settings.complex_pro_formants new_settings.complex_pro_formants in
+    let complex_pro_envelope_change = diff_atomic_value (module Float) old_settings.complex_pro_envelope new_settings.complex_pro_envelope in
+    {
+      warp_mode = warp_mode_change;
+      granularity_tones = granularity_tones_change;
+      granularity_texture = granularity_texture_change;
+      fluctuation_texture = fluctuation_texture_change;
+      transient_resolution = transient_resolution_change;
+      transient_loop_mode = transient_loop_mode_change;
+      transient_envelope = transient_envelope_change;
+      complex_pro_formants = complex_pro_formants_change;
+      complex_pro_envelope = complex_pro_envelope_change;
+    }
+end
+
+
 module AudioClip = struct
-  (* TODO: support warp related settings *)
   type t = {
     id : int;
     name : string;
@@ -418,6 +496,7 @@ module AudioClip = struct
     sample_ref : SampleRef.t;
     fade : Fade.t option;
     warp_markers : WarpMarker.t list;
+    warp_settings : WarpSettings.t;
   } [@@deriving eq]
 
   let create (xml : Xml.t) : t =
@@ -453,7 +532,10 @@ module AudioClip = struct
         |> List.of_seq
       in
 
-      { id; name; start_time; end_time; loop; signature; sample_ref; fade; warp_markers }
+      (* Extract warp settings *)
+      let warp_settings = WarpSettings.create xml in
+
+      { id; name; start_time; end_time; loop; signature; sample_ref; fade; warp_markers; warp_settings }
     | _ -> raise (Xml.Xml_error (xml, "Expected AudioClip element"))
 
   let has_same_id a b = a.id = b.id
@@ -473,6 +555,7 @@ module AudioClip = struct
       sample_ref : SampleRef.Patch.t structured_update;
       fade : (Fade.t, Fade.Patch.t) structured_change;
       warp_markers : warp_marker_change list;
+      warp_settings : WarpSettings.Patch.t structured_update;
     }
 
     let is_empty p =
@@ -483,13 +566,14 @@ module AudioClip = struct
       is_unchanged_update (module TimeSignature.Patch) p.signature &&
       is_unchanged_update (module SampleRef.Patch) p.sample_ref &&
       is_unchanged_change (module Fade.Patch) p.fade &&
-      List.for_all (is_unchanged_change (module WarpMarker.Patch)) p.warp_markers
+      List.for_all (is_unchanged_change (module WarpMarker.Patch)) p.warp_markers &&
+      is_unchanged_update (module WarpSettings.Patch) p.warp_settings
   end
 
 
   let diff (old_clip : t) (new_clip : t) : Patch.t =
-    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade; warp_markers = old_markers } = old_clip in
-    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; sample_ref = new_sample; fade = new_fade; warp_markers = new_markers } = new_clip in
+    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade; warp_markers = old_markers; warp_settings = old_warp_settings } = old_clip in
+    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; sample_ref = new_sample; fade = new_fade; warp_markers = new_markers; warp_settings = new_warp_settings } = new_clip in
 
     (* Only compare clips with the same id *)
     if old_id <> new_id then
@@ -518,6 +602,9 @@ module AudioClip = struct
         |> filter_changes (module WarpMarker.Patch)
       in
 
+      (* Handle warp settings diffing *)
+      let warp_settings_change = diff_complex_value (module WarpSettings) old_warp_settings new_warp_settings in
+
       {
         id = new_id;
         name = name_change;
@@ -528,5 +615,6 @@ module AudioClip = struct
         sample_ref = sample_ref_change;
         fade = fade_change;
         warp_markers = warp_markers_change;
+        warp_settings = warp_settings_change;
       }
 end

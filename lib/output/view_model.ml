@@ -784,6 +784,22 @@ let fade_field_specs : (Clip.Fade.t, Clip.Fade.Patch.t) unified_field_spec list 
 let create_fade_fields = build_value_field_views fade_field_specs ~domain_type:DTClip
 let create_fade_patch_fields = build_patch_field_views fade_field_specs ~domain_type:DTClip
 
+(** WarpSettings field specifications *)
+let warp_settings_field_specs : (Clip.WarpSettings.t, Clip.WarpSettings.Patch.t) unified_field_spec list = [
+  make_int "Warp Mode" (fun (ws : Clip.WarpSettings.t) -> ws.warp_mode) (fun (p : Clip.WarpSettings.Patch.t) -> p.warp_mode);
+  make_float "Granularity Tones" (fun (ws : Clip.WarpSettings.t) -> ws.granularity_tones) (fun (p : Clip.WarpSettings.Patch.t) -> p.granularity_tones);
+  make_float "Granularity Texture" (fun (ws : Clip.WarpSettings.t) -> ws.granularity_texture) (fun (p : Clip.WarpSettings.Patch.t) -> p.granularity_texture);
+  make_float "Fluctuation Texture" (fun (ws : Clip.WarpSettings.t) -> ws.fluctuation_texture) (fun (p : Clip.WarpSettings.Patch.t) -> p.fluctuation_texture);
+  make_float "Transient Resolution" (fun (ws : Clip.WarpSettings.t) -> ws.transient_resolution) (fun (p : Clip.WarpSettings.Patch.t) -> p.transient_resolution);
+  make_int "Transient Loop Mode" (fun (ws : Clip.WarpSettings.t) -> ws.transient_loop_mode) (fun (p : Clip.WarpSettings.Patch.t) -> p.transient_loop_mode);
+  make_float "Transient Envelope" (fun (ws : Clip.WarpSettings.t) -> ws.transient_envelope) (fun (p : Clip.WarpSettings.Patch.t) -> p.transient_envelope);
+  make_float "Complex Pro Formants" (fun (ws : Clip.WarpSettings.t) -> ws.complex_pro_formants) (fun (p : Clip.WarpSettings.Patch.t) -> p.complex_pro_formants);
+  make_float "Complex Pro Envelope" (fun (ws : Clip.WarpSettings.t) -> ws.complex_pro_envelope) (fun (p : Clip.WarpSettings.Patch.t) -> p.complex_pro_envelope);
+]
+
+let create_warp_settings_fields = build_value_field_views warp_settings_field_specs ~domain_type:DTClip
+let create_warp_settings_patch_fields = build_patch_field_views warp_settings_field_specs ~domain_type:DTClip
+
 
 (** [event_value_to_field_value] converts an Automation.event_value to a field_value *)
 let event_value_to_field_value v =
@@ -1195,6 +1211,12 @@ let audio_clip_section_specs : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) sectio
     ~of_value:(fun (c : Clip.AudioClip.t) -> c.warp_markers)
     ~of_patch:(fun (p : Clip.AudioClip.Patch.t) -> p.warp_markers)
     ~build_item:create_warp_marker_item
+    ~domain_type:DTClip;
+  Spec.child ~name:"WarpSettings"
+    ~of_value:(fun (c : Clip.AudioClip.t) -> c.warp_settings)
+    ~of_patch:(fun (p : Clip.AudioClip.Patch.t) -> p.warp_settings)
+    ~build_value_children:create_warp_settings_fields
+    ~build_patch_children:create_warp_settings_patch_fields
     ~domain_type:DTClip;
 ]
 

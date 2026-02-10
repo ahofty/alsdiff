@@ -300,6 +300,7 @@ let test_create_audio_clip_item_added () =
   let sample_ref = { SampleRef.file_path = "/path/to/sample.wav"; crc = "abc123"; last_modified_date = 12345 } in
   let loop = { Loop.start_time = 0.0; end_time = 4.0; on = true } in
   let signature = { TimeSignature.numer = 4; denom = 4 } in
+  let warp_settings = { WarpSettings.warp_mode = 0; granularity_tones = 30.0; granularity_texture = 65.0; fluctuation_texture = 25.0; transient_resolution = 6.0; transient_loop_mode = 0; transient_envelope = 100.0; complex_pro_formants = 100.0; complex_pro_envelope = 128.0; } in
   let clip = {
     AudioClip.id = 1;
     name = "Audio Clip 1";
@@ -310,6 +311,7 @@ let test_create_audio_clip_item_added () =
     sample_ref;
     fade = None;
     warp_markers = [];
+    warp_settings;
   } in
 
   let change = `Added clip in
