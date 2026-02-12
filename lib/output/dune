@@ -2,9 +2,10 @@
  (name alsdiff_output)
  (public_name alsdiff.output)
  (modules
-   view_model
-   config
-   text_renderer)
+    view_model
+    config
+    text_renderer
+    stats_renderer)
  (libraries
    alsdiff_base
    alsdiff_live
