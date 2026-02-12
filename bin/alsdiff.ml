@@ -17,19 +17,6 @@ let create_views (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   let item = View_model.create_liveset_item change in
   [View_model.Item item]
 
-let render_views config (views : View_model.view list) : string =
-  let buffer = Buffer.create 4096 in
-  let ppf = Format.formatter_of_buffer buffer in
-  Fmt.set_style_renderer ppf `None;
-
-  List.iter (fun view ->
-      Text_renderer.pp config ppf view;
-      Fmt.pf ppf "@.";
-    ) views;
-
-  Format.pp_print_flush ppf ();
-  Buffer.contents buffer
-
 type output_mode = Tree | Stats
 
 type config = {
@@ -201,7 +188,7 @@ let diff_cmd ~config ~domain_mgr : int =
                                 note_name_style = (match config.note_name_style with Some s -> s | None -> base_renderer_config.note_name_style);
                                 max_collection_items = (match config.max_collection_items with Some n -> Some n | None -> base_renderer_config.max_collection_items);
                               } in
-        render_views renderer_config views
+        Text_renderer.render renderer_config views
     in
 
     Fmt.pr "%s@." output;
