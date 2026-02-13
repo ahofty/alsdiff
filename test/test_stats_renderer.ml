@@ -1,5 +1,6 @@
 open Alsdiff_output.View_model
 open Alsdiff_output.Stats_renderer
+open Alsdiff_output.Config
 
 let mk_field name change =
   Field { name; change; domain_type = DTOther; oldval = None; newval = None }
@@ -12,7 +13,7 @@ let mk_collection name change domain_type items =
 
 let test_empty_no_changes () =
   let views = [mk_item "LiveSet" Unchanged DTLiveset []] in
-  let output = render views in
+  let output = render stats_default views in
   Alcotest.(check string) "no changes" "No changes." output
 
 let test_single_added_track () =
@@ -23,7 +24,7 @@ let test_single_added_track () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   Alcotest.(check string) "single added track" "Tracks: 1 Added" output
 
 let test_mixed_changes () =
@@ -56,7 +57,7 @@ let test_mixed_changes () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   let lines = String.split_on_char '\n' output in
   Alcotest.(check int) "line count" 4 (List.length lines);
   Alcotest.(check string) "tracks line" "Tracks: 1 Added, 1 Removed, 1 Modified"
@@ -78,7 +79,7 @@ let test_non_reportable_types_excluded () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   Alcotest.(check string) "non-reportable excluded" "No changes." output
 
 let test_unchanged_items_omitted () =
@@ -91,7 +92,7 @@ let test_unchanged_items_omitted () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   Alcotest.(check string) "unchanged omitted" "Tracks: 1 Added" output
 
 let test_ordering () =
@@ -107,7 +108,7 @@ let test_ordering () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   let lines = String.split_on_char '\n' output in
   Alcotest.(check int) "line count" 3 (List.length lines);
   Alcotest.(check string) "tracks first" "Tracks: 1 Modified" (List.nth lines 0);
@@ -130,7 +131,7 @@ let test_deeply_nested () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   let lines = String.split_on_char '\n' output in
   Alcotest.(check int) "line count" 2 (List.length lines);
   Alcotest.(check string) "tracks" "Tracks: 1 Modified" (List.nth lines 0);
@@ -146,7 +147,7 @@ let test_zero_count_change_types_omitted () =
         ]
     ]
   in
-  let output = render views in
+  let output = render stats_default views in
   Alcotest.(check string) "only added shown" "Tracks: 2 Added" output
 
 let tests =

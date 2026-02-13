@@ -1,6 +1,7 @@
 open Alsdiff_base
 open Alsdiff_live
 open Alsdiff_output
+open Config
 open Eio.Std
 open View_model
 open Cmdliner
@@ -111,10 +112,29 @@ let load_and_report_config config_path =
   Fmt.pr "Loading configuration from %s@." config_path;
   load_config_from_json config_path
 
-let tree_only_flags_provided config =
-  config.config_file <> None
-  || config.preset <> None
-  || config.prefix_added <> None
+let build_base_renderer_config ~default_config ~reference_path config =
+  match config.config_file with
+  | Some config_path ->
+    load_config_from_json config_path
+  | None ->
+    match config.preset with
+    | Some preset ->
+      let base = match preset with
+        | `Compact -> Text_renderer.compact
+        | `Composer -> Text_renderer.composer
+        | `Full -> Text_renderer.full
+        | `Inline -> Text_renderer.inline
+        | `Mixing -> Text_renderer.mixing
+        | `Quiet -> Text_renderer.quiet
+        | `Verbose -> Text_renderer.verbose
+      in base
+    | None ->
+      match discover_config_file ~reference_path with
+      | Some auto_config -> load_and_report_config auto_config
+      | None -> default_config
+
+let stats_incompatible_flags_provided config =
+  config.prefix_added <> None
   || config.prefix_removed <> None
   || config.prefix_modified <> None
   || config.prefix_unchanged <> None
@@ -122,8 +142,8 @@ let tree_only_flags_provided config =
   || config.max_collection_items <> None
 
 let diff_cmd ~config ~domain_mgr : int =
-  if config.output_mode = Stats && tree_only_flags_provided config then begin
-    Fmt.epr "Error: --mode stats is incompatible with --preset, --config, --prefix-*, \
+  if config.output_mode = Stats && stats_incompatible_flags_provided config then begin
+    Fmt.epr "Error: --mode stats is incompatible with --prefix-*, \
              --note-name-style, and --max-collection-items@.";
     1
   end else begin
@@ -157,29 +177,11 @@ let diff_cmd ~config ~domain_mgr : int =
 
     let output = match config.output_mode with
       | Stats ->
-        Stats_renderer.render views
+        let base_renderer_config = build_base_renderer_config ~default_config:stats_default ~reference_path config in
+        (* Stats mode doesn't use prefix/note_style/max_items, so no merging needed *)
+        Stats_renderer.render base_renderer_config views
       | Tree ->
-        let base_renderer_config =
-          match config.config_file with
-          | Some config_path ->
-            load_config_from_json config_path
-          | None ->
-            match config.preset with
-            | Some preset ->
-              let base = match preset with
-                | `Compact -> Text_renderer.compact
-                | `Composer -> Text_renderer.composer
-                | `Full -> Text_renderer.full
-                | `Inline -> Text_renderer.inline
-                | `Mixing -> Text_renderer.mixing
-                | `Quiet -> Text_renderer.quiet
-                | `Verbose -> Text_renderer.verbose
-              in base
-            | None ->
-              match discover_config_file ~reference_path with
-              | Some auto_config -> load_and_report_config auto_config
-              | None -> Text_renderer.quiet
-        in
+        let base_renderer_config = build_base_renderer_config ~default_config:Text_renderer.quiet ~reference_path config in
         let renderer_config = { base_renderer_config with
                                 prefix_added = (match config.prefix_added with Some s -> s | None -> base_renderer_config.prefix_added);
                                 prefix_removed = (match config.prefix_removed with Some s -> s | None -> base_renderer_config.prefix_removed);
@@ -249,7 +251,7 @@ let max_collection_items =
 
 let output_mode =
   let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. \
-             Stats mode is incompatible with --preset, --config, --prefix-*, --note-name-style, and --max-collection-items." in
+             Stats mode now supports --config and --preset for customizing which types appear in statistics. Incompatible with --prefix-*, --note-name-style, and --max-collection-items." in
   Arg.(value & opt (enum ["tree", Tree; "stats", Stats]) Tree & info ["mode"] ~docv:"MODE" ~doc)
 
 let dump_schema =

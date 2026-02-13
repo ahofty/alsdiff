@@ -443,6 +443,58 @@ let quiet = {
   indent_width = 2;
 }
 
+(* stats_default preset: types shown in statistics output by default.
+   Shows the 7 core types that were historically in stats_renderer.
+   All other types set to Ignore to exclude from statistics. *)
+let stats_default = {
+  (* Base: Summary to show counts only *)
+  added = Summary;
+  removed = Summary;
+  modified = Summary;
+  unchanged = Ignore;
+
+  (* Show the 7 historically tracked types *)
+  type_overrides = [
+    { domain_type = DTTrack; override = uniform_override Summary; };
+    { domain_type = DTDevice; override = uniform_override Summary; };
+    { domain_type = DTClip; override = uniform_override Summary; };
+    { domain_type = DTNote; override = uniform_override Summary; };
+    { domain_type = DTAutomation; override = uniform_override Summary; };
+    { domain_type = DTSend; override = uniform_override Summary; };
+    { domain_type = DTParam; override = uniform_override Summary; };
+    { domain_type = DTLocator; override = uniform_override Summary; };
+
+    (* Explicitly ignore all other types for stats mode *)
+    { domain_type = DTLiveset; override = uniform_override Ignore; };
+    { domain_type = DTMixer; override = uniform_override Ignore; };
+    { domain_type = DTRouting; override = uniform_override Ignore; };
+    { domain_type = DTEvent; override = uniform_override Ignore; };
+    { domain_type = DTPreset; override = uniform_override Ignore; };
+    { domain_type = DTMacro; override = uniform_override Ignore; };
+    { domain_type = DTSnapshot; override = uniform_override Ignore; };
+    { domain_type = DTLoop; override = uniform_override Ignore; };
+    { domain_type = DTSignature; override = uniform_override Ignore; };
+    { domain_type = DTSampleRef; override = uniform_override Ignore; };
+    { domain_type = DTVersion; override = uniform_override Ignore; };
+    { domain_type = DTOther; override = uniform_override Ignore; };
+  ];
+
+  (* No limit needed for stats - just counting *)
+  max_collection_items = None;
+
+  (* Standard prefixes *)
+  prefix_added = "+";
+  prefix_removed = "-";
+  prefix_modified = "*";
+  prefix_unchanged = "=";
+
+  (* Sharp note names *)
+  note_name_style = Sharp;
+
+  (* Indent width *)
+  indent_width = 2;
+}
+
 (* Verbose preset: show everything including unchanged items.
    Useful for debugging, auditing, or understanding complete file structure.
    No limits - displays all items and all fields. *)
