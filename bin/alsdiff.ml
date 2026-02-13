@@ -145,7 +145,7 @@ let diff_cmd ~config ~domain_mgr : int =
   if config.output_mode = Stats && stats_incompatible_flags_provided config then begin
     Fmt.epr "Error: --mode stats is incompatible with --prefix-*, \
              --note-name-style, and --max-collection-items@.";
-    1
+    if config.git_mode then 2 else 1
   end else begin
     let file1, file2, reference_path =
       if config.git_mode then
