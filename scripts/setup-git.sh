@@ -88,24 +88,53 @@ if [[ "$install_hook" =~ ^[Yy]$ ]]; then
     HOOK_FILE=".git/hooks/prepare-commit-msg"
     MARKER_BEGIN="# alsdiff:begin"
     MARKER_END="# alsdiff:end"
+    INCLUDE_MESSAGE=0
+    INCLUDE_COMMIT=0
 
-    # Check if our hook block is already installed
-    if [ -f "$HOOK_FILE" ] && grep -q "$MARKER_BEGIN" "$HOOK_FILE"; then
-        echo "✅ prepare-commit-msg hook already contains alsdiff block"
-    else
-        # Define the hook block
-        HOOK_BLOCK='
+    echo ""
+    read -p "Include stats for explicit message commits (-m/-F)? (y/N): " include_message
+    if [[ "$include_message" =~ ^[Yy]$ ]]; then
+        INCLUDE_MESSAGE=1
+    fi
+
+    read -p "Include stats for amend/reuse commits (--amend/-c/-C)? (y/N): " include_commit
+    if [[ "$include_commit" =~ ^[Yy]$ ]]; then
+        INCLUDE_COMMIT=1
+    fi
+
+    # Define the hook block
+    HOOK_BLOCK='
 '"$MARKER_BEGIN"'
 # Auto-generate commit message from .als file changes using alsdiff --mode stats
 # Installed by: scripts/setup-git.sh
 alsdiff_prepare_commit_msg() {
     COMMIT_MSG_FILE="$1"
     COMMIT_SOURCE="${2:-}"
+    INCLUDE_MESSAGE='"$INCLUDE_MESSAGE"'
+    INCLUDE_COMMIT='"$INCLUDE_COMMIT"'
 
-    # Skip for merges, squashes, amends, and -m messages
-    if [ -n "$COMMIT_SOURCE" ]; then
-        return
-    fi
+    # Run only for normal editor/template flows.
+    # Skip explicit message commits (-m/-F), merges, squashes, and amend/reuse flows.
+    case "$COMMIT_SOURCE" in
+        ""|template)
+            ;;
+        message)
+            if [ "$INCLUDE_MESSAGE" -ne 1 ]; then
+                return
+            fi
+            ;;
+        commit)
+            if [ "$INCLUDE_COMMIT" -ne 1 ]; then
+                return
+            fi
+            ;;
+        merge|squash)
+            return
+            ;;
+        *)
+            return
+            ;;
+    esac
 
     # Check if alsdiff is available
     if ! command -v alsdiff &> /dev/null; then
@@ -124,27 +153,75 @@ alsdiff_prepare_commit_msg() {
 
     STATS_OUTPUT=""
 
-    while IFS=$'"'"'\t'"'"' read -r status filepath; do
-        filename=$(basename "$filepath")
-        case "$status" in
+    while IFS=$'"'"'\t'"'"' read -r file_status oldpath newpath; do
+        filename=$(basename "$oldpath")
+        case "$file_status" in
             M)
                 # Modified: diff HEAD vs staged
                 OLD_FILE="$TMPDIR_ALS/old_${filename}"
                 NEW_FILE="$TMPDIR_ALS/new_${filename}"
-                git show "HEAD:${filepath}" > "$OLD_FILE" 2>/dev/null || continue
-                git show ":${filepath}" > "$NEW_FILE" 2>/dev/null || continue
-                DIFF_STATS=$(alsdiff --mode stats "$OLD_FILE" "$NEW_FILE" 2>/dev/null) || true
+                git show "HEAD:${oldpath}" > "$OLD_FILE" 2>/dev/null || continue
+                git show ":${oldpath}" > "$NEW_FILE" 2>/dev/null || continue
+                if ! DIFF_STATS=$(alsdiff --mode stats "$OLD_FILE" "$NEW_FILE" 2>&1); then
+                    echo "Warning: alsdiff failed for ${oldpath}" >&2
+                    if [ -n "$DIFF_STATS" ]; then
+                        echo "$DIFF_STATS" | sed "s/^/  /" >&2
+                    else
+                        echo "  (no error output from alsdiff)" >&2
+                    fi
+                    continue
+                fi
                 if [ -n "$DIFF_STATS" ] && [ "$DIFF_STATS" != "No changes." ]; then
                     # Indent each line of stats output
                     INDENTED=$(echo "$DIFF_STATS" | sed "s/^/  /")
-                    STATS_OUTPUT="${STATS_OUTPUT}${filepath}:\n${INDENTED}\n"
+                    STATS_OUTPUT="${STATS_OUTPUT}${oldpath}:\n${INDENTED}\n"
                 fi
                 ;;
             A)
-                STATS_OUTPUT="${STATS_OUTPUT}${filepath}: New file\n"
+                STATS_OUTPUT="${STATS_OUTPUT}${oldpath}: New file\n"
                 ;;
             D)
-                STATS_OUTPUT="${STATS_OUTPUT}${filepath}: Deleted\n"
+                STATS_OUTPUT="${STATS_OUTPUT}${oldpath}: Deleted\n"
+                ;;
+            R*)
+                # Renamed: diff HEAD old_path vs staged new_path
+                OLD_FILE="$TMPDIR_ALS/old_$(basename "$oldpath")"
+                NEW_FILE="$TMPDIR_ALS/new_$(basename "$newpath")"
+                git show "HEAD:${oldpath}" > "$OLD_FILE" 2>/dev/null || continue
+                git show ":${newpath}" > "$NEW_FILE" 2>/dev/null || continue
+                if ! DIFF_STATS=$(alsdiff --mode stats "$OLD_FILE" "$NEW_FILE" 2>&1); then
+                    echo "Warning: alsdiff failed for ${oldpath} -> ${newpath}" >&2
+                    if [ -n "$DIFF_STATS" ]; then
+                        echo "$DIFF_STATS" | sed "s/^/  /" >&2
+                    else
+                        echo "  (no error output from alsdiff)" >&2
+                    fi
+                    continue
+                fi
+                if [ -n "$DIFF_STATS" ] && [ "$DIFF_STATS" != "No changes." ]; then
+                    INDENTED=$(echo "$DIFF_STATS" | sed "s/^/  /")
+                    STATS_OUTPUT="${STATS_OUTPUT}${oldpath} -> ${newpath}:\n${INDENTED}\n"
+                fi
+                ;;
+            C*)
+                # Copied: diff HEAD old_path vs staged new_path
+                OLD_FILE="$TMPDIR_ALS/old_$(basename "$oldpath")"
+                NEW_FILE="$TMPDIR_ALS/new_$(basename "$newpath")"
+                git show "HEAD:${oldpath}" > "$OLD_FILE" 2>/dev/null || continue
+                git show ":${newpath}" > "$NEW_FILE" 2>/dev/null || continue
+                if ! DIFF_STATS=$(alsdiff --mode stats "$OLD_FILE" "$NEW_FILE" 2>&1); then
+                    echo "Warning: alsdiff failed for ${oldpath} -> ${newpath}" >&2
+                    if [ -n "$DIFF_STATS" ]; then
+                        echo "$DIFF_STATS" | sed "s/^/  /" >&2
+                    else
+                        echo "  (no error output from alsdiff)" >&2
+                    fi
+                    continue
+                fi
+                if [ -n "$DIFF_STATS" ] && [ "$DIFF_STATS" != "No changes." ]; then
+                    INDENTED=$(echo "$DIFF_STATS" | sed "s/^/  /")
+                    STATS_OUTPUT="${STATS_OUTPUT}${oldpath} -> ${newpath} (copy):\n${INDENTED}\n"
+                fi
                 ;;
         esac
     done <<< "$ALS_STATUS"
@@ -160,6 +237,17 @@ alsdiff_prepare_commit_msg() {
 alsdiff_prepare_commit_msg "$@"
 '"$MARKER_END"
 
+    if [ -f "$HOOK_FILE" ] && grep -q "$MARKER_BEGIN" "$HOOK_FILE"; then
+        TMP_HOOK=$(mktemp)
+        awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
+            $0 == begin { inblock=1; next }
+            $0 == end { inblock=0; next }
+            inblock == 0 { print }
+        ' "$HOOK_FILE" > "$TMP_HOOK"
+        printf "%s\n" "$HOOK_BLOCK" >> "$TMP_HOOK"
+        mv "$TMP_HOOK" "$HOOK_FILE"
+        echo "✅ Updated prepare-commit-msg hook alsdiff block"
+    else
         if [ -f "$HOOK_FILE" ]; then
             # Append to existing hook
             echo "$HOOK_BLOCK" >> "$HOOK_FILE"
@@ -168,9 +256,13 @@ alsdiff_prepare_commit_msg "$@"
             # Create new hook
             echo '#!/bin/bash' > "$HOOK_FILE"
             echo "$HOOK_BLOCK" >> "$HOOK_FILE"
-            chmod +x "$HOOK_FILE"
             echo "✅ Created prepare-commit-msg hook"
         fi
+    fi
+
+    if ! chmod +x "$HOOK_FILE" 2>/dev/null; then
+        echo "Error: Failed to make hook executable: $HOOK_FILE" >&2
+        exit 1
     fi
 else
     echo "⏭️  Skipping prepare-commit-msg hook"
