@@ -231,6 +231,19 @@ let pp cfg fmt view =
 let render_to_string cfg view =
   Fmt.str "%a" (pp_view cfg) view
 
+let render config (views : View_model.view list) : string =
+  let buffer = Buffer.create 4096 in
+  let ppf = Format.formatter_of_buffer buffer in
+  Fmt.set_style_renderer ppf `None;
+
+  List.iter (fun view ->
+      pp config ppf view;
+      Fmt.pf ppf "@.";
+    ) views;
+
+  Format.pp_print_flush ppf ();
+  Buffer.contents buffer
+
 (* ==================== Backward Compatibility Re-exports ==================== *)
 (* Include all Config types and functions for backward compatibility.
    This ensures that code referencing Text_renderer.Ignore, Text_renderer.detail_config_of_yojson,
