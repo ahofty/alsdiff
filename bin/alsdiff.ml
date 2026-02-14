@@ -50,6 +50,15 @@ let parse_git_args args =
   | _ ->
     Error "Git mode requires exactly 7 positional arguments: path old-file old-hex old-mode new-file new-hex new-mode"
 
+let parse_preset_args = function
+  | `Compact -> Text_renderer.compact
+  | `Composer -> Text_renderer.composer
+  | `Full -> Text_renderer.full
+  | `Inline -> Text_renderer.inline
+  | `Mixing -> Text_renderer.mixing
+  | `Quiet -> Text_renderer.quiet
+  | `Verbose -> Text_renderer.verbose
+
 let load_config_from_json file_path =
   match Text_renderer.load_and_validate_config file_path with
   | Ok cfg -> cfg
@@ -118,16 +127,7 @@ let build_base_renderer_config ~default_config ~reference_path config =
     load_config_from_json config_path
   | None ->
     match config.preset with
-    | Some preset ->
-      let base = match preset with
-        | `Compact -> Text_renderer.compact
-        | `Composer -> Text_renderer.composer
-        | `Full -> Text_renderer.full
-        | `Inline -> Text_renderer.inline
-        | `Mixing -> Text_renderer.mixing
-        | `Quiet -> Text_renderer.quiet
-        | `Verbose -> Text_renderer.verbose
-      in base
+    | Some preset -> parse_preset_args preset
     | None ->
       match discover_config_file ~reference_path with
       | Some auto_config -> load_and_report_config auto_config
@@ -140,6 +140,25 @@ let stats_incompatible_flags_provided config =
   || config.prefix_unchanged <> None
   || config.note_name_style <> None
   || config.max_collection_items <> None
+
+
+let render_stats ~config ~reference_path views =
+  let base_renderer_config = build_base_renderer_config ~default_config:stats_default ~reference_path config in
+  (* Stats mode doesn't use prefix/note_style/max_items, so no merging needed *)
+  Stats_renderer.render base_renderer_config views
+
+let render_tree ~config ~reference_path views =
+  let base_renderer_config = build_base_renderer_config ~default_config:Text_renderer.quiet ~reference_path config in
+  let renderer_config = {
+    base_renderer_config with
+    prefix_added = (match config.prefix_added with Some s -> s | None -> base_renderer_config.prefix_added);
+    prefix_removed = (match config.prefix_removed with Some s -> s | None -> base_renderer_config.prefix_removed);
+    prefix_modified = (match config.prefix_modified with Some s -> s | None -> base_renderer_config.prefix_modified);
+    prefix_unchanged = (match config.prefix_unchanged with Some s -> s | None -> base_renderer_config.prefix_unchanged);
+    note_name_style = (match config.note_name_style with Some s -> s | None -> base_renderer_config.note_name_style);
+    max_collection_items = (match config.max_collection_items with Some n -> Some n | None -> base_renderer_config.max_collection_items);
+  } in
+  Text_renderer.render renderer_config views
 
 let diff_cmd ~config ~domain_mgr : int =
   if config.output_mode = Stats && stats_incompatible_flags_provided config then begin
@@ -176,21 +195,8 @@ let diff_cmd ~config ~domain_mgr : int =
     let views = create_views liveset_change in
 
     let output = match config.output_mode with
-      | Stats ->
-        let base_renderer_config = build_base_renderer_config ~default_config:stats_default ~reference_path config in
-        (* Stats mode doesn't use prefix/note_style/max_items, so no merging needed *)
-        Stats_renderer.render base_renderer_config views
-      | Tree ->
-        let base_renderer_config = build_base_renderer_config ~default_config:Text_renderer.quiet ~reference_path config in
-        let renderer_config = { base_renderer_config with
-                                prefix_added = (match config.prefix_added with Some s -> s | None -> base_renderer_config.prefix_added);
-                                prefix_removed = (match config.prefix_removed with Some s -> s | None -> base_renderer_config.prefix_removed);
-                                prefix_modified = (match config.prefix_modified with Some s -> s | None -> base_renderer_config.prefix_modified);
-                                prefix_unchanged = (match config.prefix_unchanged with Some s -> s | None -> base_renderer_config.prefix_unchanged);
-                                note_name_style = (match config.note_name_style with Some s -> s | None -> base_renderer_config.note_name_style);
-                                max_collection_items = (match config.max_collection_items with Some n -> Some n | None -> base_renderer_config.max_collection_items);
-                              } in
-        Text_renderer.render renderer_config views
+      | Stats -> render_stats ~config ~reference_path views
+      | Tree -> render_tree ~config ~reference_path views
     in
 
     Fmt.pr "%s@." output;
@@ -249,9 +255,12 @@ let max_collection_items =
   let doc = "Maximum number of items to show in collections (default from preset: None/10/50 depending on preset)" in
   Arg.(value & opt (some int) None & info ["max-collection-items"] ~docv:"N" ~doc)
 
+let stats_mode_doc =
+  "Stats mode supports --config and --preset for customizing which types appear in statistics. \
+   Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
+
 let output_mode =
-  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. \
-             Stats mode now supports --config and --preset for customizing which types appear in statistics. Incompatible with --prefix-*, --note-name-style, and --max-collection-items." in
+  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. " ^ stats_mode_doc in
   Arg.(value & opt (enum ["tree", Tree; "stats", Stats]) Tree & info ["mode"] ~docv:"MODE" ~doc)
 
 let dump_schema =
@@ -261,6 +270,7 @@ let dump_schema =
 let validate_config =
   let doc = "Validate a configuration file against the JSON schema and exit. Reports validation errors without running diff." in
   Arg.(value & opt (some string) None & info ["validate-config"] ~docv:"FILE" ~doc)
+
 
 let config_ref = ref None
 
@@ -329,7 +339,8 @@ let cmd =
     `P "Git mode with config file:";
     `Pre "$(cmd) --config myconfig.json --git path old-file old-hex old-mode new-file new-hex new-mode";
     `S Manpage.s_options;
-    `P "$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). Stats mode is incompatible with --preset, --config, and other tree-specific options.";
+    `P ("$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. \
+         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). " ^ stats_mode_doc);
     `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery. The --preset option is ignored when --config is specified. Individual CLI options override values from config file.";
     `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over auto-discovery but ignored when --config is specified.";
     `P "$(b,--prefix-added PREFIX) overrides prefix for added items from config file.";
@@ -379,15 +390,7 @@ let main () =
           (* Handle --dump-preset first *)
           (match cfg.dump_preset with
            | Some preset ->
-             let preset_config = match preset with
-               | `Compact -> Text_renderer.compact
-               | `Composer -> Text_renderer.composer
-               | `Full -> Text_renderer.full
-               | `Inline -> Text_renderer.inline
-               | `Mixing -> Text_renderer.mixing
-               | `Quiet -> Text_renderer.quiet
-               | `Verbose -> Text_renderer.verbose
-             in
+             let preset_config = parse_preset_args preset in
              let json = Text_renderer.detail_config_to_yojson_with_schema preset_config in
              print_endline (Yojson.Safe.pretty_to_string json);
              0
@@ -467,7 +470,6 @@ let main () =
       Fmt.epr "Please report this bug at https://github.com/krfantasy/alsdiff/issues@.";
       error_exit_code ()
   in
-
   safe_run cmd
 
 let () =

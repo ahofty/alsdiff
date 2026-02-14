@@ -2,16 +2,7 @@ open View_model
 open Config
 
 let display_name (dt : domain_type) : string =
-  match dt with
-  | DTTrack -> "Tracks"
-  | DTDevice -> "Devices"
-  | DTClip -> "Clips"
-  | DTNote -> "Notes"
-  | DTAutomation -> "Automations"
-  | DTSend -> "Sends"
-  | DTParam -> "Parameters"
-  | DTLocator -> "Locators"
-  | _ -> domain_type_to_string dt
+  (domain_type_to_string dt) ^ "s"
 
 (* Build the initial stats list from config - include types not set to Ignore *)
 let stats_from_config (cfg : detail_config) : (domain_type * change_breakdown) list =
