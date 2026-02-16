@@ -22,26 +22,42 @@ if ! command -v alsdiff &> /dev/null; then
 fi
 
 # Check if we're in a git repository
-if [ ! -d ".git" ]; then
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "⚠️  No git repository found in current directory"
     echo ""
     echo "To use this script:"
     echo "  1. Navigate to your music project folder"
-    echo "  2. Make sure it has a .git folder (run 'git init' if needed)"
+    echo "  2. Make sure it is a git repo (run 'git init' if needed)"
     echo "  3. Run this script again from that folder"
     exit 1
 fi
 
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+CURRENT_DIR=$(pwd -P)
+if [ "$CURRENT_DIR" != "$REPO_ROOT" ]; then
+    echo "⚠️  Please run this script from the repository root"
+    echo ""
+    echo "Detected repository root:"
+    echo "  $REPO_ROOT"
+    echo ""
+    echo "Run:"
+    echo "  cd \"$REPO_ROOT\""
+    echo "  bash \"$0\""
+    exit 1
+fi
+
+GITATTR_FILE="$REPO_ROOT/.gitattributes"
+
 # Setup .gitattributes
-if [ -f ".gitattributes" ]; then
-    if grep -q "*.als diff=alsdiff" .gitattributes; then
+if [ -f "$GITATTR_FILE" ]; then
+    if grep -Fqx "*.als diff=alsdiff" "$GITATTR_FILE"; then
         echo "✅ .gitattributes already configured"
     else
-        echo "*.als diff=alsdiff" >> .gitattributes
+        echo "*.als diff=alsdiff" >> "$GITATTR_FILE"
         echo "✅ Added to .gitattributes"
     fi
 else
-    echo "*.als diff=alsdiff" > .gitattributes
+    echo "*.als diff=alsdiff" > "$GITATTR_FILE"
     echo "✅ Created .gitattributes"
 fi
 
@@ -67,8 +83,11 @@ else
 fi
 
 # Configure git diff driver
-git config --global diff.alsdiff.command "$ALSDIFF_CMD"
+git config diff.alsdiff.command "$ALSDIFF_CMD"
 echo "✅ Configured git to use: $ALSDIFF_CMD"
+
+git config diff.alsdiff.trustExitCode true
+echo "✅ Enabled trustExitCode for alsdiff"
 
 # --- prepare-commit-msg hook ---
 echo ""
@@ -85,7 +104,7 @@ echo ""
 read -p "Install prepare-commit-msg hook? (y/N): " install_hook
 
 if [[ "$install_hook" =~ ^[Yy]$ ]]; then
-    HOOK_FILE=".git/hooks/prepare-commit-msg"
+    HOOK_FILE=$(git rev-parse --git-path hooks/prepare-commit-msg)
     MARKER_BEGIN="# alsdiff:begin"
     MARKER_END="# alsdiff:end"
     INCLUDE_MESSAGE=0
@@ -136,24 +155,47 @@ alsdiff_prepare_commit_msg() {
             ;;
     esac
 
+    # Create temp directory for blob extraction
+    TMPDIR_ALS=$(mktemp -d)
+    cleanup_alsdiff_tmpdir() {
+        rm -rf "$TMPDIR_ALS"
+    }
+    trap cleanup_alsdiff_tmpdir 0 HUP INT TERM
+
+    COMMENT_CHAR=$(git config --get core.commentChar 2>/dev/null || printf "")
+    if [ -z "$COMMENT_CHAR" ] || [ "$COMMENT_CHAR" = "auto" ]; then
+        COMMENT_CHAR="#"
+    fi
+    STATS_MARKER_BEGIN="${COMMENT_CHAR} alsdiff-stats:begin"
+    STATS_MARKER_END="${COMMENT_CHAR} alsdiff-stats:end"
+
+    CLEAN_MSG_FILE="$TMPDIR_ALS/commit_msg_clean"
+    awk -v begin="$STATS_MARKER_BEGIN" -v end="$STATS_MARKER_END" "
+        \$0 == begin { inblock=1; next }
+        \$0 == end { inblock=0; next }
+        inblock == 0 { print }
+    " "$COMMIT_MSG_FILE" > "$CLEAN_MSG_FILE"
+
     # Check if alsdiff is available
-    if ! command -v alsdiff &> /dev/null; then
+    if ! command -v alsdiff >/dev/null 2>&1; then
+        mv "$CLEAN_MSG_FILE" "$COMMIT_MSG_FILE"
         return
     fi
 
     # Find staged .als files
     ALS_STATUS=$(git diff --cached --name-status -- "*.als" 2>/dev/null)
     if [ -z "$ALS_STATUS" ]; then
+        mv "$CLEAN_MSG_FILE" "$COMMIT_MSG_FILE"
         return
     fi
 
-    # Create temp directory for blob extraction
-    TMPDIR_ALS=$(mktemp -d)
-    trap "rm -rf \"$TMPDIR_ALS\"" RETURN
-
     STATS_OUTPUT=""
+    TAB=$(printf "\t")
 
-    while IFS=$'"'"'\t'"'"' read -r file_status oldpath newpath; do
+    while IFS="$TAB" read -r file_status oldpath newpath; do
+        if [ -z "$file_status" ]; then
+            continue
+        fi
         filename=$(basename "$oldpath")
         case "$file_status" in
             M)
@@ -224,18 +266,55 @@ alsdiff_prepare_commit_msg() {
                 fi
                 ;;
         esac
-    done <<< "$ALS_STATUS"
+    done <<EOF
+$ALS_STATUS
+EOF
 
     if [ -n "$STATS_OUTPUT" ]; then
-        # Prepend stats to commit message (before any # comment lines)
+        # Prepend generated stats block to commit message.
         TMPFILE="$TMPDIR_ALS/commit_msg"
-        printf "%b\n" "$STATS_OUTPUT" > "$TMPFILE"
-        cat "$COMMIT_MSG_FILE" >> "$TMPFILE"
+        {
+            printf "%s\n" "$STATS_MARKER_BEGIN"
+            printf "%b\n" "$STATS_OUTPUT"
+            printf "%s\n\n" "$STATS_MARKER_END"
+            cat "$CLEAN_MSG_FILE"
+        } > "$TMPFILE"
         mv "$TMPFILE" "$COMMIT_MSG_FILE"
+    else
+        mv "$CLEAN_MSG_FILE" "$COMMIT_MSG_FILE"
     fi
 }
 alsdiff_prepare_commit_msg "$@"
 '"$MARKER_END"
+
+    if [ -f "$HOOK_FILE" ]; then
+        FIRST_LINE=$(head -n 1 "$HOOK_FILE" 2>/dev/null || true)
+        if [[ "$FIRST_LINE" == "#!"* ]]; then
+            INTERPRETER=$(printf "%s\n" "$FIRST_LINE" | sed -E "s/^#![[:space:]]*//; s/[[:space:]].*$//")
+            if [ "$INTERPRETER" = "/usr/bin/env" ]; then
+                ENV_TARGET=$(printf "%s\n" "$FIRST_LINE" | sed -E "s/^#![[:space:]]*\/usr\/bin\/env[[:space:]]+//; s/[[:space:]].*$//")
+                case "$ENV_TARGET" in
+                    sh|bash)
+                        ;;
+                    *)
+                        echo "❌ Existing hook uses unsupported interpreter: $FIRST_LINE"
+                        echo "   Only sh/bash hooks are supported for safe auto-update."
+                        exit 1
+                        ;;
+                esac
+            else
+                case "$INTERPRETER" in
+                    */sh|*/bash|sh|bash)
+                        ;;
+                    *)
+                        echo "❌ Existing hook uses unsupported interpreter: $FIRST_LINE"
+                        echo "   Only sh/bash hooks are supported for safe auto-update."
+                        exit 1
+                        ;;
+                esac
+            fi
+        fi
+    fi
 
     if [ -f "$HOOK_FILE" ] && grep -q "$MARKER_BEGIN" "$HOOK_FILE"; then
         TMP_HOOK=$(mktemp)
