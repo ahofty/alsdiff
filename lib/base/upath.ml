@@ -80,6 +80,8 @@ type path_component =
 
 type path = path_component list
 
+exception Path_parse_error of string * string (* (input, message) *)
+
 
 module Parser =
 struct
@@ -97,17 +99,24 @@ struct
     try
       Re.Pcre.regexp pattern
     with
-    | Re.Pcre.Parse_error | Re.Pcre.Not_supported -> failwith ("Invalid PCRE regex pattern '" ^ pattern ^ "'")
+    | Re.Pcre.Parse_error | Re.Pcre.Not_supported ->
+      failwith (Printf.sprintf "Invalid PCRE regex pattern '%s'" pattern)
 
   (* Parse a single-quoted regex pattern *)
   let p_quoted_regex =
     let p_regex_content =
-      let p_escaped = char '\\' *> any_char >>| String.make 1 in
+      let p_escaped =
+        char '\\' *> any_char >>| fun c ->
+        "\\" ^ String.make 1 c
+      in
       let p_unescaped = take_while1 (fun c -> c <> '\'' && c <> '\\') in
       many (p_escaped <|> p_unescaped) >>| String.concat ""
     in
-    char '\'' *> p_regex_content <* char '\'' >>| fun pattern ->
-    Regex (pattern, compile_regex pattern)
+    char '\'' *> p_regex_content <* char '\'' >>= fun pattern ->
+    if pattern = "" then
+      fail "Invalid path: empty regex '' is not allowed"
+    else
+      return (Regex (pattern, compile_regex pattern))
 
   (* Parse either a raw identifier or a quoted regex *)
   let p_name_component =
@@ -188,12 +197,42 @@ struct
              p_single_wildcard;
              p_tag ] <?> "path component"
 
+  let validate_path_components components =
+    let has_leading_parent =
+      match components with
+      | ParentNode :: _ -> true
+      | _ -> false
+    in
+    let rec find_invalid_pattern = function
+      | MultiWildcard _ :: MultiWildcard _ :: _
+      | MultiWildcard _ :: SingleWildcard _ :: _
+      | SingleWildcard _ :: MultiWildcard _ :: _ ->
+        Some "Invalid path: adjacent wildcard pairs '**/**', '**/*', and '*/**' are not allowed"
+      | MultiWildcard _ :: ParentNode :: _
+      | SingleWildcard _ :: ParentNode :: _ ->
+        Some "Invalid path: wildcard-parent adjacency '**/..' and '*/..' is not allowed"
+      | _ :: rest -> find_invalid_pattern rest
+      | [] -> None
+    in
+    if has_leading_parent then
+      fail "Invalid path: leading parent node '..' is not allowed"
+    else
+      match find_invalid_pattern components with
+      | Some msg -> fail msg
+      | None -> return components
+
   let path_parser =
     let optional_slash = option None (char '/' >>| fun _ -> Some ()) in
-    optional_slash *> sep_by1 (char '/') p_component <?> "path"
+    optional_slash *> sep_by1 (char '/') p_component >>= validate_path_components <?> "path"
 
   let parse_path s =
-    parse_string ~consume:All path_parser s
+    try
+      match parse_string ~consume:All path_parser s with
+      | Ok p -> p
+      | Error msg -> raise (Path_parse_error (s, msg))
+    with
+    | Failure msg ->
+      raise (Path_parse_error (s, msg))
 
 end
 
@@ -245,9 +284,7 @@ let match_component tree = function
 
 
 let parse_path path =
-  match Parser.parse_path path with
-  | Ok p -> p
-  | Error msg -> failwith ("Failed to parse path: " ^ path ^ " with error: " ^ msg)
+  Parser.parse_path path
 
 
 (** Optimized internal traversal state.
