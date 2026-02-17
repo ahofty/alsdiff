@@ -52,7 +52,14 @@ mv alsdiff ~/.local/bin  # or any directory in your PATH
 
 ### Git Integration
 
-A helper script is provided at [./scripts/setup-git.sh](./scripts/setup-git.sh). Simply download it to your git repository and run `./setup-git.sh`. This script will automatically configure git to use `alsdiff` for `.als` files.
+A helper script is provided at [./scripts/setup-git.sh](./scripts/setup-git.sh). Simply download it to your git repository root and run `./setup-git.sh`. This script will automatically configure git to use `alsdiff` for `.als` files and optionally install a prepare-commit-msg hook for auto-generating commit messages.
+
+The script provides:
+- Automatic `.gitattributes` configuration for `.als` files
+- Git diff driver setup using `alsdiff --git`
+- Optional prepare-commit-msg hook that auto-generates commit message summaries using `alsdiff --mode stats`
+- Support for all git operations (add, modify, delete, rename, copy)
+- Root-only execution guard with clear guidance if run from a subdirectory
 
 Alternatively, you can perform the setup manually.
 
@@ -74,6 +81,23 @@ git config --global diff.alsdiff.command "alsdiff <put_extra_args_here> --git"
 ```bash
 git diff HEAD~1 -- your-project.als
 ```
+
+#### Prepare-Commit-Msg Hook
+
+When enabled, the hook automatically prepends change statistics to your commit messages:
+
+```
+$ git commit
+
+MyProject.als:
+  Tracks: 1 Added, 3 Modified
+  Devices: 2 Added, 5 Removed
+  Clips: 4 Added, 2 Modified
+
+# Please enter the commit message...
+```
+
+If the hook runs multiple times for the same commit message (for example during amend/reuse flows), it refreshes the generated stats block instead of duplicating it.
 
 ### Build from source
 
@@ -189,6 +213,45 @@ alsdiff v1.als v2.als --preset mixing     # Stem mixing focus
 alsdiff v1.als v2.als --preset composer   # MIDI composition focus
 ```
 
+## Output Modes
+
+`alsdiff` offers two output modes for different use cases:
+
+### Tree Mode (default)
+
+Hierarchical tree view showing the structure of your Live set with changes organized by Live's hierarchy (LiveSet > Tracks > Devices > Parameters).
+
+```bash
+alsdiff v1.als v2.als
+alsdiff v1.als v2.als --mode tree
+```
+
+### Stats Mode
+
+Flat summary statistics showing change counts by domain type. Perfect for quick overviews and automated commit messages.
+
+```bash
+alsdiff v1.als v2.als --mode stats
+```
+
+Example output:
+```
+Tracks: 2 Added, 1 Removed, 5 Modified
+Devices: 3 Added, 2 Modified
+Clips: 4 Added, 1 Removed
+Notes: 12 Added, 5 Removed
+Automation: 7 Modified
+```
+
+Stats mode is fully compatible with `--config` and `--preset` flags for customizing which types are tracked:
+
+```bash
+alsdiff v1.als v2.als --mode stats --preset compact
+alsdiff v1.als v2.als --mode stats --config myconfig.json
+```
+
+**Note:** Stats mode is incompatible with display customization flags (`--prefix-*`, `--note-name-style`, `--max-collection-items`), which are designed for tree mode.
+
 <details>
 <summary>Preset output comparison</summary>
 
@@ -227,6 +290,7 @@ alsdiff v1.als v2.als --preset composer   # MIDI composition focus
 
 #### Configuration Selection
 
+- `--mode MODE` - Output mode: `tree` (default) or `stats`
 - `--preset PRESET` - Use built-in preset (compact, full, inline, mixing, composer, quiet, verbose)
 - `--config FILE` - Load custom configuration from JSON file
 
@@ -424,11 +488,11 @@ You can customize display behavior for specific types of elements using `type_ov
    + Audio Clip
      - [x] External audio file changes
      - [x] Loop
-     - [ ] Fade
+     - [x] Fade
      - [ ] Warp markers & settings
  * Automation
    + [x] Basic
-   + [ ] Curve
+   + [x] Curve
  * Global settings
    - [x] Tempo
    - [ ] Time signature
