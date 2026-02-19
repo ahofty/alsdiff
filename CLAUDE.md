@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Structure
 
-- `bin/main.ml` - Main executable entry point
+- `bin/alsdiff.ml` - Main executable entry point
 - `lib/` - Core library modules organized into sublibraries:
   - `lib/base/` - Base functionality modules:
     - `xml.ml` - XML parsing and data structures
@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `lib/output/` - Output formatting:
     - `output.ml` - Output interface definitions
     - `text_renderer.ml` - Plain text output rendering
+    - `stats_renderer.ml` - Statistics summary output rendering
     - `view_model.ml` - View model for output formatting
 - `test/` - Test suites (all use specific module opens for cleaner code):
   - `test_upath.ml` - Tests for XPath-like functionality
@@ -51,6 +52,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `test_view_model.ml` - Tests for view model functionality
   - `test_detail_config_json.ml` - Tests for JSON config handling
   - `test_text_renderer.ml` - Tests for text renderer
+  - `test_stats_renderer.ml` - Tests for statistics renderer
   - `utils.ml` - Shared test utilities
 
 ## Dependencies
@@ -59,7 +61,7 @@ All dependencies with their repositories:
 
 | Dependency | Version | Description | Repository |
 |------------|---------|-------------|------------|
-| `ocaml` | >= 5.0.0 | OCaml compiler | https://ocaml.org |
+| `ocaml` | >= 5.3.0 | OCaml compiler | https://ocaml.org |
 | `xmlm` | - | XML parsing | https://github.com/dbuenzli/xmlm |
 | `camlzip` | - | Gzip decompression for .als files | https://github.com/xavierleroy/camlzip |
 | `angstrom` | - | Parser combinators for Upath | https://github.com/inhabitedtype/angstrom |

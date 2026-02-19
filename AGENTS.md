@@ -11,10 +11,13 @@
 
 ### CLI Options
 - `alsdiff FILE1.als FILE2.als` - Compare two ALS files
-- `--preset PRESET` - Use output preset (compact, full, midi, quiet, verbose)
+- `--mode tree|stats` - Output mode: hierarchical tree (default) or stats summary
+- `--preset PRESET` - Use output preset (compact, composer, full, inline, mixing, quiet, verbose)
 - `--config FILE` - Load configuration from JSON file
-- `--dump-schema [FILE]` - Dump JSON schema for configuration
+- `--dump-preset PRESET` - Dump preset configuration as JSON to stdout
+- `--dump-schema` - Dump JSON schema for configuration to stdout
 - `--validate-config FILE` - Validate a config file against schema
+- `--git` - Git external diff driver mode (exit code 0 = no changes, 1 = changes)
 - `--prefix-added/removed/modified/unchanged` - Custom change prefixes
 - `--note-name-style Sharp|Flat` - Note naming convention
 - `--max-collection-items N` - Limit collection output size
@@ -25,6 +28,9 @@
 - `dune exec test/test_device.exe` - Run specific test (device)
 - `dune exec test/test_view_model.exe` - Run view model tests
 - `dune exec test/test_text_renderer.exe` - Run text renderer tests
+- `dune exec test/test_stats_renderer.exe` - Run stats renderer tests
+- `dune exec test/test_liveset.exe` - Run liveset tests
+- `dune exec test/test_detail_config_json.exe` - Run config JSON tests
 - General pattern: `dune exec test/test_<module>.exe`
 
 ### Development Utilities
@@ -126,6 +132,7 @@ match xml with
   - `upath.ml` - μpath query language (XPath-like syntax for XML)
   - `equality.ml` - Equality and identity traits (EQUALABLE, IDENTIFIABLE)
   - `diff.ml` - Diff infrastructure with phantom types (atomic/structured changes)
+  - `error.ml` - Core error handling (Path_error, Diff_error, Parse_error modules)
 - `lib/live/` (alsdiff_live) - Ableton Live types
   - `automation.ml` - Automation envelopes and events
   - `clip.ml` - MIDI and Audio clips (MidiClip, AudioClip, Loop, MidiNote, SampleRef)
@@ -134,8 +141,10 @@ match xml with
   - `liveset.ml` - Top-level LiveSet structure (Version, Locator, pointees)
 - `lib/output/` (alsdiff_output) - Output formatting
   - `output.ml` - Output interface definition
+  - `config.ml` - JSON configuration with schema support and presets
   - `view_model.ml` - View model types and builders (Field, Item, Collection, ViewBuilder)
   - `text_renderer.ml` - Text rendering with detail configs and JSON schema support
+  - `stats_renderer.ml` - Stats mode rendering (change counts by type)
 - `bin/` - CLI entry point (alsdiff.ml with cmdliner)
 
 ### Device Hierarchy
@@ -166,12 +175,13 @@ type view = Field of field | Item of item | Collection of collection
 Config auto-discovery order:
 1. CLI `--config FILE`
 2. CLI `--preset PRESET`
-3. `.alsdiff.json` in git repository root
-4. `.alsdiff.json` in `$HOME`
-5. `quiet` preset (default)
+3. `.alsdiff.json` in directory of FILE2.als
+4. `.alsdiff.json` in git repository root
+5. `.alsdiff.json` in `$HOME`
+6. `quiet` preset (default)
 
 Detail levels: `Ignore`, `Summary`, `Compact`, `Inline`, `Full`
-Presets: `compact`, `full`, `midi_friendly`, `quiet`, `verbose`
+Presets: `compact`, `composer`, `full`, `inline`, `mixing`, `quiet`, `verbose`
 
 ## Do / Don't
 
