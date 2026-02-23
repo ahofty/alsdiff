@@ -312,19 +312,51 @@ let find_all_seq_0 (path : path_component list) (tree : Xml.t) : (string * Xml.t
   in
 
   (* Helper: DFS generator for MultiWildcard (**)
-     This avoids the O(N^2) pitfall of BFS with Seq.append. *)
-  let rec get_descendants state =
-    Seq.cons state (
-      match state.node with
-      | Xml.Element {childs; name; _} ->
-        let new_stack = name :: state.path_stack in
-        let child_states =
-          List.to_seq childs
-          |> Seq.map (fun child -> { path_stack = new_stack; node = child; parent = Some state })
-        in
-        Seq.flat_map get_descendants child_states
-      | Xml.Data _ -> Seq.empty
-    )
+     Uses an explicit stack to avoid recursive traversal call chains in JS runtimes. *)
+  let get_descendants root_state =
+    let stack = Stack.create () in
+    Stack.push root_state stack;
+    Seq.unfold
+      (fun stack ->
+         if Stack.is_empty stack then
+           None
+         else
+           let state = Stack.pop stack in
+           (match state.node with
+            | Xml.Element {childs; name; _} ->
+              let new_stack = name :: state.path_stack in
+              List.iter
+                (fun child ->
+                   Stack.push { path_stack = new_stack; node = child; parent = Some state } stack)
+                (List.rev childs)
+            | Xml.Data _ -> ());
+           Some (state, stack))
+      stack
+  in
+
+  let flat_map_states
+      (f : traverse_state -> traverse_state Seq.t)
+      (states : traverse_state Seq.t) : traverse_state Seq.t =
+    Seq.unfold
+      (fun (source, current) ->
+         let source_ref = ref source in
+         let current_ref = ref current in
+         let result = ref None in
+         let searching = ref true in
+         while !searching && !result = None do
+           match (!current_ref ()) with
+           | Seq.Cons (x, next_current) ->
+             result := Some (x, (!source_ref, next_current))
+           | Seq.Nil ->
+             (match (!source_ref ()) with
+              | Seq.Cons (state, next_source) ->
+                source_ref := next_source;
+                current_ref := f state
+              | Seq.Nil ->
+                searching := false)
+         done;
+         !result)
+      (states, Seq.empty)
   in
 
   (* Core recursive search function *)
@@ -337,7 +369,7 @@ let find_all_seq_0 (path : path_component list) (tree : Xml.t) : (string * Xml.t
         (* OPTIMIZATION: Fuse generation and filtering.
            Instead of flat_map children -> filter match, we filter strictly inside the loop. *)
         let matched =
-          states |> Seq.flat_map (fun state ->
+          flat_map_states (fun state ->
               match state.node with
               | Xml.Element {childs; name; _} ->
                 (* Push current node's name to stack for the children *)
@@ -353,13 +385,13 @@ let find_all_seq_0 (path : path_component list) (tree : Xml.t) : (string * Xml.t
                     | Xml.Data _ -> None
                   )
               | Xml.Data _ -> Seq.empty
-            )
+            ) states
         in
         find_path_in_children rest matched
 
       | SingleWildcard attrs ->
         let matched =
-          states |> Seq.flat_map children_of_state
+          flat_map_states children_of_state states
           |> Seq.filter (fun s -> match_component s.node (SingleWildcard attrs))
         in
         find_path_in_children rest matched
@@ -367,14 +399,14 @@ let find_all_seq_0 (path : path_component list) (tree : Xml.t) : (string * Xml.t
       | MultiWildcard attrs ->
         (* OPTIMIZATION: DFS traversal.
            We generate all descendants efficiently and then filter. *)
-        let all_descendants = Seq.flat_map get_descendants states in
+        let all_descendants = flat_map_states get_descendants states in
         let matched_descendants =
           Seq.filter (fun s -> match_component s.node (MultiWildcard attrs)) all_descendants
         in
         find_path_in_children rest matched_descendants
 
       | Index (i, name_comp_opt) ->
-        let children = Seq.flat_map children_of_state states in
+        let children = flat_map_states children_of_state states in
         let filtered =
           match name_comp_opt with
           | None -> children

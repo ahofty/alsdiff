@@ -1,0 +1,5 @@
+(library
+ (name base_io)
+ (public_name alsdiff.base_io)
+ (virtual_modules base_io)
+ (default_implementation base_io_native))

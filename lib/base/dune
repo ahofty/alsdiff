@@ -8,9 +8,9 @@
    equality
    diff)
  (libraries
+   base_io
    re
    angstrom
-   camlzip
    xmlm
    fmt))
 

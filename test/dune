@@ -164,6 +164,20 @@
  (modules test_stats_renderer)
  (libraries alsdiff_output alcotest))
 
+(rule
+ (alias runtest-js)
+ (deps
+  browser/js_regression_runner.js
+  t4.xml
+  ../lib/browser/alsdiff.js
+  ../bin/js/alsdiff_js.bc.js)
+ (action
+  (run node
+   %{dep:browser/js_regression_runner.js}
+   %{dep:../lib/browser/alsdiff.js}
+   %{dep:../bin/js/alsdiff_js.bc.js}
+   %{dep:t4.xml})))
+
 ;; Auto indent files with `dune build @fmt`
 (subdir
  run

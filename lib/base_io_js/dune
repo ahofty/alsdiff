@@ -1,0 +1,5 @@
+(library
+ (name base_io_js)
+ (public_name alsdiff.base_io_js)
+ (implements base_io)
+ (libraries js_of_ocaml))

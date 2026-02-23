@@ -47,6 +47,9 @@ jobs:
       - name: Run tests
         run: opam exec -- dune runtest
 
+      - name: Run JS regression tests
+        run: opam exec -- dune build @runtest-js
+
   build-and-release:
     needs: test
     strategy:

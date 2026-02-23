@@ -1,0 +1,5 @@
+(executable
+ (name alsdiff_js)
+ (modes js)
+ (libraries alsdiff_base alsdiff_live alsdiff_output base_io_js js_of_ocaml lwt cmdliner dune-build-info)
+ (preprocess (pps lwt_ppx)))

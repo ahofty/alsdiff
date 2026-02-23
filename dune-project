@@ -22,21 +22,29 @@
  (depends
    (ocaml (>= 5.3.0))
     re
-    camlzip
     xmlm
     angstrom
    (cmdliner (>= 2.0.0))
     dune-build-info
    (ocp-indent :build)
-    eio
-    eio_main
     alcotest
     ppx_deriving
     ppx_deriving_yojson
     ppx_deriving_jsonschema
     jsonschema
     fmt
-    ptime)
+    ptime
+
+   ; Native-specific dependencies
+   (camlzip :with-native)
+   (eio :with-native)
+   (eio_main :with-native)
+
+   ; JS-specific dependencies (for browser builds)
+   lwt
+   lwt_ppx
+   js_of_ocaml
+   js_of_ocaml-ppx)
  (tags
   ("ableton live" "git" "version control")))
 

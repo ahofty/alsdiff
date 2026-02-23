@@ -273,115 +273,136 @@ let diff_list_generic (type a p k)
   if n = 0 then List.map (fun x -> `Added x) new_list
   else if m = 0 then List.map (fun x -> `Removed x) old_list
   else
-    (* Myers O(ND) algorithm implementation *)
-    let max_d = n + m in
-    let offset = max_d in (* Offset to handle negative k indices *)
-
-    (* V array stores the furthest x position for each k-line *)
-    let v = Array.make (2 * max_d + 1) 0 in
-    (* Trace array stores V states for backtracking *)
-    let traces = Array.init (max_d + 1) (fun _ -> Array.make (2 * max_d + 1) 0) in
-
-    (* Follow diagonal (matching elements) as far as possible *)
-    let rec follow_snake x y =
-      if x < n && y < m && compare old_arr.(x) new_arr.(y) then
-        follow_snake (x + 1) (y + 1)
-      else (x, y)
+    let fast_path_result =
+      if n <> m then
+        None
+      else
+        let all_match = ref true in
+        let i = ref 0 in
+        while !all_match && !i < n do
+          if compare old_arr.(!i) new_arr.(!i) then
+            incr i
+          else
+            all_match := false
+        done;
+        if !all_match then begin
+          let result = ref [] in
+          for idx = n - 1 downto 0 do
+            result := on_match old_arr.(idx) new_arr.(idx) :: !result
+          done;
+          Some !result
+        end else
+          None
     in
+    match fast_path_result with
+    | Some result -> result
+    | None ->
+      (* Myers O(ND) algorithm implementation *)
+      let max_d = n + m in
+      let offset = max_d in (* Offset to handle negative k indices *)
 
-    (* Forward search to find the shortest edit distance *)
-    let rec search d =
-      if d > max_d then failwith "Myers algorithm: exceeded maximum edit distance";
+      (* V array stores the furthest x position for each k-line *)
+      let v = Array.make (2 * max_d + 1) 0 in
+      (* Trace array stores V states for backtracking *)
+      let traces = Array.init (max_d + 1) (fun _ -> Array.make (2 * max_d + 1) 0) in
 
-      (* Store current V state for backtracking *)
-      traces.(d) <- Array.copy v;
-
-      (* Search k-lines from -d to +d *)
-      let rec search_k k =
-        if k > d then false (* Not found at this edit distance *)
-        else
-          (* Calculate x position based on previous k-lines *)
-          let x =
-            if k = -d || (k <> d && v.(k - 1 + offset) < v.(k + 1 + offset)) then
-              v.(k + 1 + offset) (* Move down (insertion) *)
-            else
-              v.(k - 1 + offset) + 1 (* Move right (deletion) *)
-          in
-          let y = x - k in
-
-          (* Follow diagonal (snake) *)
-          let x_end, y_end = follow_snake x y in
-          v.(k + offset) <- x_end;
-
-          (* Check if we've reached the end *)
-          if x_end >= n && y_end >= m then true
-          else search_k (k + 2)
+      (* Follow diagonal (matching elements) as far as possible *)
+      let follow_snake x y =
+        let x_ref = ref x in
+        let y_ref = ref y in
+        while !x_ref < n && !y_ref < m && compare old_arr.(!x_ref) new_arr.(!y_ref) do
+          incr x_ref;
+          incr y_ref
+        done;
+        (!x_ref, !y_ref)
       in
 
-      if search_k (-d) then d (* Found solution at edit distance d *)
-      else search (d + 1) (* Try next edit distance *)
-    in
+      (* Forward search to find the shortest edit distance *)
+      let search () =
+        let found = ref None in
+        let d = ref 0 in
+        while !found = None && !d <= max_d do
+          traces.(!d) <- Array.copy v;
 
-    (* Find the edit distance *)
-    let edit_distance = search 0 in
+          let found_at_d = ref false in
+          let k = ref (- !d) in
+          while not !found_at_d && !k <= !d do
+            let x =
+              if !k = - !d || (!k <> !d && v.(!k - 1 + offset) < v.(!k + 1 + offset)) then
+                v.(!k + 1 + offset)
+              else
+                v.(!k - 1 + offset) + 1
+            in
+            let y = x - !k in
+            let x_end, y_end = follow_snake x y in
+            v.(!k + offset) <- x_end;
+            if x_end >= n && y_end >= m then
+              found_at_d := true
+            else
+              k := !k + 2
+          done;
 
-    (* Backtrack to reconstruct the edit script *)
-    let result = ref [] in
+          if !found_at_d then
+            found := Some !d
+          else
+            incr d
+        done;
+        match !found with
+        | Some d -> d
+        | None -> failwith "Myers algorithm: exceeded maximum edit distance"
+      in
 
-    let rec backtrack d x y =
-      if d = 0 then
-        (* At edit distance 0, everything is unchanged *)
-        let rec add_unchanged i =
-          if i >= 0 then (
-            result := on_match old_arr.(i) new_arr.(i) :: !result;
-            add_unchanged (i - 1)
-          )
-        in
-        add_unchanged (x - 1)
-      else
+      (* Find the edit distance *)
+      let edit_distance = search () in
+
+      (* Backtrack to reconstruct the edit script *)
+      let result = ref [] in
+
+      let d_ref = ref edit_distance in
+      let x_ref = ref n in
+      let y_ref = ref m in
+      while !d_ref > 0 do
+        let d = !d_ref in
         let prev_v = traces.(d) in
-        let k = x - y in
+        let k = !x_ref - !y_ref in
 
-        (* Determine which previous k-line we came from *)
         let prev_k =
           if k = -d || (k <> d && prev_v.(k - 1 + offset) < prev_v.(k + 1 + offset)) then
-            k + 1 (* Came from insertion *)
+            k + 1
           else
-            k - 1 (* Came from deletion *)
+            k - 1
         in
 
         let prev_x = prev_v.(prev_k + offset) in
         let prev_y = prev_x - prev_k in
-
-        (* Calculate where the snake started *)
         let snake_start_x, snake_start_y =
-          if prev_k = k - 1 then (prev_x + 1, prev_y) (* After deletion *)
-          else (prev_x, prev_y + 1) (* After insertion *)
+          if prev_k = k - 1 then (prev_x + 1, prev_y)
+          else (prev_x, prev_y + 1)
         in
 
-        (* Add unchanged elements from the snake *)
-        let rec add_snake curr_x curr_y =
-          if curr_x > snake_start_x && curr_y > snake_start_y then (
-            result := on_match old_arr.(curr_x - 1) new_arr.(curr_y - 1) :: !result;
-            add_snake (curr_x - 1) (curr_y - 1)
-          )
-        in
-        add_snake x y;
+        let curr_x = ref !x_ref in
+        let curr_y = ref !y_ref in
+        while !curr_x > snake_start_x && !curr_y > snake_start_y do
+          result := on_match old_arr.(!curr_x - 1) new_arr.(!curr_y - 1) :: !result;
+          decr curr_x;
+          decr curr_y
+        done;
 
-        (* Add the edit operation *)
         if prev_k = k - 1 then
-          (* Deletion *)
           result := `Removed old_arr.(snake_start_x - 1) :: !result
         else
-          (* Insertion *)
           result := `Added new_arr.(snake_start_y - 1) :: !result;
 
-        (* Continue backtracking *)
-        backtrack (d - 1) prev_x prev_y
-    in
+        x_ref := prev_x;
+        y_ref := prev_y;
+        decr d_ref
+      done;
 
-    backtrack edit_distance n m;
-    !result
+      for i = !x_ref - 1 downto 0 do
+        result := on_match old_arr.(i) new_arr.(i) :: !result
+      done;
+
+      !result
 
 
 (** Myers' O(ND) diff algorithm - based on Eugene W. Myers' 1986 paper.
@@ -404,10 +425,11 @@ let diff_list_id (type a p k) (module ID : DIFFABLE_ID with type t = a and type 
   diff_list_generic
     ~compare:ID.has_same_id
     ~on_match:(fun old_item new_item ->
-        if ID.equal old_item new_item then
+        let patch = ID.diff old_item new_item in
+        if ID.Patch.is_empty patch then
           `Unchanged
         else
-          `Modified (ID.diff old_item new_item)
+          `Modified patch
       )
     old_list new_list
 

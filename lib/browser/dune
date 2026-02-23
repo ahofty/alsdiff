@@ -1,0 +1,25 @@
+(library
+ (name alsdiff_browser)
+ (public_name alsdiff.browser)
+ (modules alsdiff_browser)
+ (libraries
+   alsdiff_base
+   alsdiff_live
+   alsdiff_output
+   base_io_js
+   js_of_ocaml
+   lwt)
+ (preprocess (pps lwt_ppx js_of_ocaml-ppx)))
+
+(executable
+ (name main)
+ (modules main)
+ (libraries alsdiff_browser)
+ (modes js)
+ (preprocess (pps lwt_ppx js_of_ocaml-ppx)))
+
+(rule
+ (target alsdiff.js)
+ (deps main.bc.js)
+ (action
+  (run cp %{deps} %{target})))

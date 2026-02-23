@@ -1,0 +1,5 @@
+(library
+ (name base_io_native)
+ (public_name alsdiff.base_io_native)
+ (implements base_io)
+ (libraries camlzip unix))
