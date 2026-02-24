@@ -5,7 +5,8 @@
    view_model
    config
    text_renderer
-   flowchart)
+   flowchart
+   dot_renderer)
  (libraries
    alsdiff_base
    alsdiff_live

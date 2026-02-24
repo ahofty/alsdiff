@@ -238,6 +238,7 @@ let test_routing_from_group_to_main_uses_subgraph_id () =
       ~target_id:"main"
       ~group_ids:(IntSet.singleton 74)
       ~main_node_id:"main"
+      ~use_subgraph_id:true
   in
   check string "group source to main uses subgraph id" "group_74" from_id
 
@@ -249,6 +250,7 @@ let test_routing_from_group_to_non_main_keeps_track_node () =
       ~target_id:"track_42"
       ~group_ids:(IntSet.singleton 74)
       ~main_node_id:"main"
+      ~use_subgraph_id:true
   in
   check string "group source to non-main keeps track node" "track_74" from_id
 
@@ -260,6 +262,7 @@ let test_routing_from_non_group_to_main_keeps_track_node () =
       ~target_id:"main"
       ~group_ids:(IntSet.singleton 74)
       ~main_node_id:"main"
+      ~use_subgraph_id:true
   in
   check string "non-group source to main keeps track node" "track_12" from_id
 
