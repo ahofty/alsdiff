@@ -26,13 +26,13 @@ depends: [
   "jsonschema"
   "fmt"
   "ptime"
-  "camlzip" {with-native}
-  "eio" {with-native}
-  "eio_main" {with-native}
-  "lwt"
-  "lwt_ppx"
-  "js_of_ocaml"
-  "js_of_ocaml-ppx"
+  "camlzip"
+  "eio"
+  "eio_main"
+  "lwt" {with_js}
+  "lwt_ppx" {with_js}
+  "js_of_ocaml" {with_js}
+  "js_of_ocaml-ppx" {with_js}
   "odoc" {with-doc}
 ]
 build: [

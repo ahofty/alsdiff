@@ -37,6 +37,8 @@ jobs:
             arch: x86_64
 
     runs-on: ${{ matrix.os }}
+    env:
+      OPAMVAR_with_js: "false"
 
     steps:
       - name: Checkout code
@@ -45,6 +47,14 @@ jobs:
           # Determine what to checkout
           # If commit_sha is provided, use that; otherwise use the branch input
           ref: ${{ inputs.commit_sha || inputs.branch }}
+
+      - name: Guard opam dependency filters
+        shell: bash
+        run: |
+          if grep -n "with-native" dune-project alsdiff.opam; then
+            echo "::error::Found deprecated with-native filter in package metadata."
+            exit 1
+          fi
 
       - name: Get version info
         id: version_info

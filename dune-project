@@ -35,16 +35,16 @@
     fmt
     ptime
 
-   ; Native-specific dependencies
-   (camlzip :with-native)
-   (eio :with-native)
-   (eio_main :with-native)
+   ; Native-specific dependencies (default profile)
+   camlzip
+   eio
+   eio_main
 
-   ; JS-specific dependencies (for browser builds)
-   lwt
-   lwt_ppx
-   js_of_ocaml
-   js_of_ocaml-ppx)
+   ; JS-specific dependencies (opt-in via OPAMVAR_with_js=true)
+   (lwt :with_js)
+   (lwt_ppx :with_js)
+   (js_of_ocaml :with_js)
+   (js_of_ocaml-ppx :with_js))
  (tags
   ("ableton live" "git" "version control")))
 
