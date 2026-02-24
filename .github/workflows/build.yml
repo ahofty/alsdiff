@@ -46,7 +46,8 @@ jobs:
 
       - run: opam install . --deps-only --with-test
 
-      - run: opam exec -- dune build
+      # Build only the native CLI target; full `dune build` would pull JS targets.
+      - run: opam exec -- dune build bin/alsdiff.exe
 
       - run: opam exec -- dune runtest
 

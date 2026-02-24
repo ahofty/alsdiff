@@ -89,11 +89,18 @@ jobs:
       - name: Install dependencies
         run: opam install . --deps-only
 
-      - name: Build
-        run: opam exec -- dune build
+      - name: Build native CLI target
+        run: opam exec -- dune build bin/alsdiff.exe
 
-      - name: Install
-        run: opam exec -- dune install alsdiff --prefix install
+      - name: Prepare install tree
+        shell: bash
+        run: |
+          mkdir -p install/bin
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp _build/default/bin/alsdiff.exe install/bin/alsdiff.exe
+          else
+            cp _build/default/bin/alsdiff.exe install/bin/alsdiff
+          fi
 
       - name: Create zip (Linux/macOS)
         if: runner.os != 'Windows'
