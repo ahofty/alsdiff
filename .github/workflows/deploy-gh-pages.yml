@@ -1,0 +1,108 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - js_of_ocaml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OPAMVAR_with_js: "true"
+
+    steps:
+      - name: Wait for build workflow success
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = context.sha;
+            const workflowId = "build.yml";
+            const maxWaitMs = 45 * 60 * 1000;
+            const pollIntervalMs = 30 * 1000;
+            const startedAt = Date.now();
+
+            while (Date.now() - startedAt < maxWaitMs) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: workflowId,
+                branch: "js_of_ocaml",
+                event: "push",
+                per_page: 100
+              });
+
+              const matchingRuns = data.workflow_runs
+                .filter((run) => run.head_sha === headSha)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+              if (matchingRuns.length === 0) {
+                core.info(`No ${workflowId} run found yet for ${headSha}. Waiting...`);
+              } else {
+                const run = matchingRuns[0];
+                core.info(
+                  `Found ${workflowId} run ${run.id}: status=${run.status}, conclusion=${run.conclusion}`
+                );
+
+                if (run.status === "completed") {
+                  if (run.conclusion === "success") {
+                    core.info(`${workflowId} succeeded for ${headSha}. Continuing deployment.`);
+                    return;
+                  }
+
+                  core.setFailed(
+                    `${workflowId} completed with conclusion '${run.conclusion}' for ${headSha}.`
+                  );
+                  return;
+                }
+              }
+
+              await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+            }
+
+            core.setFailed(
+              `Timed out waiting for ${workflowId} success for ${headSha} after 45 minutes.`
+            );
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - name: Install dependencies
+        run: opam install . --deps-only
+
+      - name: Build alsdiff.js (release profile)
+        run: DUNE_BUILD_DIR=_build-pages-release opam exec -- dune build --profile release lib/browser/alsdiff.js
+
+      - name: Stage gh-pages payload
+        shell: bash
+        run: |
+          mkdir -p payload
+          cp test/browser/dist/index.html payload/index.html
+          cp _build-pages-release/default/lib/browser/alsdiff.js payload/alsdiff.js
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./payload
+          force_orphan: true
+          keep_files: false
