@@ -33,8 +33,8 @@ let file_arg =
   Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE.als" ~doc)
 
 let direction_arg =
-  let doc = "Flowchart direction (LR or TD)." in
-  Arg.(value & opt string "LR" & info ["direction"] ~docv:"DIR" ~doc)
+  let doc = "Flowchart direction: LR (left-right) or TD (top-down)." in
+  Arg.(value & opt (enum ["LR", "LR"; "TD", "TD"]) "TD" & info ["direction"] ~docv:"DIR" ~doc)
 
 let include_external_arg =
   let doc = "Include external routing nodes." in

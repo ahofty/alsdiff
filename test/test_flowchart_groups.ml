@@ -91,10 +91,267 @@ let test_nested_groups () =
   check bool "ungrouped present" true
     (contains_substring ~haystack:output ~needle:"track_20[\"Solo (Audio)\"]")
 
+let test_top_down_direction_header () =
+  let open Flowchart in
+  let group_info = {
+    track_parent = IntMap.empty;
+    group_ids = IntSet.empty;
+    track_order = [];
+  } in
+  let output = render_nodes_with_groups
+      ~direction:"TD"
+      ~track_info_map:IntMap.empty
+      ~main_node:{ id = "main"; label = "Main" }
+      ~external_nodes:[]
+      ~edges:[]
+      ~group_info
+  in
+  check bool "direction header TD" true
+    (contains_substring ~haystack:output ~needle:"flowchart TD")
+
+let test_main_keyword_classifier () =
+  let open Flowchart in
+  check bool "main keyword exact" true (is_main_keyword "main");
+  check bool "main keyword case-insensitive" true (is_main_keyword "Main");
+  check bool "main keyword with spaces" true (is_main_keyword " main ");
+  check bool "main keyword not master" false (is_main_keyword "master")
+
+let test_group_parent_target_resolution () =
+  let open Flowchart in
+  let track_parent =
+    IntMap.empty
+    |> IntMap.add 74 None
+    |> IntMap.add 75 (Some 74)
+  in
+  let track_id_map =
+    IntMap.empty
+    |> IntMap.add 74 "track_74"
+    |> IntMap.add 75 "track_75"
+  in
+  let resolved = resolve_group_parent_node_id
+      ~source_track_id:(Some 75)
+      ~track_parent
+      ~group_ids:(IntSet.singleton 74)
+      ~track_id_map
+  in
+  check (option string) "group target resolves to parent group node"
+    (Some "track_74") resolved
+
+let test_group_parent_target_resolution_none_without_parent_group () =
+  let open Flowchart in
+  let track_parent =
+    IntMap.empty
+    |> IntMap.add 74 None
+    |> IntMap.add 75 None
+  in
+  let track_id_map =
+    IntMap.empty
+    |> IntMap.add 74 "track_74"
+    |> IntMap.add 75 "track_75"
+  in
+  let resolved = resolve_group_parent_node_id
+      ~source_track_id:(Some 75)
+      ~track_parent
+      ~group_ids:(IntSet.singleton 74)
+      ~track_id_map
+  in
+  check (option string) "no parent group means no resolution" None resolved
+
+let test_parent_group_routing_edge_suppressed () =
+  let open Flowchart in
+  let track_parent =
+    IntMap.empty
+    |> IntMap.add 74 None
+    |> IntMap.add 75 (Some 74)
+  in
+  let track_id_map =
+    IntMap.empty
+    |> IntMap.add 74 "track_74"
+    |> IntMap.add 75 "track_75"
+  in
+  let suppressed = should_suppress_parent_group_routing_edge
+      ~source_track_id:(Some 75)
+      ~target_id:"track_74"
+      ~track_parent
+      ~group_ids:(IntSet.singleton 74)
+      ~track_id_map
+  in
+  check bool "parent-group routing edge suppressed" true suppressed
+
+let test_parent_group_routing_edge_not_suppressed_for_other_target () =
+  let open Flowchart in
+  let track_parent =
+    IntMap.empty
+    |> IntMap.add 74 None
+    |> IntMap.add 75 (Some 74)
+  in
+  let track_id_map =
+    IntMap.empty
+    |> IntMap.add 42 "track_42"
+    |> IntMap.add 74 "track_74"
+    |> IntMap.add 75 "track_75"
+  in
+  let suppressed = should_suppress_parent_group_routing_edge
+      ~source_track_id:(Some 75)
+      ~target_id:"track_42"
+      ~track_parent
+      ~group_ids:(IntSet.singleton 74)
+      ~track_id_map
+  in
+  check bool "non-parent target edge not suppressed" false suppressed
+
+let test_main_node_hidden_when_unconnected () =
+  let open Flowchart in
+  let output = render_nodes_with_groups
+      ~direction:"TD"
+      ~track_info_map:IntMap.empty
+      ~main_node:{ id = "main"; label = "Main" }
+      ~external_nodes:[]
+      ~edges:[]
+      ~group_info:{ track_parent = IntMap.empty; group_ids = IntSet.empty; track_order = [] }
+  in
+  check bool "main hidden when no edges reference it" false
+    (contains_substring ~haystack:output ~needle:"main[\"Main\"]")
+
+let test_main_node_shown_when_connected () =
+  let open Flowchart in
+  let track_info_map =
+    IntMap.empty
+    |> IntMap.add 1 { node = { id = "track_1"; label = "Track 1 (Audio)" }; group_label = None }
+  in
+  let output = render_nodes_with_groups
+      ~direction:"TD"
+      ~track_info_map
+      ~main_node:{ id = "main"; label = "Main" }
+      ~external_nodes:[]
+      ~edges:[{ from_id = "track_1"; to_id = "main"; label = "vol=1.00"; style = Routing }]
+      ~group_info:{ track_parent = IntMap.empty; group_ids = IntSet.empty; track_order = [1] }
+  in
+  check bool "main shown when connected" true
+    (contains_substring ~haystack:output ~needle:"main[\"Main\"]")
+
+let test_routing_from_group_to_main_uses_subgraph_id () =
+  let open Flowchart in
+  let from_id = routing_from_id_for_main_target
+      ~source_track_id:(Some 74)
+      ~default_from_id:"track_74"
+      ~target_id:"main"
+      ~group_ids:(IntSet.singleton 74)
+      ~main_node_id:"main"
+  in
+  check string "group source to main uses subgraph id" "group_74" from_id
+
+let test_routing_from_group_to_non_main_keeps_track_node () =
+  let open Flowchart in
+  let from_id = routing_from_id_for_main_target
+      ~source_track_id:(Some 74)
+      ~default_from_id:"track_74"
+      ~target_id:"track_42"
+      ~group_ids:(IntSet.singleton 74)
+      ~main_node_id:"main"
+  in
+  check string "group source to non-main keeps track node" "track_74" from_id
+
+let test_routing_from_non_group_to_main_keeps_track_node () =
+  let open Flowchart in
+  let from_id = routing_from_id_for_main_target
+      ~source_track_id:(Some 12)
+      ~default_from_id:"track_12"
+      ~target_id:"main"
+      ~group_ids:(IntSet.singleton 74)
+      ~main_node_id:"main"
+  in
+  check string "non-group source to main keeps track node" "track_12" from_id
+
+let test_parse_target_track_id_from_audio_input_target () =
+  let open Flowchart in
+  let parsed = parse_target_track_id "AudioIn/Track.12/DeviceOut.1.S1" in
+  check (option int) "parse Track.<id> from complex input target" (Some 12) parsed
+
+let test_parse_target_track_id_no_false_s_suffix_parse () =
+  let open Flowchart in
+  let parsed = parse_target_track_id "AudioIn/External/S1" in
+  check (option int) "do not parse trailing S1 as track id" None parsed
+
+let test_resolve_track_node_id_from_target () =
+  let open Flowchart in
+  let track_id_map =
+    IntMap.empty
+    |> IntMap.add 12 "track_12"
+    |> IntMap.add 68 "track_68"
+  in
+  let resolved = resolve_track_node_id_from_target
+      ~target:"AudioIn/Track.12/DeviceOut.1.S1"
+      ~track_id_map
+  in
+  check (option string) "resolve input target to source track node id" (Some "track_12") resolved
+
+let test_input_routing_edge_direction_and_style () =
+  let open Flowchart in
+  let edge = {
+    from_id = "track_12";
+    to_id = "track_68";
+    label = "3/4-Opal";
+    style = InputRouting;
+  } in
+  let rendered = render_edge edge in
+  check bool "input edge points source->consumer" true
+    (contains_substring ~haystack:rendered ~needle:"track_12");
+  check bool "input edge points to consumer" true
+    (contains_substring ~haystack:rendered ~needle:"track_68");
+  check bool "input edge is dashed" true
+    (contains_substring ~haystack:rendered ~needle:"-.->");
+  check bool "input edge preserves route label" true
+    (contains_substring ~haystack:rendered ~needle:"3/4-Opal")
+
+let test_is_no_output_none_variants () =
+  let open Flowchart in
+  check bool "None is no-output" true (is_no_output "None");
+  check bool "MidiOut/None is no-output" true (is_no_output "MidiOut/None");
+  check bool "AudioOut/None is no-output" true (is_no_output "AudioOut/None");
+  check bool "Main is not no-output" false (is_no_output "Main")
+
+let test_should_skip_routing_for_no_output_destination () =
+  let open Flowchart in
+  let routing : Alsdiff_live.Track.Routing.t = {
+    route_type = Alsdiff_live.Track.Routing.MidiOut;
+    target = "MidiOut/None";
+    upper_string = "None";
+    lower_string = "";
+  } in
+  check bool "routing to no-output is skipped" true (should_skip_routing routing)
+
 let () =
   run "flowchart groups" [
     ("groups", [
         test_case "group membership" `Quick test_group_membership;
         test_case "nested groups" `Quick test_nested_groups;
+        test_case "top-down direction header" `Quick test_top_down_direction_header;
+        test_case "main keyword classifier" `Quick test_main_keyword_classifier;
+        test_case "group parent target resolution" `Quick test_group_parent_target_resolution;
+        test_case "group parent target resolution none"
+          `Quick test_group_parent_target_resolution_none_without_parent_group;
+        test_case "parent-group routing edge suppressed" `Quick test_parent_group_routing_edge_suppressed;
+        test_case "parent-group routing edge not suppressed"
+          `Quick test_parent_group_routing_edge_not_suppressed_for_other_target;
+        test_case "main node hidden when unconnected" `Quick test_main_node_hidden_when_unconnected;
+        test_case "main node shown when connected" `Quick test_main_node_shown_when_connected;
+        test_case "routing from group to main uses subgraph id"
+          `Quick test_routing_from_group_to_main_uses_subgraph_id;
+        test_case "routing from group to non-main keeps track node"
+          `Quick test_routing_from_group_to_non_main_keeps_track_node;
+        test_case "routing from non-group to main keeps track node"
+          `Quick test_routing_from_non_group_to_main_keeps_track_node;
+        test_case "parse target track id from audio input target"
+          `Quick test_parse_target_track_id_from_audio_input_target;
+        test_case "parse target track id no false suffix parse"
+          `Quick test_parse_target_track_id_no_false_s_suffix_parse;
+        test_case "resolve track node id from target"
+          `Quick test_resolve_track_node_id_from_target;
+        test_case "input routing edge direction and style"
+          `Quick test_input_routing_edge_direction_and_style;
+        test_case "none variants classify as no-output" `Quick test_is_no_output_none_variants;
+        test_case "routing to no-output is skipped"
+          `Quick test_should_skip_routing_for_no_output_destination;
       ]);
   ]

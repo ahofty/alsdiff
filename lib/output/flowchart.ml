@@ -7,6 +7,7 @@ module IntSet = Set.Make (Int)
 type edge_style =
   | Routing
   | Send
+  | InputRouting
 
 type node = {
   id : string;
@@ -36,6 +37,7 @@ type options = {
   include_external : bool;
   include_routing : bool;
   include_sends : bool;
+  use_subgraph_id_for_groups : bool;
 }
 
 let sanitize_id (s : string) : string =
@@ -78,7 +80,7 @@ let normalize_external_label (s : string) : string * string =
   let normalized = String.lowercase_ascii collapsed in
   let key =
     match normalized with
-    | "" | "none" | "no output" -> "no output"
+    | "" | "none" | "no output" | "midiout/none" | "audioout/none" -> "no output"
     | _ -> normalized
   in
   let display =
@@ -110,8 +112,8 @@ let send_label (s : Track.Send.t) : string =
   Printf.sprintf "send=%s" amt
 
 let is_no_output (s : string) : bool =
-  let s = String.trim s |> String.lowercase_ascii in
-  s = "" || s = "no output"
+  let s = collapse_whitespace s |> String.lowercase_ascii in
+  s = "" || s = "none" || s = "no output" || s = "midiout/none" || s = "audioout/none"
 
 let parse_trailing_int (s : string) : int option =
   let len = String.length s in
@@ -136,21 +138,61 @@ let parse_trailing_int (s : string) : int option =
     let substr = String.sub s start (len - start) in
     int_of_string_opt substr
 
+let parse_track_id_from_target (target : string) : int option =
+  let len = String.length target in
+  let marker = "Track." in
+  let marker_len = String.length marker in
+  let is_digit ch = ch >= '0' && ch <= '9' in
+  let rec find i =
+    if i + marker_len > len then None
+    else if String.sub target i marker_len = marker then
+      let start = i + marker_len in
+      if start >= len || not (is_digit target.[start]) then find (i + 1)
+      else
+        let rec consume j =
+          if j < len && is_digit target.[j] then consume (j + 1)
+          else j
+        in
+        let stop = consume start in
+        let digits = String.sub target start (stop - start) in
+        int_of_string_opt digits
+    else find (i + 1)
+  in
+  find 0
+
 let parse_target_track_id (target : string) : int option =
   match int_of_string_opt (String.trim target) with
   | Some n -> Some n
-  | None -> parse_trailing_int target
+  | None ->
+    (match parse_track_id_from_target target with
+     | Some n -> Some n
+     | None ->
+       if String.contains target '/' || String.contains target '.'
+       then None
+       else parse_trailing_int target)
 
 let routing_label_target (r : Track.Routing.t) : string =
   if not (is_no_output r.upper_string) then r.upper_string
   else if not (is_no_output r.lower_string) then r.lower_string
   else r.target
 
+let is_group_keyword (s : string) : bool =
+  String.lowercase_ascii (String.trim s) = "group"
+
+let is_group_routing_target (r : Track.Routing.t) : bool =
+  is_group_keyword r.target || is_group_keyword (routing_label_target r)
+
+let is_main_keyword (s : string) : bool =
+  String.lowercase_ascii (String.trim s) = "main"
+
+let group_subgraph_id (group_id : int) : string =
+  sanitize_id ("group_" ^ string_of_int group_id)
+
 let should_skip_routing (r : Track.Routing.t) : bool =
-  String.trim r.target = "" && is_no_output r.upper_string && is_no_output r.lower_string
+  is_no_output r.target && is_no_output (routing_label_target r)
 
 let render_edge (e : edge) : string =
-  let arrow = match e.style with Routing -> "-->" | Send -> "-.->" in
+  let arrow = match e.style with Routing -> "-->" | Send | InputRouting -> "-.->" in
   if String.trim e.label = "" then
     Printf.sprintf "%s %s %s" e.from_id arrow e.to_id
   else
@@ -178,6 +220,12 @@ let routing_for_track (track : Track.t) : Track.Routing.t option =
   | Track.Audio t | Track.Group t | Track.Return t -> Some t.routings.audio_out
   | Track.Main _ -> None
 
+let input_routing_for_track (track : Track.t) : Track.Routing.t option =
+  match track with
+  | Track.Midi t -> Some t.routings.midi_in
+  | Track.Audio t | Track.Group t | Track.Return t -> Some t.routings.audio_in
+  | Track.Main _ -> None
+
 let mixer_for_track (track : Track.t) : Track.Mixer.t option =
   match track with
   | Track.Midi t -> Some t.mixer
@@ -189,6 +237,7 @@ let sends_for_track (track : Track.t) : Track.Send.t list =
   | Track.Midi t -> t.mixer.sends
   | Track.Audio t | Track.Group t | Track.Return t -> t.mixer.sends
   | Track.Main _ -> []
+
 
 let build_group_info (xml : Xml.t) ~(track_order : int list) : group_info =
   let liveset_xml = Upath.find "LiveSet" xml |> snd in
@@ -216,6 +265,58 @@ let build_group_info (xml : Xml.t) ~(track_order : int list) : group_info =
     );
   { track_parent = !track_parent; group_ids = !group_ids; track_order }
 
+let resolve_group_parent_node_id
+    ~(source_track_id : int option)
+    ~(track_parent : int option IntMap.t)
+    ~(group_ids : IntSet.t)
+    ~(track_id_map : string IntMap.t)
+  : string option =
+  match source_track_id with
+  | Some source_id ->
+    (match IntMap.find_opt source_id track_parent with
+     | Some (Some parent_id) when IntSet.mem parent_id group_ids ->
+       IntMap.find_opt parent_id track_id_map
+     | _ -> None)
+  | None -> None
+
+let should_suppress_parent_group_routing_edge
+    ~(source_track_id : int option)
+    ~(target_id : string)
+    ~(track_parent : int option IntMap.t)
+    ~(group_ids : IntSet.t)
+    ~(track_id_map : string IntMap.t)
+  : bool =
+  match resolve_group_parent_node_id ~source_track_id ~track_parent ~group_ids ~track_id_map with
+  | Some parent_node_id -> parent_node_id = target_id
+  | None -> false
+
+let input_routing_label (r : Track.Routing.t) : string =
+  let lower = String.trim r.lower_string in
+  if lower <> "" && not (is_no_output lower) then lower
+  else
+    let upper = String.trim r.upper_string in
+    if upper <> "" && not (is_no_output upper) then upper
+    else ""
+
+let resolve_track_node_id_from_target ~(target : string) ~(track_id_map : string IntMap.t) : string option =
+  match parse_target_track_id target with
+  | Some id -> IntMap.find_opt id track_id_map
+  | None -> None
+
+let routing_from_id_for_main_target
+    ~(source_track_id : int option)
+    ~(default_from_id : string)
+    ~(target_id : string)
+    ~(group_ids : IntSet.t)
+    ~(main_node_id : string)
+    ~(use_subgraph_id : bool)
+  : string =
+  if target_id = main_node_id && use_subgraph_id then
+    match source_track_id with
+    | Some source_id when IntSet.mem source_id group_ids -> group_subgraph_id source_id
+    | _ -> default_from_id
+  else default_from_id
+
 let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
   : track_info IntMap.t * node * node list * edge list * group_info =
   let track_info_map = ref IntMap.empty in
@@ -233,6 +334,18 @@ let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
   let track_id_map =
     IntMap.fold (fun id info acc -> IntMap.add id info.node.id acc) !track_info_map IntMap.empty
   in
+  let track_order =
+    let ids = ref [] in
+    let add_id track =
+      match track_node_info track with
+      | _, Some id -> ids := id :: !ids
+      | _ -> ()
+    in
+    List.iter add_id liveset.tracks;
+    List.iter add_id liveset.returns;
+    List.rev !ids
+  in
+  let group_info = build_group_info xml ~track_order in
   let return_id_set =
     List.fold_left (fun acc track ->
         match track with
@@ -258,21 +371,35 @@ let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
         id
   in
 
-  let resolve_routing_target (r : Track.Routing.t) : string option =
-    match parse_target_track_id r.target with
-    | Some id ->
-      (match IntMap.find_opt id track_id_map with
-       | Some node_id -> Some node_id
-       | None ->
-         if options.include_external then
-           let label = routing_label_target r in
-           Some (get_external_node_id ~label)
-         else None)
-    | None ->
+  let resolve_routing_target ~(source_track_id : int option) (r : Track.Routing.t) : string option =
+    let fallback_external () =
       if options.include_external then
         let label = routing_label_target r in
         Some (get_external_node_id ~label)
       else None
+    in
+    match parse_target_track_id r.target with
+    | Some id ->
+      (match IntMap.find_opt id track_id_map with
+       | Some node_id -> Some node_id
+       | None -> fallback_external ())
+    | None ->
+      if is_group_routing_target r then
+        match resolve_group_parent_node_id
+                ~source_track_id
+                ~track_parent:group_info.track_parent
+                ~group_ids:group_info.group_ids
+                ~track_id_map
+        with
+        | Some node_id -> Some node_id
+        | None -> fallback_external ()
+      else if is_main_keyword r.target || is_main_keyword (routing_label_target r) then
+        Some main_node.id
+      else fallback_external ()
+  in
+
+  let resolve_input_source_node_id (r : Track.Routing.t) : string option =
+    resolve_track_node_id_from_target ~target:r.target ~track_id_map
   in
 
   let edges = ref [] in
@@ -280,16 +407,46 @@ let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
   let add_routing_edge track =
     match routing_for_track track, mixer_for_track track with
     | Some routing, Some mixer when options.include_routing && not (should_skip_routing routing) ->
-      (match resolve_routing_target routing with
+      let from_id, source_track_id =
+        match track_node_info track with
+        | Some info, Some id -> (info.node.id, Some id)
+        | _ -> (main_node.id, None)
+      in
+      (match resolve_routing_target ~source_track_id routing with
        | Some target_id ->
-         let from_id =
-           match track_node_info track with
-           | Some info, _ -> info.node.id
-           | _ -> main_node.id
-         in
-         let label = mixer_label mixer |> sanitize_label in
-         edges := { from_id; to_id = target_id; label; style = Routing } :: !edges
+         if should_suppress_parent_group_routing_edge
+             ~source_track_id
+             ~target_id
+             ~track_parent:group_info.track_parent
+             ~group_ids:group_info.group_ids
+             ~track_id_map
+         then ()
+         else
+           let from_id = routing_from_id_for_main_target
+               ~source_track_id
+               ~default_from_id:from_id
+               ~target_id
+               ~group_ids:group_info.group_ids
+               ~main_node_id:main_node.id
+               ~use_subgraph_id:options.use_subgraph_id_for_groups
+           in
+           let label = mixer_label mixer |> sanitize_label in
+           edges := { from_id; to_id = target_id; label; style = Routing } :: !edges
        | None -> ())
+    | _ -> ()
+  in
+
+  let add_input_routing_edge track =
+    match input_routing_for_track track with
+    | Some routing when options.include_routing && not (should_skip_routing routing) ->
+      (match track_node_info track with
+       | Some info, _ ->
+         (match resolve_input_source_node_id routing with
+          | Some source_id when source_id <> info.node.id ->
+            let label = input_routing_label routing |> sanitize_label in
+            edges := { from_id = source_id; to_id = info.node.id; label; style = InputRouting } :: !edges
+          | _ -> ())
+       | _ -> ())
     | _ -> ()
   in
 
@@ -317,23 +474,9 @@ let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
         ) sends
   in
 
-  List.iter (fun t -> add_routing_edge t; add_send_edges t) liveset.tracks;
-  List.iter (fun t -> add_routing_edge t; add_send_edges t) liveset.returns;
+  List.iter (fun t -> add_routing_edge t; add_input_routing_edge t; add_send_edges t) liveset.tracks;
+  List.iter (fun t -> add_routing_edge t; add_input_routing_edge t; add_send_edges t) liveset.returns;
   add_routing_edge liveset.main;
-
-  let track_order =
-    let ids = ref [] in
-    let add_id track =
-      match track_node_info track with
-      | _, Some id -> ids := id :: !ids
-      | _ -> ()
-    in
-    List.iter add_id liveset.tracks;
-    List.iter add_id liveset.returns;
-    List.rev !ids
-  in
-
-  let group_info = build_group_info xml ~track_order in
   (!track_info_map, main_node, List.rev !external_list, List.rev !edges, group_info)
 
 let render_nodes_with_groups
@@ -371,15 +514,22 @@ let render_nodes_with_groups
     |> List.rev
   in
 
-  let render_node (n : node) =
-    Buffer.add_string buf (Printf.sprintf "  %s[\"%s\"]\n" n.id n.label)
+  let indent ~(level : int) ~(s : string) : string =
+    let spaces = String.make (level * 2) ' ' in
+    spaces ^ s
   in
 
-  let rec render_group_subgraph visited group_id =
+  let render_node ~(level : int) (n : node) =
+    let node_def = Printf.sprintf "%s[\"%s\"]" n.id n.label in
+    Buffer.add_string buf (indent ~level ~s:node_def);
+    Buffer.add_char buf '\n'
+  in
+
+  let rec render_group_subgraph ~(level : int) visited group_id =
     if IntSet.mem group_id visited then visited
     else
       let visited = IntSet.add group_id visited in
-      let subgraph_id = sanitize_id ("group_" ^ string_of_int group_id) in
+      let subgraph_id = group_subgraph_id group_id in
       let group_label =
         match IntMap.find_opt group_id track_info_map with
         | Some info ->
@@ -388,23 +538,30 @@ let render_nodes_with_groups
            | None -> sanitize_label info.node.label)
         | None -> Printf.sprintf "Group %d" group_id
       in
-      Buffer.add_string buf (Printf.sprintf "  subgraph %s[\"%s\"]\n" subgraph_id group_label);
+      let subgraph_def = Printf.sprintf "subgraph %s[\"%s\"]" subgraph_id group_label in
+      Buffer.add_string buf (indent ~level ~s:subgraph_def);
+      Buffer.add_char buf '\n';
+
       (match IntMap.find_opt group_id track_info_map with
-       | Some info -> render_node info.node
+       | Some info -> render_node ~level:(level + 1) info.node
        | None -> ());
+
       let children = children_of group_id in
       let child_groups, child_tracks =
         List.partition is_group_id children
       in
+
       List.iter (fun id ->
           match IntMap.find_opt id track_info_map with
-          | Some info -> render_node info.node
+          | Some info -> render_node ~level:(level + 1) info.node
           | None -> ()
         ) child_tracks;
+
       let visited =
-        List.fold_left (fun v gid -> render_group_subgraph v gid) visited child_groups
+        List.fold_left (fun v gid -> render_group_subgraph ~level:(level + 1) v gid) visited child_groups
       in
-      Buffer.add_string buf "  end\n";
+      Buffer.add_string buf (indent ~level ~s:"end");
+      Buffer.add_char buf '\n';
       visited
   in
 
@@ -414,7 +571,7 @@ let render_nodes_with_groups
   in
 
   let _visited =
-    List.fold_left (fun v gid -> render_group_subgraph v gid) IntSet.empty top_level_groups
+    List.fold_left (fun v gid -> render_group_subgraph ~level:1 v gid) IntSet.empty top_level_groups
   in
 
   let ungrouped_tracks =
@@ -424,13 +581,16 @@ let render_nodes_with_groups
 
   List.iter (fun id ->
       match IntMap.find_opt id track_info_map with
-      | Some info -> render_node info.node
+      | Some info -> render_node ~level:1 info.node
       | None -> ()
     ) ungrouped_tracks;
 
-  render_node main_node;
+  let main_is_connected =
+    List.exists (fun e -> e.from_id = main_node.id || e.to_id = main_node.id) edges
+  in
+  if main_is_connected then render_node ~level:1 main_node;
 
-  List.iter render_node external_nodes;
+  List.iter (fun n -> render_node ~level:1 n) external_nodes;
 
   List.iter (fun e ->
       Buffer.add_string buf (Printf.sprintf "  %s\n" (render_edge e))
