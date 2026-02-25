@@ -6,6 +6,7 @@
    config
    text_renderer
    flowchart
+   mermaid_renderer
    dot_renderer)
  (libraries
    alsdiff_base

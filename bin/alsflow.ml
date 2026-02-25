@@ -32,11 +32,11 @@ let alsflow_cmd ~config ~domain_mgr : int =
   } in
   let output =
     match config.format with
-    | "mermaid" -> Flowchart.render_flowchart ~xml ~liveset ~options
+    | "mermaid" -> Mermaid_renderer.render_flowchart ~xml ~liveset ~options
     | "dot" -> Dot_renderer.render_flowchart ~xml ~liveset ~options
     | _ -> failwith "Unknown format"
   in
-  Fmt.pr "%s@." output;
+  Fmt.pr "%s" output;
   0
 
 let file_arg =

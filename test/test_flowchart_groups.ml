@@ -38,7 +38,7 @@ let test_group_membership () =
     group_ids = IntSet.singleton 64;
     track_order = [64; 12];
   } in
-  let output = render_nodes_with_groups
+  let output = Mermaid_renderer.render_nodes_with_groups
       ~direction:"LR"
       ~track_info_map
       ~main_node:{ id = "main"; label = "Main" }
@@ -74,7 +74,7 @@ let test_nested_groups () =
     group_ids = IntSet.(empty |> add 10 |> add 11);
     track_order = [10; 11; 12; 20];
   } in
-  let output = render_nodes_with_groups
+  let output = Mermaid_renderer.render_nodes_with_groups
       ~direction:"LR"
       ~track_info_map
       ~main_node:{ id = "main"; label = "Main" }
@@ -98,7 +98,7 @@ let test_top_down_direction_header () =
     group_ids = IntSet.empty;
     track_order = [];
   } in
-  let output = render_nodes_with_groups
+  let output = Mermaid_renderer.render_nodes_with_groups
       ~direction:"TD"
       ~track_info_map:IntMap.empty
       ~main_node:{ id = "main"; label = "Main" }
@@ -202,7 +202,7 @@ let test_parent_group_routing_edge_not_suppressed_for_other_target () =
 
 let test_main_node_hidden_when_unconnected () =
   let open Flowchart in
-  let output = render_nodes_with_groups
+  let output = Mermaid_renderer.render_nodes_with_groups
       ~direction:"TD"
       ~track_info_map:IntMap.empty
       ~main_node:{ id = "main"; label = "Main" }
@@ -219,7 +219,7 @@ let test_main_node_shown_when_connected () =
     IntMap.empty
     |> IntMap.add 1 { node = { id = "track_1"; label = "Track 1 (Audio)" }; group_label = None }
   in
-  let output = render_nodes_with_groups
+  let output = Mermaid_renderer.render_nodes_with_groups
       ~direction:"TD"
       ~track_info_map
       ~main_node:{ id = "main"; label = "Main" }
@@ -297,7 +297,7 @@ let test_input_routing_edge_direction_and_style () =
     label = "3/4-Opal";
     style = InputRouting;
   } in
-  let rendered = render_edge edge in
+  let rendered = Mermaid_renderer.render_edge edge in
   check bool "input edge points source->consumer" true
     (contains_substring ~haystack:rendered ~needle:"track_12");
   check bool "input edge points to consumer" true
