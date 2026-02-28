@@ -1,0 +1,748 @@
+<?xml version="1.0"?>
+<MxDeviceAudioEffect Id="5">
+  <LomId Value="472"/>
+  <LomIdView Value="0"/>
+  <IsExpanded Value="true"/>
+  <BreakoutIsExpanded Value="false"/>
+  <On>
+    <LomId Value="574"/>
+    <Manual Value="true"/>
+    <AutomationTarget Id="98231">
+      <LockEnvelope Value="0"/>
+    </AutomationTarget>
+    <MidiCCOnOffThresholds>
+      <Min Value="64"/>
+      <Max Value="127"/>
+    </MidiCCOnOffThresholds>
+  </On>
+  <ModulationSourceCount Value="0"/>
+  <ParametersListWrapper LomId="0"/>
+  <Pointee Id="98232"/>
+  <LastSelectedTimeableIndex Value="0"/>
+  <LastSelectedClipEnvelopeIndex Value="0"/>
+  <LastPresetRef>
+    <Value>
+      <AbletonDefaultPresetRef Id="0">
+        <FileRef>
+          <RelativePathType Value="7"/>
+          <RelativePath Value="Devices/Audio Effects/LFO"/>
+          <Path Value="/Applications/Ableton Live 12 Beta.app/Contents/App-Resources/Builtin/Devices/Audio Effects/LFO"/>
+          <Type Value="2"/>
+          <LivePackName Value=""/>
+          <LivePackId Value=""/>
+          <OriginalFileSize Value="0"/>
+          <OriginalCrc Value="0"/>
+        </FileRef>
+        <DeviceId Name=""/>
+      </AbletonDefaultPresetRef>
+    </Value>
+  </LastPresetRef>
+  <LockedScripts/>
+  <IsFolded Value="false"/>
+  <ShouldShowPresetName Value="true"/>
+  <UserName Value=""/>
+  <Annotation Value=""/>
+  <SourceContext>
+    <Value>
+      <BranchSourceContext Id="0">
+        <OriginalFileRef>
+          <FileRef Id="0">
+            <RelativePathType Value="7"/>
+            <RelativePath Value="Devices/Audio Effects/LFO"/>
+            <Path Value="/Applications/Ableton Live 12 Beta.app/Contents/App-Resources/Builtin/Devices/Audio Effects/LFO"/>
+            <Type Value="2"/>
+            <LivePackName Value=""/>
+            <LivePackId Value=""/>
+            <OriginalFileSize Value="0"/>
+            <OriginalCrc Value="0"/>
+          </FileRef>
+        </OriginalFileRef>
+        <BrowserContentPath Value="query:Find#LFO"/>
+        <LocalFiltersJson Value=""/>
+        <PresetRef>
+          <AbletonDefaultPresetRef Id="0">
+            <FileRef>
+              <RelativePathType Value="7"/>
+              <RelativePath Value="Devices/Audio Effects/LFO"/>
+              <Path Value="/Applications/Ableton Live 12 Beta.app/Contents/App-Resources/Builtin/Devices/Audio Effects/LFO"/>
+              <Type Value="2"/>
+              <LivePackName Value=""/>
+              <LivePackId Value=""/>
+              <OriginalFileSize Value="0"/>
+              <OriginalCrc Value="0"/>
+            </FileRef>
+            <DeviceId Name=""/>
+          </AbletonDefaultPresetRef>
+        </PresetRef>
+        <BranchDeviceId Value=""/>
+      </BranchSourceContext>
+    </Value>
+  </SourceContext>
+  <MpePitchBendUsesTuning Value="true"/>
+  <OverwriteProtectionNumber Value="3074"/>
+  <AudioOutputsListWrapper LomId="0"/>
+  <AudioInputsListWrapper LomId="0"/>
+  <MidiOutputsListWrapper LomId="0"/>
+  <MidiInputsListWrapper LomId="0"/>
+  <PatchSlot>
+    <Value>
+      <MxPatchRef Id="3">
+        <FileRef>
+          <RelativePathType Value="7"/>
+          <RelativePath Value="Devices/Audio Effects/LFO/Ableton Folder Info/LFO.amxd"/>
+          <Path Value="/Applications/Ableton Live 12 Beta.app/Contents/App-Resources/Builtin/Devices/Audio Effects/LFO/Ableton Folder Info/LFO.amxd"/>
+          <Type Value="2"/>
+          <LivePackName Value=""/>
+          <LivePackId Value=""/>
+          <OriginalFileSize Value="361012"/>
+          <OriginalCrc Value="19749"/>
+        </FileRef>
+        <LastModDate Value="1738923956"/>
+        <SourceContext/>
+        <SampleUsageHint Value="0"/>
+      </MxPatchRef>
+    </Value>
+  </PatchSlot>
+  <ParameterList>
+    <ParameterList>
+      <MxDFloatParameter Id="11">
+        <Index Value="0"/>
+        <Type Value="0"/>
+        <Name Value="Depth"/>
+        <ShortName Value="Depth"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="100"/>
+        <Default Value="100"/>
+        <ModType Value="2"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="100"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="98233">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="98234">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+      </MxDFloatParameter>
+      <MxDFloatParameter Id="12">
+        <Index Value="1"/>
+        <Type Value="0"/>
+        <Name Value="Freq Rate"/>
+        <ShortName Value="Rate"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="40"/>
+        <Default Value="10.029686"/>
+        <ModType Value="2"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="469"/>
+          <Manual Value="9.39976501"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="98235">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="98236">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+      </MxDFloatParameter>
+      <MxDEnumParameter Id="13">
+        <Index Value="2"/>
+        <Type Value="2"/>
+        <Name Value="Hold"/>
+        <ShortName Value="Hold"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="1"/>
+        <Default Value="0"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <AutomationTarget Id="98237">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="0">
+            <Name Value="Off"/>
+          </Name>
+          <Name Id="1">
+            <Name Value="On"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+      <MxDIntParameter Id="14">
+        <Index Value="3"/>
+        <Type Value="1"/>
+        <Name Value="Jitter"/>
+        <ShortName Value="Jitter"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="100"/>
+        <Default Value="0"/>
+        <ModType Value="4"/>
+        <MinMod Value="0"/>
+        <MaxMod Value="127"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="98238">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="98239">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+        <ScrollPosArranger Value="-1073741824"/>
+        <ScrollPosEnvelope Value="-1073741824"/>
+      </MxDIntParameter>
+      <MxDIntParameter Id="15">
+        <Index Value="4"/>
+        <Type Value="1"/>
+        <Name Value="Offset"/>
+        <ShortName Value="Offset"/>
+        <MinValue Value="-100"/>
+        <MaxValue Value="100"/>
+        <Default Value="0"/>
+        <ModType Value="4"/>
+        <MinMod Value="0"/>
+        <MaxMod Value="127"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="98240">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="98241">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+        <ScrollPosArranger Value="-1073741824"/>
+        <ScrollPosEnvelope Value="-1073741824"/>
+      </MxDIntParameter>
+      <MxDIntParameter Id="16">
+        <Index Value="5"/>
+        <Type Value="1"/>
+        <Name Value="Phase"/>
+        <ShortName Value="Phase"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="100"/>
+        <Default Value="0"/>
+        <ModType Value="4"/>
+        <MinMod Value="0"/>
+        <MaxMod Value="127"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="98242">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="98243">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+        <ScrollPosArranger Value="-1073741824"/>
+        <ScrollPosEnvelope Value="-1073741824"/>
+      </MxDIntParameter>
+      <MxDEnumParameter Id="17">
+        <Index Value="6"/>
+        <Type Value="2"/>
+        <Name Value="Re-Trigger"/>
+        <ShortName Value="Re-Trigger"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="1"/>
+        <Default Value="0"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <AutomationTarget Id="98244">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="0">
+            <Name Value="Off"/>
+          </Name>
+          <Name Id="1">
+            <Name Value="On"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+      <MxDEnumParameter Id="18">
+        <Index Value="7"/>
+        <Type Value="2"/>
+        <Name Value="Shape"/>
+        <ShortName Value="Shape"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="8"/>
+        <Default Value="0"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="468"/>
+          <Manual Value="5"/>
+          <AutomationTarget Id="98245">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="7">
+            <Name Value="Sine"/>
+          </Name>
+          <Name Id="8">
+            <Name Value="Up"/>
+          </Name>
+          <Name Id="9">
+            <Name Value="Down"/>
+          </Name>
+          <Name Id="10">
+            <Name Value="Triangle"/>
+          </Name>
+          <Name Id="11">
+            <Name Value="Square"/>
+          </Name>
+          <Name Id="12">
+            <Name Value="Random"/>
+          </Name>
+          <Name Id="13">
+            <Name Value="Bin"/>
+          </Name>
+          <Name Id="14">
+            <Name Value="Stray"/>
+          </Name>
+          <Name Id="15">
+            <Name Value="Glider"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+      <MxDIntParameter Id="19">
+        <Index Value="8"/>
+        <Type Value="1"/>
+        <Name Value="Smooth"/>
+        <ShortName Value="Smooth"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="100"/>
+        <Default Value="0"/>
+        <ModType Value="4"/>
+        <MinMod Value="0"/>
+        <MaxMod Value="127"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="51"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="98246">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="98247">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+        <ScrollPosArranger Value="-1073741824"/>
+        <ScrollPosEnvelope Value="-1073741824"/>
+      </MxDIntParameter>
+      <MxDEnumParameter Id="20">
+        <Index Value="9"/>
+        <Type Value="2"/>
+        <Name Value="Steps"/>
+        <ShortName Value="Steps"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="24"/>
+        <Default Value="0"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <AutomationTarget Id="169816">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="0">
+            <Name Value="Off"/>
+          </Name>
+          <Name Id="1">
+            <Name Value="24"/>
+          </Name>
+          <Name Id="2">
+            <Name Value="23"/>
+          </Name>
+          <Name Id="3">
+            <Name Value="22"/>
+          </Name>
+          <Name Id="4">
+            <Name Value="21"/>
+          </Name>
+          <Name Id="5">
+            <Name Value="20"/>
+          </Name>
+          <Name Id="6">
+            <Name Value="19"/>
+          </Name>
+          <Name Id="7">
+            <Name Value="18"/>
+          </Name>
+          <Name Id="8">
+            <Name Value="17"/>
+          </Name>
+          <Name Id="9">
+            <Name Value="16"/>
+          </Name>
+          <Name Id="10">
+            <Name Value="15"/>
+          </Name>
+          <Name Id="11">
+            <Name Value="14"/>
+          </Name>
+          <Name Id="12">
+            <Name Value="13"/>
+          </Name>
+          <Name Id="13">
+            <Name Value="12"/>
+          </Name>
+          <Name Id="14">
+            <Name Value="11"/>
+          </Name>
+          <Name Id="15">
+            <Name Value="10"/>
+          </Name>
+          <Name Id="16">
+            <Name Value="9"/>
+          </Name>
+          <Name Id="17">
+            <Name Value="8"/>
+          </Name>
+          <Name Id="18">
+            <Name Value="7"/>
+          </Name>
+          <Name Id="19">
+            <Name Value="6"/>
+          </Name>
+          <Name Id="20">
+            <Name Value="5"/>
+          </Name>
+          <Name Id="21">
+            <Name Value="4"/>
+          </Name>
+          <Name Id="22">
+            <Name Value="3"/>
+          </Name>
+          <Name Id="23">
+            <Name Value="2"/>
+          </Name>
+          <Name Id="24">
+            <Name Value="1"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+      <MxDEnumParameter Id="21">
+        <Index Value="10"/>
+        <Type Value="2"/>
+        <Name Value="Sync Rate"/>
+        <ShortName Value="Rate"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="23"/>
+        <Default Value="15"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="471"/>
+          <Manual Value="15"/>
+          <AutomationTarget Id="98248">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="0">
+            <Name Value="1/64"/>
+          </Name>
+          <Name Id="1">
+            <Name Value="1/48"/>
+          </Name>
+          <Name Id="2">
+            <Name Value="1/32"/>
+          </Name>
+          <Name Id="3">
+            <Name Value="1/24"/>
+          </Name>
+          <Name Id="4">
+            <Name Value="1/16"/>
+          </Name>
+          <Name Id="5">
+            <Name Value="1/12"/>
+          </Name>
+          <Name Id="6">
+            <Name Value="1/8"/>
+          </Name>
+          <Name Id="7">
+            <Name Value="1/6"/>
+          </Name>
+          <Name Id="8">
+            <Name Value="3/16"/>
+          </Name>
+          <Name Id="9">
+            <Name Value="1/4"/>
+          </Name>
+          <Name Id="10">
+            <Name Value="5/16"/>
+          </Name>
+          <Name Id="11">
+            <Name Value="1/3"/>
+          </Name>
+          <Name Id="12">
+            <Name Value="3/8"/>
+          </Name>
+          <Name Id="13">
+            <Name Value="1/2"/>
+          </Name>
+          <Name Id="14">
+            <Name Value="3/4"/>
+          </Name>
+          <Name Id="15">
+            <Name Value="1"/>
+          </Name>
+          <Name Id="16">
+            <Name Value="1.5"/>
+          </Name>
+          <Name Id="17">
+            <Name Value="2"/>
+          </Name>
+          <Name Id="18">
+            <Name Value="3"/>
+          </Name>
+          <Name Id="19">
+            <Name Value="4"/>
+          </Name>
+          <Name Id="20">
+            <Name Value="6"/>
+          </Name>
+          <Name Id="21">
+            <Name Value="8"/>
+          </Name>
+          <Name Id="22">
+            <Name Value="16"/>
+          </Name>
+          <Name Id="23">
+            <Name Value="32"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+      <MxDEnumParameter Id="22">
+        <Index Value="11"/>
+        <Type Value="2"/>
+        <Name Value="Time Mode"/>
+        <ShortName Value="Time Mode"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="1"/>
+        <Default Value="0"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="470"/>
+          <Manual Value="1"/>
+          <AutomationTarget Id="98249">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="0">
+            <Name Value="Free"/>
+          </Name>
+          <Name Id="1">
+            <Name Value="Sync"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+      <MxDFloatParameter Id="23">
+        <Index Value="12"/>
+        <Type Value="0"/>
+        <Name Value="WaveShape"/>
+        <ShortName Value="WaveShape"/>
+        <MinValue Value="-100"/>
+        <MaxValue Value="100"/>
+        <Default Value="0"/>
+        <ModType Value="2"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <MidiControllerRange>
+            <Min Value="0"/>
+            <Max Value="1"/>
+          </MidiControllerRange>
+          <AutomationTarget Id="169817">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+          <ModulationTarget Id="169818">
+            <LockEnvelope Value="0"/>
+          </ModulationTarget>
+        </Timeable>
+      </MxDFloatParameter>
+      <MxDEnumParameter Id="24">
+        <Index Value="13"/>
+        <Type Value="2"/>
+        <Name Value="x10"/>
+        <ShortName Value="x10"/>
+        <MinValue Value="0"/>
+        <MaxValue Value="1"/>
+        <Default Value="0"/>
+        <ModType Value="0"/>
+        <MinMod Value="-1"/>
+        <MaxMod Value="1"/>
+        <Timeable>
+          <LomId Value="0"/>
+          <Manual Value="0"/>
+          <AutomationTarget Id="169819">
+            <LockEnvelope Value="0"/>
+          </AutomationTarget>
+        </Timeable>
+        <Names>
+          <Name Id="0">
+            <Name Value="Off"/>
+          </Name>
+          <Name Id="1">
+            <Name Value="On"/>
+          </Name>
+        </Names>
+      </MxDEnumParameter>
+    </ParameterList>
+  </ParameterList>
+  <FileDropList>
+    <FileDropList/>
+  </FileDropList>
+  <IdRefList>
+    <IdRefList>
+      <MxDIdRef Id="0">
+        <Name Value="obj-7::obj-5"/>
+        <LomId Value="320"/>
+        <Property Value=""/>
+      </MxDIdRef>
+      <MxDIdRef Id="1">
+        <Name Value="obj-7::obj-16::obj-5"/>
+        <LomId Value="320"/>
+        <Property Value="id"/>
+      </MxDIdRef>
+      <MxDIdRef Id="2">
+        <Name Value="obj-7::obj-16::obj-130"/>
+        <LomId Value="320"/>
+        <Property Value=""/>
+      </MxDIdRef>
+      <MxDIdRef Id="3">
+        <Name Value="obj-7.1::obj-10"/>
+        <LomId Value="0"/>
+        <Property Value=""/>
+      </MxDIdRef>
+    </IdRefList>
+  </IdRefList>
+  <BlobSlot>
+    <Value>
+      <MxDBlob Id="47">
+        <Blob>
+												7B0A09224D6F64756C6174696F6E20416D6F756E74203122203A205B203530205D2C0A09224D6F64
+												756C6174696F6E20416D6F756E74203222203A205B203530205D2C0A09224D6F64756C6174696F6E
+												20416D6F756E74203322203A205B203530205D2C0A09224D6F64756C6174696F6E20416D6F756E74
+												203422203A205B203530205D2C0A09224D6F64756C6174696F6E20416D6F756E74203522203A205B
+												203530205D2C0A09224D6F64756C6174696F6E20416D6F756E74203622203A205B203530205D2C0A
+												09224D6F64756C6174696F6E20416D6F756E74203722203A205B203530205D2C0A09224D6F64756C
+												6174696F6E20416D6F756E74203822203A205B203530205D2C0A09224D6F64756C6174696F6E2050
+												6F6C6172697479203122203A205B2030205D2C0A09224D6F64756C6174696F6E20506F6C61726974
+												79203222203A205B2030205D2C0A09224D6F64756C6174696F6E20506F6C6172697479203322203A
+												205B2030205D2C0A09224D6F64756C6174696F6E20506F6C6172697479203422203A205B2030205D
+												2C0A09224D6F64756C6174696F6E20506F6C6172697479203522203A205B2030205D2C0A09224D6F
+												64756C6174696F6E20506F6C6172697479203622203A205B2030205D2C0A09224D6F64756C617469
+												6F6E20506F6C6172697479203722203A205B2030205D2C0A09224D6F64756C6174696F6E20506F6C
+												6172697479203822203A205B2030205D2C0A09225461726765744D61785B31315D22203A205B2031
+												3030205D2C0A09225461726765744D61785B315D22203A205B20313030205D2C0A09225461726765
+												744D61785B325D22203A205B20313030205D2C0A09225461726765744D61785B335D22203A205B20
+												313030205D2C0A09225461726765744D61785B345D22203A205B20313030205D2C0A092254617267
+												65744D61785B355D22203A205B20313030205D2C0A09225461726765744D61785B365D22203A205B
+												20313030205D2C0A09225461726765744D61785B375D22203A205B20313030205D2C0A0922546172
+												6765744D696E5B31315D22203A205B2030205D2C0A09225461726765744D696E5B315D22203A205B
+												2030205D2C0A09225461726765744D696E5B325D22203A205B2030205D2C0A09225461726765744D
+												696E5B335D22203A205B2030205D2C0A09225461726765744D696E5B345D22203A205B2030205D2C
+												0A09225461726765744D696E5B355D22203A205B2030205D2C0A09225461726765744D696E5B365D
+												22203A205B2030205D2C0A09225461726765744D696E5B375D22203A205B203235205D2C0A09226D
+												6F64655B31315D22203A205B2030205D2C0A09226D6F64655B31325D22203A205B2030205D2C0A09
+												226D6F64655B315D22203A205B2030205D2C0A09226D6F64655B325D22203A205B2030205D2C0A09
+												226D6F64655B335D22203A205B2030205D2C0A09226D6F64655B345D22203A205B2030205D2C0A09
+												226D6F64655B355D22203A205B2030205D2C0A09226D6F64655B365D22203A205B2030205D0A7D0A
+												00
+											</Blob>
+        <HasData Value="true"/>
+      </MxDBlob>
+    </Value>
+  </BlobSlot>
+  <Routables>
+    <InRoutings>
+      <MxDInRoutable Id="0">
+        <Routable>
+          <Target Value="AudioIn/None"/>
+          <UpperDisplayString Value="No Output"/>
+          <LowerDisplayString Value=""/>
+          <MpeSettings>
+            <ZoneType Value="0"/>
+            <FirstNoteChannel Value="1"/>
+            <LastNoteChannel Value="15"/>
+          </MpeSettings>
+          <MpePitchBendUsesTuning Value="true"/>
+        </Routable>
+        <LomId Value="0"/>
+      </MxDInRoutable>
+    </InRoutings>
+    <OutRoutings>
+      <MxDOutRoutable Id="0">
+        <Routable>
+          <Target Value="AudioOut/None"/>
+          <UpperDisplayString Value="No Output"/>
+          <LowerDisplayString Value=""/>
+          <MpeSettings>
+            <ZoneType Value="0"/>
+            <FirstNoteChannel Value="1"/>
+            <LastNoteChannel Value="15"/>
+          </MpeSettings>
+          <MpePitchBendUsesTuning Value="true"/>
+        </Routable>
+        <LomId Value="0"/>
+      </MxDOutRoutable>
+    </OutRoutings>
+    <MidiInRoutings/>
+    <MidiOutRoutings/>
+  </Routables>
+  <MpeEnabled Value="false"/>
+  <MpeTuningEnabled Value="false"/>
+</MxDeviceAudioEffect>

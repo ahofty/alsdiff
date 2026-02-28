@@ -1,9 +1,10 @@
 open Alsdiff_base.Xml
 open Alsdiff_live.Clip
+open Utils
 
 let test_midi_clip_parsing () =
   (* Read the midi_clip.xml file *)
-  let xml = read_file "midi_clip.xml" in
+  let xml = read_file (resolve_test_data_path "midi_clip.xml") in
 
   (* Create midi clip from the XML *)
   let midi_clip = MidiClip.create xml in

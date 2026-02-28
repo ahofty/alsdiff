@@ -1,11 +1,12 @@
 open Alcotest
 open Alsdiff_base
 open Alsdiff_live
+open Utils
 
 (** Test parsing FloatEvents with and without curve parameters *)
 let test_envelope_event_parsing () =
   (* Load automation XML that has events with curve parameters *)
-  let xml = Xml.read_file "automation.xml" in
+  let xml = Xml.read_file (resolve_test_data_path "automation.xml") in
   let envelope_element = Upath.find "/Envelopes/AutomationEnvelope@Id=3" xml |> snd in
   let automation = Automation.create envelope_element in
 

@@ -1,10 +1,11 @@
 open Alcotest
 open Alsdiff_base
 open Alsdiff_live.Clip
+open Utils
 
 (** Helper to load an MidiClip.t from a file path. *)
 let load_midi_clip_from_file (path : string) : MidiClip.t =
-  let xml = Xml.read_file path in
+  let xml = Xml.read_file (resolve_test_data_path path) in
   let clip_element =
     match xml with
     | Element { name = "MidiClip"; _ } as clip -> clip

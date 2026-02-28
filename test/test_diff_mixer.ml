@@ -1,13 +1,14 @@
 open Alsdiff_base
 open Alsdiff_live
+open Utils
 
 let test_mixer_diff () =
   (* Load the old mixer XML *)
-  let old_xml = Xml.read_file "mixer_old.xml" in
+  let old_xml = Xml.read_file (resolve_test_data_path "mixer_old.xml") in
   let old_mixer = Track.Mixer.create old_xml in
 
   (* Load the new mixer XML *)
-  let new_xml = Xml.read_file "mixer.xml" in
+  let new_xml = Xml.read_file (resolve_test_data_path "mixer.xml") in
   let new_mixer = Track.Mixer.create new_xml in
 
   (* Verify that both mixers have HeadKeyMidi mapping for Solo *)
