@@ -13,9 +13,9 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item change in
+  let item = View_model.create_liveset_item ~note_name_style change in
   [View_model.Item item]
 
 type output_mode = Tree | Stats
@@ -192,7 +192,11 @@ let diff_cmd ~config ~domain_mgr : int =
         `Unchanged
     in
 
-    let views = create_views liveset_change in
+    let note_name_style = match config.note_name_style with
+      | Some style -> style
+      | None -> View_model.Sharp
+    in
+    let views = create_views ~note_name_style liveset_change in
 
     let output = match config.output_mode with
       | Stats -> render_stats ~config ~reference_path views

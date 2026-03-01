@@ -211,6 +211,50 @@ let test_create_note_item_modified () =
    | _ -> fail "Expected Ffloat old and new for Time")
 
 
+let test_create_note_item_sharp_style () =
+  (* Note 54 = F#3 in sharp notation *)
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  (* Test with explicit Sharp style *)
+  let item = create_note_item ~note_name_style:Sharp change in
+
+  check string "Item name contains F#3" "Note F#3 (54)" item.name;
+  check bool "Item is Added" true (item.change = Added)
+
+
+let test_create_note_item_flat_style () =
+  (* Note 54 = Gb3 in flat notation *)
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  let item = create_note_item ~note_name_style:Flat change in
+
+  check string "Item name contains Gb3" "Note Gb3 (54)" item.name;
+  check bool "Item is Added" true (item.change = Added)
+
+
+let test_create_note_item_flat_style_ab_note () =
+  (* Note 56 = Ab3 in flat notation *)
+  let note = { MidiNote.id = 1; note = 56; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  let item = create_note_item ~note_name_style:Flat change in
+
+  check string "Item name contains Ab3" "Note Ab3 (56)" item.name;
+  check bool "Item is Added" true (item.change = Added)
+
+
+let test_create_note_item_default_is_sharp () =
+  (* Verify that without specifying style, default is Sharp *)
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  let item = create_note_item change in
+
+  check string "Default style is Sharp (F#3)" "Note F#3 (54)" item.name
+
+
 let test_create_midi_clip_item () =
   (* Setup data *)
   let old_midi_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
@@ -419,6 +463,12 @@ let () =
     "create_note_item", [
       test_case "Create note item for Added" `Quick test_create_note_item_added;
       test_case "Create note item for Modified" `Quick test_create_note_item_modified;
+    ];
+    "create_note_item note_name_style", [
+      test_case "Sharp style produces sharp notes" `Quick test_create_note_item_sharp_style;
+      test_case "Flat style produces flat notes" `Quick test_create_note_item_flat_style;
+      test_case "Flat style for Ab note" `Quick test_create_note_item_flat_style_ab_note;
+      test_case "Default style is Sharp" `Quick test_create_note_item_default_is_sharp;
     ];
     "create_midi_clip_item", [
       test_case "Create item from patch" `Quick test_create_midi_clip_item;

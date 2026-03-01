@@ -1087,35 +1087,40 @@ let build_midi_clip_section_name =
     ~get_patch_name:(fun p -> p.Clip.MidiClip.Patch.name)
 
 (** MidiClip section specs - defines the structure of a MidiClip item *)
-let midi_clip_section_specs : (Clip.MidiClip.t, Clip.MidiClip.Patch.t) section_spec list = [
-  Spec.inline_fields ~specs:midi_clip_field_specs ~domain_type:DTClip;
-  Spec.child ~name:"Loop"
-    ~of_value:(fun (c : Clip.MidiClip.t) -> c.loop)
-    ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.loop)
-    ~build_value_children:create_loop_fields
-    ~build_patch_children:create_loop_patch_fields
-    ~domain_type:DTLoop;
-  Spec.child ~name:"TimeSignature"
-    ~of_value:(fun (c : Clip.MidiClip.t) -> c.signature)
-    ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.signature)
-    ~build_value_children:create_signature_fields
-    ~build_patch_children:create_signature_patch_fields
-    ~domain_type:DTSignature;
-  Spec.collection ~name:"Notes"
-    ~of_value:(fun (c : Clip.MidiClip.t) -> c.notes)
-    ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.notes)
-    ~build_item:create_note_item
-    ~domain_type:DTNote;
-]
+let midi_clip_section_specs ?(note_name_style = default_note_name_style) () :
+  (Clip.MidiClip.t, Clip.MidiClip.Patch.t) section_spec list =
+  [
+    Spec.inline_fields ~specs:midi_clip_field_specs ~domain_type:DTClip;
+    Spec.child ~name:"Loop"
+      ~of_value:(fun (c : Clip.MidiClip.t) -> c.loop)
+      ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.loop)
+      ~build_value_children:create_loop_fields
+      ~build_patch_children:create_loop_patch_fields
+      ~domain_type:DTLoop;
+    Spec.child ~name:"TimeSignature"
+      ~of_value:(fun (c : Clip.MidiClip.t) -> c.signature)
+      ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.signature)
+      ~build_value_children:create_signature_fields
+      ~build_patch_children:create_signature_patch_fields
+      ~domain_type:DTSignature;
+    Spec.collection ~name:"Notes"
+      ~of_value:(fun (c : Clip.MidiClip.t) -> c.notes)
+      ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.notes)
+      ~build_item:(create_note_item ~note_name_style)
+      ~domain_type:DTNote;
+  ]
 
 (** [create_midi_clip_item] creates a [item] from a MidiClip structured change (new type system).
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param c the midi clip structured change
 *)
 let create_midi_clip_item
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Clip.MidiClip.t, Clip.MidiClip.Patch.t) structured_change)
   : item =
   let name = build_midi_clip_section_name c in
-  build_item_from_specs ~name ~domain_type:DTClip ~specs:midi_clip_section_specs c
+  let specs = midi_clip_section_specs ~note_name_style () in
+  build_item_from_specs ~name ~domain_type:DTClip ~specs c
 
 
 (* ==================== AudioClip Specs (using new infrastructure) ==================== *)
@@ -2194,10 +2199,12 @@ let build_track_view
 
 (** [create_midi_track_item] creates a [item] from a MidiTrack structured change (new type system).
     @param get_pointee_name function to resolve pointee IDs to names
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param c the MIDI track structured change
 *)
 let create_midi_track_item
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Track.MidiTrack.t, Track.MidiTrack.Patch.t) structured_change)
   : item =
 
@@ -2205,7 +2212,7 @@ let create_midi_track_item
       ~name:"Clips"
       ~of_value:(fun (t : Track.MidiTrack.t) -> t.Track.MidiTrack.clips)
       ~of_patch:(fun (p : Track.MidiTrack.Patch.t) -> p.clips)
-      ~build_item:create_midi_clip_item
+      ~build_item:(create_midi_clip_item ~note_name_style)
       ~domain_type:DTClip
   in
 
@@ -2258,14 +2265,19 @@ let create_midi_track_item
 (** [create_audio_like_track_item] creates a [item] for AudioTrack-like structured changes.
     Shared implementation for AudioTrack and GroupTrack (which share the same internal structure).
     @param get_pointee_name function to resolve pointee IDs to names
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param track_type_name The display type name (e.g., "AudioTrack" or "Group")
     @param c the track structured change
 *)
 let create_audio_like_track_item
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     ~track_type_name
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
+  (* Note: note_name_style is accepted for API consistency but not used here
+     since audio tracks don't have MIDI clips *)
+  let () = ignore (note_name_style : note_display_style) in
 
   let clips_config = Spec.collection
       ~name:"Clips"
@@ -2324,35 +2336,44 @@ let create_audio_like_track_item
 
 (** [create_audio_track_item] creates a [item] from an AudioTrack structured change (new type system).
     @param get_pointee_name function to resolve pointee IDs to names
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param c the audio track structured change
 *)
 let create_audio_track_item
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
-  create_audio_like_track_item ~get_pointee_name ~track_type_name:"AudioTrack" c
+  create_audio_like_track_item ~get_pointee_name ~note_name_style ~track_type_name:"AudioTrack" c
 
 
 (** [create_group_track_item] creates a [item] from a GroupTrack structured change (new type system).
     Group tracks use the same internal structure as AudioTrack but have a different type name.
     @param get_pointee_name function to resolve pointee IDs to names
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param c the group track structured change (represented as AudioTrack internally)
 *)
 let create_group_track_item
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
-  create_audio_like_track_item ~get_pointee_name ~track_type_name:"Group" c
+  create_audio_like_track_item ~get_pointee_name ~note_name_style ~track_type_name:"Group" c
 
 
 (** [create_main_track_item] creates a [item] from a MainTrack structured change (new type system).
     @param get_pointee_name function to resolve pointee IDs to names
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param c the main track structured change
 *)
 let create_main_track_item
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Track.MainTrack.t, Track.MainTrack.Patch.t) structured_change)
   : item =
+  (* Note: note_name_style is accepted for API consistency but not used here
+     since main track has no clips *)
+  let () = ignore (note_name_style : note_display_style) in
 
   (* NO clips collection for MainTrack *)
 
@@ -2479,39 +2500,41 @@ let make_pointee_resolver
   | `Unchanged -> fun id -> Printf.sprintf "<Pointee %d>" id
 
 
-(** [dispatch_track_change ~get_pointee_name tc] dispatches a track change to the appropriate
+(** [dispatch_track_change ~get_pointee_name ~note_name_style tc] dispatches a track change to the appropriate
     track item builder based on track type.
     Returns None for Unchanged or Main tracks (Main tracks are handled separately).
 *)
 let dispatch_track_change
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (tc : (Track.t, Track.Patch.t) structured_change)
   : view option =
   match tc with
   (* Midi tracks *)
-  | `Added (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name (`Added t)))
-  | `Removed (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name (`Removed t)))
-  | `Modified (Track.Patch.MidiPatch pt) -> Some (Item (create_midi_track_item ~get_pointee_name (`Modified pt)))
+  | `Added (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style (`Added t)))
+  | `Removed (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style (`Removed t)))
+  | `Modified (Track.Patch.MidiPatch pt) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style (`Modified pt)))
   (* Audio tracks *)
-  | `Added (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name (`Added t)))
-  | `Removed (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name (`Removed t)))
-  | `Modified (Track.Patch.AudioPatch pt) -> Some (Item (create_audio_track_item ~get_pointee_name (`Modified pt)))
+  | `Added (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Added t)))
+  | `Removed (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Removed t)))
+  | `Modified (Track.Patch.AudioPatch pt) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Modified pt)))
   (* Group tracks *)
-  | `Added (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name (`Added t)))
-  | `Removed (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name (`Removed t)))
+  | `Added (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style (`Added t)))
+  | `Removed (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style (`Removed t)))
   (* Return tracks - use audio track builder since ReturnTrack = AudioTrack *)
-  | `Added (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name (`Added t)))
-  | `Removed (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name (`Removed t)))
+  | `Added (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Added t)))
+  | `Removed (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Removed t)))
   (* Main tracks - handled separately in create_liveset_item *)
   | `Added (Track.Main _) | `Removed (Track.Main _) | `Modified (Track.Patch.MainPatch _) -> None
   | `Unchanged -> None
 
 
-(** [build_liveset_tracks_items ~get_pointee_name c] builds view items for all regular tracks
+(** [build_liveset_tracks_items ~get_pointee_name ~note_name_style c] builds view items for all regular tracks
     (Midi, Audio, Group) in a liveset change. Main and Return tracks are handled separately.
 *)
 let build_liveset_tracks_items
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : view list =
   let is_regular_track = function
@@ -2536,14 +2559,15 @@ let build_liveset_tracks_items
       patch.tracks |> List.filter is_regular_track_change
     | `Unchanged -> []
   in
-  List.filter_map (dispatch_track_change ~get_pointee_name) track_changes
+  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style) track_changes
 
 
-(** [build_liveset_returns_items ~get_pointee_name c] builds view items for all return tracks
+(** [build_liveset_returns_items ~get_pointee_name ~note_name_style c] builds view items for all return tracks
     in a liveset change.
 *)
 let build_liveset_returns_items
     ~(get_pointee_name : int -> string)
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : view list =
   let return_changes = match c with
@@ -2554,7 +2578,7 @@ let build_liveset_returns_items
     | `Modified patch -> patch.returns
     | `Unchanged -> []
   in
-  List.filter_map (dispatch_track_change ~get_pointee_name) return_changes
+  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style) return_changes
 
 
 (** Liveset field specifications for atomic fields (Name, Creator) *)
@@ -2569,9 +2593,11 @@ let liveset_field_specs : (Liveset.t, Liveset.Patch.t) unified_field_spec list =
 
 
 (** [create_liveset_item] creates a [item] from a Liveset structured change (new type system).
+    @param note_name_style the style to use for note names (Sharp or Flat)
     @param c the liveset structured change
 *)
 let create_liveset_item
+    ?(note_name_style : note_display_style = default_note_name_style)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : item =
 
@@ -2627,13 +2653,13 @@ let create_liveset_item
           | Some main_change -> main_change
           | None -> `Unchanged)
       ~build_value_children:(fun ct (main_track : Track.MainTrack.t) ->
-          [Item (create_main_track_item ~get_pointee_name (match ct with
+          [Item (create_main_track_item ~get_pointee_name ~note_name_style (match ct with
                | Added -> `Added main_track
                | Removed -> `Removed main_track
                | Unchanged -> failwith "Invalid change type for value"
                | Modified -> failwith "Invalid change type for value"))])
       ~build_patch_children:(fun pt ->
-          [Item (create_main_track_item ~get_pointee_name (`Modified pt))])
+          [Item (create_main_track_item ~get_pointee_name ~note_name_style (`Modified pt))])
       ~domain_type:DTTrack
   in
 
@@ -2651,8 +2677,8 @@ let create_liveset_item
     atomic_children
     @ (version_item |> Option.map (fun i -> Item i) |> option_to_list)
     @ (main_track_item |> Option.map (fun i -> Item i) |> option_to_list)
-    @ build_liveset_tracks_items ~get_pointee_name c
-    @ build_liveset_returns_items ~get_pointee_name c
+    @ build_liveset_tracks_items ~get_pointee_name ~note_name_style c
+    @ build_liveset_returns_items ~get_pointee_name ~note_name_style c
     @ (locators_collection |> Option.map (fun c -> Collection c) |> option_to_list)
   in
 
