@@ -164,6 +164,11 @@
  (modules test_stats_renderer)
  (libraries alsdiff_output alcotest))
 
+(test
+ (name test_config_text_renderer)
+ (modules test_config_text_renderer)
+ (libraries alsdiff_output alcotest))
+
 ;; Auto indent files with `dune build @fmt`
 (subdir
  run
