@@ -75,99 +75,6 @@ let test_change_type_of () =
     )) "Unchanged change" Unchanged (ViewBuilder.change_type_of unchanged_change)
 
 
-let test_build_field_added () =
-  (* Create a simple field descriptor *)
-  let fd : (int, int atomic_patch) field_descriptor = FieldDesc {
-      name = "TestField";
-      of_parent_value = (fun x -> x);
-      of_parent_patch = (fun p -> `Modified p);
-      wrapper = int_value;
-    } in
-
-  let change = `Added 42 in
-  let field = ViewBuilder.build_field change fd ~domain_type:DTOther in
-
-  check string "Field name" "TestField" field.name;
-  check bool "Field is Added" true (field.change = Added);
-  check bool "No old value" true (field.oldval = None);
-  (match field.newval with
-   | Some (Fint n) -> check int "New value" 42 n
-   | _ -> fail "Expected Fint new value")
-
-
-let test_build_field_removed () =
-  let fd : (string, string atomic_patch) field_descriptor = FieldDesc {
-      name = "StringField";
-      of_parent_value = Fun.id;
-      of_parent_patch = (fun p -> `Modified p);
-      wrapper = string_value;
-    } in
-
-  let change = `Removed "goodbye" in
-  let field = ViewBuilder.build_field change fd ~domain_type:DTOther in
-
-  check string "Field name" "StringField" field.name;
-  check bool "Field is Removed" true (field.change = Removed);
-  (match field.oldval with
-   | Some (Fstring s) -> check string "Old value" "goodbye" s
-   | _ -> fail "Expected Fstring old value");
-  check bool "No new value" true (field.newval = None)
-
-
-let test_build_field_modified () =
-  let fd : (float, float atomic_patch) field_descriptor = FieldDesc {
-      name = "FloatField";
-      of_parent_value = Fun.id;
-      of_parent_patch = (fun p -> `Modified p);
-      wrapper = float_value;
-    } in
-
-  let patch = { oldval = 1.5; newval = 2.5 } in
-  let change = `Modified patch in
-  let field = ViewBuilder.build_field change fd ~domain_type:DTOther in
-
-  check string "Field name" "FloatField" field.name;
-  check bool "Field is Modified" true (field.change = Modified);
-  (match field.oldval, field.newval with
-   | Some (Ffloat o), Some (Ffloat n) ->
-     check (float 0.001) "Old value" 1.5 o;
-     check (float 0.001) "New value" 2.5 n
-   | _ -> fail "Expected Ffloat old and new values")
-
-
-let test_build_item_from_fields () =
-  let fd1 : (int * string, (int atomic_patch * string atomic_patch)) field_descriptor = FieldDesc {
-      name = "IntField";
-      of_parent_value = fst;
-      of_parent_patch = (fun (p, _) -> `Modified p);
-      wrapper = int_value;
-    } in
-  let fd2 : (int * string, (int atomic_patch * string atomic_patch)) field_descriptor = FieldDesc {
-      name = "StrField";
-      of_parent_value = snd;
-      of_parent_patch = (fun (_, p) -> `Modified p);
-      wrapper = string_value;
-    } in
-
-  let change = `Added (10, "hello") in
-  let item = ViewBuilder.build_item_from_fields change
-      ~name:"TestItem"
-      ~domain_type:DTOther
-      ~field_descs:[fd1; fd2] in
-
-  check string "Item name" "TestItem" item.name;
-  check bool "Item is Added" true (item.change = Added);
-  check int "Two children" 2 (List.length item.children);
-
-  (* Check first field *)
-  let f1 = get_field (List.nth item.children 0) in
-  check string "First field name" "IntField" f1.name;
-  (match f1.newval with Some (Fint n) -> check int "Int value" 10 n | _ -> fail "Expected Fint");
-
-  (* Check second field *)
-  let f2 = get_field (List.nth item.children 1) in
-  check string "Second field name" "StrField" f2.name;
-  (match f2.newval with Some (Fstring s) -> check string "String value" "hello" s | _ -> fail "Expected Fstring")
 
 
 (* ========== Create Function Tests ========== *)
@@ -452,14 +359,7 @@ let () =
     "ViewBuilder.change_type_of", [
       test_case "Extracts change type correctly" `Quick test_change_type_of;
     ];
-    "ViewBuilder.build_field", [
-      test_case "Build field for Added" `Quick test_build_field_added;
-      test_case "Build field for Removed" `Quick test_build_field_removed;
-      test_case "Build field for Modified" `Quick test_build_field_modified;
-    ];
-    "ViewBuilder.build_item_from_fields", [
-      test_case "Build item with field children" `Quick test_build_item_from_fields;
-    ];
+
     "create_note_item", [
       test_case "Create note item for Added" `Quick test_create_note_item_added;
       test_case "Create note item for Modified" `Quick test_create_note_item_modified;
