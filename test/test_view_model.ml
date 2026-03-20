@@ -1,5 +1,6 @@
 open Alcotest
 open Alsdiff_base.Diff
+open Alsdiff_live
 open Alsdiff_live.Clip
 open Alsdiff_output.View_model
 
@@ -74,99 +75,6 @@ let test_change_type_of () =
     )) "Unchanged change" Unchanged (ViewBuilder.change_type_of unchanged_change)
 
 
-let test_build_field_added () =
-  (* Create a simple field descriptor *)
-  let fd : (int, int atomic_patch) field_descriptor = FieldDesc {
-      name = "TestField";
-      of_parent_value = (fun x -> x);
-      of_parent_patch = (fun p -> `Modified p);
-      wrapper = int_value;
-    } in
-
-  let change = `Added 42 in
-  let field = ViewBuilder.build_field change fd ~domain_type:DTOther in
-
-  check string "Field name" "TestField" field.name;
-  check bool "Field is Added" true (field.change = Added);
-  check bool "No old value" true (field.oldval = None);
-  (match field.newval with
-   | Some (Fint n) -> check int "New value" 42 n
-   | _ -> fail "Expected Fint new value")
-
-
-let test_build_field_removed () =
-  let fd : (string, string atomic_patch) field_descriptor = FieldDesc {
-      name = "StringField";
-      of_parent_value = Fun.id;
-      of_parent_patch = (fun p -> `Modified p);
-      wrapper = string_value;
-    } in
-
-  let change = `Removed "goodbye" in
-  let field = ViewBuilder.build_field change fd ~domain_type:DTOther in
-
-  check string "Field name" "StringField" field.name;
-  check bool "Field is Removed" true (field.change = Removed);
-  (match field.oldval with
-   | Some (Fstring s) -> check string "Old value" "goodbye" s
-   | _ -> fail "Expected Fstring old value");
-  check bool "No new value" true (field.newval = None)
-
-
-let test_build_field_modified () =
-  let fd : (float, float atomic_patch) field_descriptor = FieldDesc {
-      name = "FloatField";
-      of_parent_value = Fun.id;
-      of_parent_patch = (fun p -> `Modified p);
-      wrapper = float_value;
-    } in
-
-  let patch = { oldval = 1.5; newval = 2.5 } in
-  let change = `Modified patch in
-  let field = ViewBuilder.build_field change fd ~domain_type:DTOther in
-
-  check string "Field name" "FloatField" field.name;
-  check bool "Field is Modified" true (field.change = Modified);
-  (match field.oldval, field.newval with
-   | Some (Ffloat o), Some (Ffloat n) ->
-     check (float 0.001) "Old value" 1.5 o;
-     check (float 0.001) "New value" 2.5 n
-   | _ -> fail "Expected Ffloat old and new values")
-
-
-let test_build_item_from_fields () =
-  let fd1 : (int * string, (int atomic_patch * string atomic_patch)) field_descriptor = FieldDesc {
-      name = "IntField";
-      of_parent_value = fst;
-      of_parent_patch = (fun (p, _) -> `Modified p);
-      wrapper = int_value;
-    } in
-  let fd2 : (int * string, (int atomic_patch * string atomic_patch)) field_descriptor = FieldDesc {
-      name = "StrField";
-      of_parent_value = snd;
-      of_parent_patch = (fun (_, p) -> `Modified p);
-      wrapper = string_value;
-    } in
-
-  let change = `Added (10, "hello") in
-  let item = ViewBuilder.build_item_from_fields change
-      ~name:"TestItem"
-      ~domain_type:DTOther
-      ~field_descs:[fd1; fd2] in
-
-  check string "Item name" "TestItem" item.name;
-  check bool "Item is Added" true (item.change = Added);
-  check int "Two children" 2 (List.length item.children);
-
-  (* Check first field *)
-  let f1 = get_field (List.nth item.children 0) in
-  check string "First field name" "IntField" f1.name;
-  (match f1.newval with Some (Fint n) -> check int "Int value" 10 n | _ -> fail "Expected Fint");
-
-  (* Check second field *)
-  let f2 = get_field (List.nth item.children 1) in
-  check string "Second field name" "StrField" f2.name;
-  (match f2.newval with Some (Fstring s) -> check string "String value" "hello" s | _ -> fail "Expected Fstring")
 
 
 (* ========== Create Function Tests ========== *)
@@ -208,6 +116,50 @@ let test_create_note_item_modified () =
      check (float 0.001) "Old time" 0.0 o;
      check (float 0.001) "New time" 0.5 n
    | _ -> fail "Expected Ffloat old and new for Time")
+
+
+let test_create_note_item_sharp_style () =
+  (* Note 54 = F#3 in sharp notation *)
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  (* Test with explicit Sharp style *)
+  let item = create_note_item ~note_name_style:Sharp change in
+
+  check string "Item name contains F#3" "Note F#3 (54)" item.name;
+  check bool "Item is Added" true (item.change = Added)
+
+
+let test_create_note_item_flat_style () =
+  (* Note 54 = Gb3 in flat notation *)
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  let item = create_note_item ~note_name_style:Flat change in
+
+  check string "Item name contains Gb3" "Note Gb3 (54)" item.name;
+  check bool "Item is Added" true (item.change = Added)
+
+
+let test_create_note_item_flat_style_ab_note () =
+  (* Note 56 = Ab3 in flat notation *)
+  let note = { MidiNote.id = 1; note = 56; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  let item = create_note_item ~note_name_style:Flat change in
+
+  check string "Item name contains Ab3" "Note Ab3 (56)" item.name;
+  check bool "Item is Added" true (item.change = Added)
+
+
+let test_create_note_item_default_is_sharp () =
+  (* Verify that without specifying style, default is Sharp *)
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let change = `Added note in
+
+  let item = create_note_item change in
+
+  check string "Default style is Sharp (F#3)" "Note F#3 (54)" item.name
 
 
 let test_create_midi_clip_item () =
@@ -307,6 +259,7 @@ let test_create_audio_clip_item_added () =
     loop;
     signature;
     sample_ref;
+    fade = None;
   } in
 
   let change = `Added clip in
@@ -335,28 +288,97 @@ let test_create_audio_clip_item_added () =
    | Some (Fstring s) -> check string "Sample file path" "/path/to/sample.wav" s
    | _ -> fail "Expected Fstring for File Path")
 
+let build_automation_item_from_event_patch event_patch =
+  let automation_patch = {
+    Automation.Patch.id = 1;
+    target = 2;
+    events = [`Modified event_patch];
+  } in
+  create_automation_item ~get_pointee_name:(fun _ -> "Target") (`Modified automation_patch)
+
+let get_single_event_summary item =
+  check int "single event field" 1 (List.length item.children);
+  let event_field = get_field (List.hd item.children) in
+  match event_field.oldval with
+  | Some (Fstring s) -> s
+  | _ -> fail "Expected event summary as string old value"
+
+let test_create_automation_item_curve_added_summary () =
+  let event_patch = {
+    Automation.EnvelopeEvent.Patch.time = `Modified { oldval = 1.0; newval = 2.0 };
+    value = `Modified { oldval = Automation.FloatEvent 10.0; newval = Automation.FloatEvent 11.0 };
+    curve = `Added {
+        Automation.CurveControls.curve1_x = 0.1;
+        curve1_y = 0.2;
+        curve2_x = 0.3;
+        curve2_y = 0.4;
+      };
+  } in
+  let item = build_automation_item_from_event_patch event_patch in
+  let summary = get_single_event_summary item in
+  check string "combined summary with curve add"
+    "Time: 1.00->2.00, Value: 10.00->11.00, Curve Added: Curve1=(0.10,0.20) Curve2=(0.30,0.40)"
+    summary
+
+let test_create_automation_item_curve_removed_summary () =
+  let event_patch = {
+    Automation.EnvelopeEvent.Patch.time = `Modified { oldval = 1.0; newval = 2.0 };
+    value = `Unchanged;
+    curve = `Removed {
+        Automation.CurveControls.curve1_x = 0.5;
+        curve1_y = 0.6;
+        curve2_x = 0.7;
+        curve2_y = 0.8;
+      };
+  } in
+  let item = build_automation_item_from_event_patch event_patch in
+  let summary = get_single_event_summary item in
+  check string "combined summary with curve remove"
+    "Time: 1.00->2.00, Curve Removed: Curve1=(0.50,0.60) Curve2=(0.70,0.80)"
+    summary
+
+let test_create_automation_item_curve_modified_summary () =
+  let event_patch = {
+    Automation.EnvelopeEvent.Patch.time = `Modified { oldval = 1.0; newval = 2.0 };
+    value = `Modified { oldval = Automation.FloatEvent 10.0; newval = Automation.FloatEvent 11.0 };
+    curve = `Modified {
+        Automation.CurveControls.Patch.curve1_x = `Modified { oldval = 0.1; newval = 0.2 };
+        curve1_y = `Modified { oldval = 0.2; newval = 0.3 };
+        curve2_x = `Modified { oldval = 0.3; newval = 0.4 };
+        curve2_y = `Modified { oldval = 0.4; newval = 0.5 };
+      };
+  } in
+  let item = build_automation_item_from_event_patch event_patch in
+  let summary = get_single_event_summary item in
+  check string "combined summary with curve modify"
+    "Time: 1.00->2.00, Value: 10.00->11.00, Curve: C1X: 0.10->0.20, C1Y: 0.20->0.30, C2X: 0.30->0.40, C2Y: 0.40->0.50"
+    summary
 
 let () =
   run "ViewModel" [
     "ViewBuilder.change_type_of", [
       test_case "Extracts change type correctly" `Quick test_change_type_of;
     ];
-    "ViewBuilder.build_field", [
-      test_case "Build field for Added" `Quick test_build_field_added;
-      test_case "Build field for Removed" `Quick test_build_field_removed;
-      test_case "Build field for Modified" `Quick test_build_field_modified;
-    ];
-    "ViewBuilder.build_item_from_fields", [
-      test_case "Build item with field children" `Quick test_build_item_from_fields;
-    ];
+
     "create_note_item", [
       test_case "Create note item for Added" `Quick test_create_note_item_added;
       test_case "Create note item for Modified" `Quick test_create_note_item_modified;
+    ];
+    "create_note_item note_name_style", [
+      test_case "Sharp style produces sharp notes" `Quick test_create_note_item_sharp_style;
+      test_case "Flat style produces flat notes" `Quick test_create_note_item_flat_style;
+      test_case "Flat style for Ab note" `Quick test_create_note_item_flat_style_ab_note;
+      test_case "Default style is Sharp" `Quick test_create_note_item_default_is_sharp;
     ];
     "create_midi_clip_item", [
       test_case "Create item from patch" `Quick test_create_midi_clip_item;
     ];
     "create_audio_clip_item", [
       test_case "Create item for Added clip" `Quick test_create_audio_clip_item_added;
+    ];
+    "create_automation_item", [
+      test_case "Combined summary includes added curve details" `Quick test_create_automation_item_curve_added_summary;
+      test_case "Combined summary includes removed curve details" `Quick test_create_automation_item_curve_removed_summary;
+      test_case "Combined summary includes modified curve details" `Quick test_create_automation_item_curve_modified_summary;
     ];
   ]

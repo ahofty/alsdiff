@@ -1,10 +1,11 @@
 open Alcotest
 open Alsdiff_base
 open Alsdiff_live
+open Utils
 
 (** Helper to load an Automation.t from a file path. *)
 let load_automation_from_file (path : string) : Automation.t =
-  let xml = Xml.read_file path in
+  let xml = Xml.read_file (resolve_test_data_path path) in
   let envelope_element = Upath.find "/Envelopes/AutomationEnvelope@Id=0" xml |> snd in
   Automation.create envelope_element
 

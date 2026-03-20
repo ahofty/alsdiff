@@ -1,10 +1,11 @@
 open Alsdiff_base.Xml
 open Alsdiff_live.Clip
+open Utils
 
 let test_identical_clips () =
   (* Read the audio_clip.xml file twice *)
-  let xml1 = read_file "audio_clip.xml" in
-  let xml2 = read_file "audio_clip.xml" in
+  let xml1 = read_file (resolve_test_data_path "audio_clip.xml") in
+  let xml2 = read_file (resolve_test_data_path "audio_clip.xml") in
 
   (* Create two identical audio clips *)
   let clip1 = AudioClip.create xml1 in
@@ -17,15 +18,15 @@ let test_identical_clips () =
   let is_empty =
     match patch with
     | { id = _; name = `Unchanged; start_time = `Unchanged; end_time = `Unchanged;
-        loop = `Unchanged; signature = `Unchanged; sample_ref = `Unchanged } -> true
+        loop = `Unchanged; signature = `Unchanged; sample_ref = `Unchanged; fade = `Unchanged } -> true
     | _ -> false
   in
   Alcotest.(check bool) "patch is empty" true is_empty
 
 let test_modified_start_time () =
   (* Read the audio_clip.xml file twice *)
-  let xml1 = read_file "audio_clip.xml" in
-  let xml2 = read_file "audio_clip.xml" in
+  let xml1 = read_file (resolve_test_data_path "audio_clip.xml") in
+  let xml2 = read_file (resolve_test_data_path "audio_clip.xml") in
 
   (* Create two audio clips *)
   let clip1 = AudioClip.create xml1 in
@@ -46,8 +47,8 @@ let test_modified_start_time () =
 
 let test_modified_name () =
   (* Read the audio_clip.xml file twice *)
-  let xml1 = read_file "audio_clip.xml" in
-  let xml2 = read_file "audio_clip.xml" in
+  let xml1 = read_file (resolve_test_data_path "audio_clip.xml") in
+  let xml2 = read_file (resolve_test_data_path "audio_clip.xml") in
 
   (* Create two audio clips *)
   let clip1 = AudioClip.create xml1 in

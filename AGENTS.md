@@ -1,37 +1,209 @@
 # ALSDiff Agent Instructions
 
-## Build, Lint, and Test Commands
+This file provides guidance when working with code in this repository.
 
-### Core Commands
-- `dune build` - Build the entire project
+## Project Structure
+
+- `bin/alsdiff.ml` - Main executable entry point
+- `lib/` - Core library modules organized into sublibraries:
+  - `lib/base/` - Base functionality modules:
+    - `xml.ml` - XML parsing and data structures
+    - `upath.ml` - XPath-like query language for XML
+    - `file.ml` - File handling and .als file decompression
+    - `equality.ml` - Equality checking utilities
+    - `diff.ml` - List diffing algorithms
+  - `lib/live/` - Ableton Live specific modules:
+    - `automation.ml` - Automation envelope handling
+    - `clip.ml` - Clip and mixer functionality
+    - `track.ml` - Track handling and management (contains all track modules: Routing, RoutingSet, Send, Mixer, MidiTrack, AudioTrack, MainMixer, MainTrack)
+    - `device.ml` - Device functionality (includes plugin, regular, group devices, and Max for Live)
+    - `liveset.ml` - Live set management
+  - `lib/output/` - Output formatting:
+    - `output.ml` - Output interface definitions
+    - `text_renderer.ml` - Plain text output rendering
+    - `stats_renderer.ml` - Statistics summary output rendering
+    - `view_model.ml` - View model for output formatting
+- `test/` - Test suites (all use specific module opens for cleaner code):
+  - `test_upath.ml` - Tests for XPath-like functionality
+  - `test_xml.ml` - Tests for XML parsing
+  - `test_wildcard.ml` - Tests for wildcard matching
+  - `test_wildcard_debug.ml` - Debug tests for wildcard matching
+  - `test_complex.ml` - Complex integration tests
+  - `test_audio_clip.ml` - Tests for audio clip functionality
+  - `test_midi_clip.ml` - Tests for MIDI clip functionality
+  - `test_midi_track.ml` - Tests for MIDI track functionality
+  - `test_audio_track.ml` - Tests for audio track functionality
+  - `test_main_track.ml` - Tests for MainTrack (singleton master output track)
+  - `test_device.ml` - Tests for device functionality
+  - `test_plugin_device.ml` - Tests for plugin device functionality
+  - `test_group_device.ml` - Tests for group device functionality
+  - `test_m4l_device.ml` - Tests for Max for Live device functionality
+  - `test_real_devices.ml` - Tests for real device implementations
+  - `test_diff_automation.ml` - Tests for diffing automation envelopes
+  - `test_diff_list.ml` - Tests for list diffing functionality
+  - `test_diff_audio_clip.ml` - Tests for audio clip diffing
+  - `test_diff_midi_clip.ml` - Tests for MIDI clip diffing
+  - `test_diff_mixer.ml` - Tests for mixer diffing functionality
+  - `test_diff_device.ml` - Tests for device diffing functionality
+  - `test_diff_track.ml` - Tests for track diffing functionality
+  - `test_clip_patch.ml` - Tests for clip patching functionality
+  - `test_liveset.ml` - Tests for liveset functionality
+  - `test_regex_match.ml` - Tests for regex matching functionality
+  - `test_view_model.ml` - Tests for view model functionality
+  - `test_detail_config_json.ml` - Tests for JSON config handling
+  - `test_text_renderer.ml` - Tests for text renderer
+  - `test_stats_renderer.ml` - Tests for statistics renderer
+  - `utils.ml` - Shared test utilities
+
+## Dependencies
+
+All dependencies with their repositories:
+
+| Dependency | Version | Description | Repository |
+|------------|---------|-------------|------------|
+| `ocaml` | >= 5.3.0 | OCaml compiler | https://ocaml.org |
+| `xmlm` | - | XML parsing | https://github.com/dbuenzli/xmlm |
+| `camlzip` | - | Gzip decompression for .als files | https://github.com/xavierleroy/camlzip |
+| `angstrom` | - | Parser combinators for Upath | https://github.com/inhabitedtype/angstrom |
+| `eio` | - | Effects-based IO | https://github.com/ocaml-multicore/eio |
+| `eio_main` | - | EIO main | https://github.com/ocaml-multicore/eio |
+| `alcotest` | - | Testing framework | https://github.com/mirage/alcotest |
+| `re` | - | Regular expression library | https://github.com/ocaml/ocaml-re |
+| `cmdliner` | >= 2.0.0 | Command line interface library | https://github.com/dbuenzli/cmdliner |
+| `ppx_deriving` | - | PPX extension for deriving equality functions | https://github.com/ocaml-ppx/ppx_deriving |
+| `ppx_deriving_yojson` | - | PPX extension for Yojson serialization | https://github.com/ocaml-ppx/ppx_deriving_yojson |
+| `ppx_deriving_jsonschema` | - | PPX extension for JSON schema generation | https://github.com/ahrefs/ppx_deriving_jsonschema |
+| `jsonschema` | - | JSON schema validation | https://github.com/ocaml-community/jsonschema |
+| `fmt` | - | Pretty-printing | https://github.com/dbuenzli/fmt |
+| `ptime` | - | Time handling | https://github.com/dbuenzli/ptime |
+| `yojson` | - | JSON parsing and serialization | https://github.com/ocaml-community/yojson |
+
+## Architecture Overview
+
+This is a Git helper tool for Ableton Live Set (.als) files. The core functionality:
+
+1. **File Handling**: Decompress .als files (which are gzipped XML)
+2. **XML Processing**: Parse and navigate XML structure of Live sets
+3. **Upath**: Custom XPath-like query language for finding elements in XML
+4. **Diffing**: Compare Live set objects to detect changes with advanced algorithms
+5. **Patch Management**: Handle patches and modifications
+6. **Output Formatting**: Format and display results
+
+The `Upath` module provides a subset of XPath functionality with support for:
+- Tag names with attributes (`tag@attr="value"`)
+- Indexing with optional tag matching (`[0]`, `[1]`, `tag[0]`, `tag[1]`)
+- Wildcards (`*`, `**`)
+- Path navigation (`/tag1/tag2`)
+
+The `Diff` module implements multiple diffing algorithms:
+- Ordered diffing for sequential data
+- Myers O(ND) algorithm for optimal diffing performance
+- Specialized diffing for automation envelopes in Live sets
+- Structured diffing with patch generation for complex data types
+
+### Track Architecture
+
+All track-related modules are consolidated in `lib/live/track.ml`:
+
+- **Routing & RoutingSet**: Handle audio/MIDI input/output routing configuration
+- **Send**: Track-to-track send routing with amount parameters
+- **Mixer**: Standard track mixer with volume, pan, mute, solo, and sends
+- **MidiTrack**: MIDI tracks with clips, automations, devices, mixer, and routings
+- **AudioTrack**: Audio tracks with clips, automations, devices, mixer, and routings
+- **MainMixer**: Extends Mixer with global parameters (tempo, time signature, crossfade, global groove)
+- **MainTrack**: Singleton master output track (no `id` field - uses singleton pattern)
+  - `has_same_id _ _ = true` - always returns true
+  - `id_hash _ = Hashtbl.hash 0` - constant hash
+  - No ID validation in diff function
+
+### Device Support
+
+The project includes comprehensive support for Ableton Live devices:
+- **Device Types**: Regular devices, Plugin devices (VST2, VST3, AUv2), Group devices, and Max for Live devices
+- **Device Architecture**: Consolidated in device.ml with unified device type system
+- **Device Mapping**: Type-safe mapping from XML to OCaml data structures
+- **Real Device Support**: Support for actual Ableton Live device implementations
+- **Test Coverage**: Extensive test suite covering all device types and edge cases
+- **Diffing Support**: Advanced diffing algorithms for all device types with proper patch generation
+
+## Library Organization
+
+The project is organized into four main libraries:
+
+1. **alsdiff_base** (`lib/base/`) - Core functionality
+2. **alsdiff_live** (`lib/live/`) - Ableton Live specific types and logic
+4. **alsdiff_output** (`lib/output/`) - Output formatting
+
+### Module Access Patterns
+
+When working with the libraries, use specific module opens for cleaner code:
+
+```ocaml
+(* Base modules *)
+open Alsdiff_base.Xml
+open Alsdiff_base.Upath
+open Alsdiff_base.Diff
+
+(* Live modules *)
+open Alsdiff_live.Automation
+open Alsdiff_live.Clip
+open Alsdiff_live.Track
+open Alsdiff_live.Device
+open Alsdiff_live.Liveset
+
+(* Track submodule access (from track.ml) *)
+open Alsdiff_live.Track.Routing
+open Alsdiff_live.Track.Mixer
+open Alsdiff_live.Track.MidiTrack
+open Alsdiff_live.Track.AudioTrack
+open Alsdiff_live.Track.MainTrack
+
+(* Output modules *)
+open Alsdiff_output.Text_renderer
+```
+
+This allows you to write:
+- `Automation.t` instead of `Alsdiff_live.Automation.Automation.t`
+- `Xml.read_file` instead of `Alsdiff_base.Xml.read_file`
+- `MainTrack.t` instead of `Alsdiff_live.Track.MainTrack.t`
+
+**Note**: `MainTrack` is a singleton (master output track) and does not have an `id` field. It uses singleton pattern with `has_same_id _ _ = true` and `id_hash _ = Hashtbl.hash 0`.
+
+## Development Commands
+
+This is an OCaml project using Dune build system.
+
+### Build and Test Commands
+- `dune build` - Build the project
 - `dune runtest` - Run all tests
 - `dune runtest --force` - Force rerun all tests
-- `dune build @fmt` - Format code with OCamlFormat
-- `dune exec alsdiff -- <file1.als> <file2.als>` - Run main CLI
+- `dune exec alsdiff` - Run the main executable
+- `dune exec test/test_upath.exe` - Run specific test `test/test_upath.ml` (Upath tests)
 
-### CLI Options
+### Development Utilities
+- `dune build @fmt` - Format code
+- `dune promote` - Promote generated files
+- `dune clean` - Clean build artifacts
+- `dune utop` - Load this library into Utop REPL
+- `dune utop . -- -emacs` - Load this library into Utop REPL for Emacs utop-mode
+
+### PPX Code Inspection
+To inspect code after PPX rewriting (e.g., to see generated equality functions from `[@@deriving eq]`):
+- `dune describe pp lib/live/device.ml` - Show PPX-expanded code for a specific file
+
+## CLI Options
+
 - `alsdiff FILE1.als FILE2.als` - Compare two ALS files
-- `--preset PRESET` - Use output preset (compact, full, midi, quiet, verbose)
+- `--mode tree|stats` - Output mode: hierarchical tree (default) or stats summary
+- `--preset PRESET` - Use output preset (compact, composer, full, inline, mixing, quiet, verbose)
 - `--config FILE` - Load configuration from JSON file
-- `--dump-schema [FILE]` - Dump JSON schema for configuration
+- `--dump-preset PRESET` - Dump preset configuration as JSON to stdout
+- `--dump-schema` - Dump JSON schema for configuration to stdout
 - `--validate-config FILE` - Validate a config file against schema
+- `--git` - Git external diff driver mode (exit code 0 = no changes, 1 = changes)
 - `--prefix-added/removed/modified/unchanged` - Custom change prefixes
 - `--note-name-style Sharp|Flat` - Note naming convention
 - `--max-collection-items N` - Limit collection output size
-
-### Running Single Tests
-- `dune exec test/test_upath.exe` - Run specific test (upath)
-- `dune exec test/test_xml.exe` - Run specific test (xml)
-- `dune exec test/test_device.exe` - Run specific test (device)
-- `dune exec test/test_view_model.exe` - Run view model tests
-- `dune exec test/test_text_renderer.exe` - Run text renderer tests
-- General pattern: `dune exec test/test_<module>.exe`
-
-### Development Utilities
-- `dune clean` - Clean build artifacts
-- `dune promote` - Promote generated files
-- `dune utop` - Load library into Utop REPL
-- `dune describe pp lib/<path>.ml` - Inspect PPX-generated code
 
 ## Code Style Guidelines
 
@@ -117,62 +289,6 @@ match xml with
 - Parallel work: `Eio.Domain_manager.run domain_mgr (fun () -> ...)`
 - Preserve `Eio_main.run` structure when modifying parallel workloads
 
-## Architecture
-
-### Library Structure
-- `lib/base/` (alsdiff_base) - Core utilities
-  - `file.ml` - ALS file decompression and loading
-  - `xml.ml` - XML parsing and manipulation
-  - `upath.ml` - μpath query language (XPath-like syntax for XML)
-  - `equality.ml` - Equality and identity traits (EQUALABLE, IDENTIFIABLE)
-  - `diff.ml` - Diff infrastructure with phantom types (atomic/structured changes)
-- `lib/live/` (alsdiff_live) - Ableton Live types
-  - `automation.ml` - Automation envelopes and events
-  - `clip.ml` - MIDI and Audio clips (MidiClip, AudioClip, Loop, MidiNote, SampleRef)
-  - `device.ml` - All device types (Regular, Plugin, Max4Live, Group)
-  - `track.ml` - Track types (MidiTrack, AudioTrack, MainTrack, Routing, Mixer, Send)
-  - `liveset.ml` - Top-level LiveSet structure (Version, Locator, pointees)
-- `lib/output/` (alsdiff_output) - Output formatting
-  - `output.ml` - Output interface definition
-  - `view_model.ml` - View model types and builders (Field, Item, Collection, ViewBuilder)
-  - `text_renderer.ml` - Text rendering with detail configs and JSON schema support
-- `bin/` - CLI entry point (alsdiff.ml with cmdliner)
-
-### Device Hierarchy
-All device types in `lib/live/device.ml`:
-- `RegularDevice` - Built-in Ableton effects (Compressor, EQ8, etc.)
-- `PluginDevice` - External plugins (VST2, VST3, AUv2)
-- `GroupDevice` - Nested device chains with branches
-- `Max4LiveDevice` - Max for Live devices
-- Supporting types: `PluginDesc`, `PluginParam`, `GenericParam`, `MIDIMapping`, `PresetRef`, `PatchRef`, `Macro`, `Snapshot`, `Branch`, `MixerDevice`
-
-### Track Types (in `lib/live/track.ml`)
-- `Routing` / `RoutingSet` - I/O routing (singleton pattern)
-- `Send` - Track-to-track sends
-- `Mixer` - Volume/pan/mute/solo
-- `MidiTrack` / `AudioTrack` / `GroupTrack` / `ReturnTrack` - Standard tracks
-- `MainMixer` / `MainTrack` - Master output (singleton pattern)
-
-### View Model Pattern (in `lib/output/view_model.ml`)
-Unified view type system for output rendering:
-```ocaml
-type view = Field of field | Item of item | Collection of collection
-```
-- `ViewBuilder` module with combinators for building views
-- `unified_field_spec` for declarative field definitions
-- Domain types enumeration (DTLiveset, DTTrack, DTDevice, etc.)
-
-### JSON Configuration Support
-Config auto-discovery order:
-1. CLI `--config FILE`
-2. CLI `--preset PRESET`
-3. `.alsdiff.json` in git repository root
-4. `.alsdiff.json` in `$HOME`
-5. `quiet` preset (default)
-
-Detail levels: `Ignore`, `Summary`, `Compact`, `Inline`, `Full`
-Presets: `compact`, `full`, `midi_friendly`, `quiet`, `verbose`
-
 ## Do / Don't
 
 ### Do
@@ -190,3 +306,8 @@ Presets: `compact`, `full`, `midi_friendly`, `quiet`, `verbose`
 - Add code comments unless explicitly requested
 - Change `.ocamlformat` configuration
 - Break singleton pattern for `MainTrack`
+
+## Git Commits
+
+Follow the Conventional Commits specification: https://www.conventionalcommits.org/en/v1.0.0/
+It is recommended to use a 1-3 line summary and list the specific changes.

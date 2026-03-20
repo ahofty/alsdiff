@@ -285,17 +285,21 @@ let find_attr_test_cases = [
 
 (* Test parser flexibility - paths with and without leading slash *)
 let test_parser_flexibility path_str () =
-  let result_with_slash = Parser.parse_path ("/" ^ path_str) in
-  let result_without_slash = Parser.parse_path path_str in
-  match (result_with_slash, result_without_slash) with
-  | (Ok with_slash, Ok without_slash) ->
-    Alcotest.(check (module struct
-                type t = Alsdiff_base.Upath.path
-                let equal = Alsdiff_base.Upath.equal_path
-                let pp = Alsdiff_base.Upath.pp_path
-              end)) ("parser flexibility: " ^ path_str) with_slash without_slash
-  | _ ->
-    Alcotest.fail ("Both should succeed: " ^ path_str)
+  let result_with_slash =
+    try Parser.parse_path ("/" ^ path_str) with
+    | Path_parse_error (_, msg) ->
+      Alcotest.fail ("Expected parser success for /" ^ path_str ^ ": " ^ msg ^ ")")
+  in
+  let result_without_slash =
+    try Parser.parse_path path_str with
+    | Path_parse_error (_, msg) ->
+      Alcotest.fail ("Expected parser success for " ^ path_str ^ ": " ^ msg)
+  in
+  Alcotest.(check (module struct
+              type t = Alsdiff_base.Upath.path
+              let equal = Alsdiff_base.Upath.equal_path
+              let pp = Alsdiff_base.Upath.pp_path
+            end)) ("parser flexibility: " ^ path_str) result_with_slash result_without_slash
 
 let parser_flexibility_test_cases = [
   "a/b/c";
@@ -303,6 +307,65 @@ let parser_flexibility_test_cases = [
   "Name";
   "element@attr=\"value\"";
   "parent/child[0]/grandchild";
+]
+
+let test_parser_invalid path_str () =
+  try
+    ignore (Parser.parse_path path_str);
+    Alcotest.fail ("Expected parser failure: " ^ path_str)
+  with
+  | Path_parse_error _ -> ()
+
+let test_parser_valid path_str () =
+  try
+    ignore (Parser.parse_path path_str)
+  with
+  | Path_parse_error (_, msg) ->
+    Alcotest.fail ("Expected parser success: " ^ path_str ^ ": " ^ msg)
+
+let parser_invalid_adjacent_multi_wildcard_cases = [
+  "/**/**/b";
+  "/root/**/**/child";
+  "/**/*/b";
+  "/root/*/**/child";
+  "/..";
+  "/../a";
+  "/**/..";
+  "/*/..";
+  "/**@id/..";
+  "/*@id/..";
+]
+
+let parser_valid_non_adjacent_multi_wildcard_cases = [
+  "/**/x/**/b";
+]
+
+let test_parser_invalid_regex path_str () =
+  try
+    ignore (Parser.parse_path path_str);
+    Alcotest.fail ("Expected invalid regex parse failure: " ^ path_str)
+  with
+  | Path_parse_error (input, msg) ->
+    Alcotest.(check string) "invalid regex input path" path_str input;
+    Alcotest.(check bool) "invalid regex message prefix" true
+      (String.starts_with ~prefix:"Invalid PCRE regex pattern" msg)
+
+let parser_invalid_regex_cases = [
+  "/**/'('";
+]
+
+let test_parser_invalid_empty_regex path_str () =
+  try
+    ignore (Parser.parse_path path_str);
+    Alcotest.fail ("Expected empty regex parse failure: " ^ path_str)
+  with
+  | Path_parse_error (input, msg) ->
+    Alcotest.(check string) "invalid empty regex input path" path_str input;
+    Alcotest.(check bool) "invalid empty regex message non-empty" true (String.length msg > 0)
+
+let parser_invalid_empty_regex_cases = [
+  "/**/''";
+  "/''";
 ]
 
 let () =
@@ -338,4 +401,22 @@ let () =
         Alcotest.test_case path_str `Quick (test_parser_flexibility path_str)
       )
       parser_flexibility_test_cases;
+    "parser_validation",
+    (List.map (fun path ->
+         Alcotest.test_case ("reject " ^ path) `Quick (test_parser_invalid path)
+       ) parser_invalid_adjacent_multi_wildcard_cases)
+    @
+    (List.map (fun path ->
+         Alcotest.test_case ("accept " ^ path) `Quick (test_parser_valid path)
+       ) parser_valid_non_adjacent_multi_wildcard_cases);
+    "parser_invalid_regex",
+    List.map (fun path ->
+        Alcotest.test_case ("invalid regex " ^ path) `Quick (test_parser_invalid_regex path)
+      )
+      parser_invalid_regex_cases;
+    "parser_invalid_empty_regex",
+    List.map (fun path ->
+        Alcotest.test_case ("invalid empty regex " ^ path) `Quick (test_parser_invalid_empty_regex path)
+      )
+      parser_invalid_empty_regex_cases;
   ]

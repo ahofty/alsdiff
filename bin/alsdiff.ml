@@ -1,6 +1,7 @@
 open Alsdiff_base
 open Alsdiff_live
 open Alsdiff_output
+open Config
 open Eio.Std
 open View_model
 open Cmdliner
@@ -12,27 +13,17 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item change in
+  let item = View_model.create_liveset_item ~note_name_style change in
   [View_model.Item item]
 
-let render_views config (views : View_model.view list) : string =
-  let buffer = Buffer.create 4096 in
-  let ppf = Format.formatter_of_buffer buffer in
-  Fmt.set_style_renderer ppf `None;
-
-  List.iter (fun view ->
-      Text_renderer.pp config ppf view;
-      Fmt.pf ppf "@.";
-    ) views;
-
-  Format.pp_print_flush ppf ();
-  Buffer.contents buffer
+type output_mode = Tree | Stats
 
 type config = {
   positional_args: string list;
   git_mode: bool;
+  output_mode: output_mode;
   config_file: string option;
   preset: [ `Compact | `Composer | `Full | `Inline | `Mixing | `Quiet | `Verbose ] option;
   dump_preset: [ `Compact | `Composer | `Full | `Inline | `Mixing | `Quiet | `Verbose ] option;
@@ -58,6 +49,15 @@ let parse_git_args args =
     Ok { path; old_file; new_file }
   | _ ->
     Error "Git mode requires exactly 7 positional arguments: path old-file old-hex old-mode new-file new-hex new-mode"
+
+let parse_preset_args = function
+  | `Compact -> Text_renderer.compact
+  | `Composer -> Text_renderer.composer
+  | `Full -> Text_renderer.full
+  | `Inline -> Text_renderer.inline
+  | `Mixing -> Text_renderer.mixing
+  | `Quiet -> Text_renderer.quiet
+  | `Verbose -> Text_renderer.verbose
 
 let load_config_from_json file_path =
   match Text_renderer.load_and_validate_config file_path with
@@ -121,75 +121,95 @@ let load_and_report_config config_path =
   Fmt.pr "Loading configuration from %s@." config_path;
   load_config_from_json config_path
 
-let diff_cmd ~config ~domain_mgr : int =
-  let file1, file2, reference_path =
-    if config.git_mode then
-      match parse_git_args config.positional_args with
-      | Error msg -> failwith msg
-      | Ok git_args -> (git_args.old_file, git_args.new_file, git_args.path)
-    else
-      match config.positional_args with
-      | [f1; f2] -> (f1, f2, f2)
-      | _ -> failwith "FILE1.als and FILE2.als are required for diff"
-  in
-
-  let base_renderer_config =
-    match config.config_file with
-    | Some config_path ->
-      load_config_from_json config_path
+let build_base_renderer_config ~default_config ~reference_path config =
+  match config.config_file with
+  | Some config_path ->
+    load_config_from_json config_path
+  | None ->
+    match config.preset with
+    | Some preset -> parse_preset_args preset
     | None ->
-      match config.preset with
-      | Some preset ->
-        let base = match preset with
-          | `Compact -> Text_renderer.compact
-          | `Composer -> Text_renderer.composer
-          | `Full -> Text_renderer.full
-          | `Inline -> Text_renderer.inline
-          | `Mixing -> Text_renderer.mixing
-          | `Quiet -> Text_renderer.quiet
-          | `Verbose -> Text_renderer.verbose
-        in base
-      | None ->
-        (* Auto-discover .alsdiff.json when neither --config nor --preset specified *)
-        match discover_config_file ~reference_path with
-        | Some auto_config -> load_and_report_config auto_config
-        | None -> Text_renderer.quiet
-  in
+      match discover_config_file ~reference_path with
+      | Some auto_config -> load_and_report_config auto_config
+      | None -> default_config
 
-  let renderer_config = { base_renderer_config with
-                          prefix_added = (match config.prefix_added with Some s -> s | None -> base_renderer_config.prefix_added);
-                          prefix_removed = (match config.prefix_removed with Some s -> s | None -> base_renderer_config.prefix_removed);
-                          prefix_modified = (match config.prefix_modified with Some s -> s | None -> base_renderer_config.prefix_modified);
-                          prefix_unchanged = (match config.prefix_unchanged with Some s -> s | None -> base_renderer_config.prefix_unchanged);
-                          note_name_style = (match config.note_name_style with Some s -> s | None -> base_renderer_config.note_name_style);
-                          max_collection_items = (match config.max_collection_items with Some n -> Some n | None -> base_renderer_config.max_collection_items);
-                        } in
+let stats_incompatible_flags_provided config =
+  config.prefix_added <> None
+  || config.prefix_removed <> None
+  || config.prefix_modified <> None
+  || config.prefix_unchanged <> None
+  || config.note_name_style <> None
+  || config.max_collection_items <> None
 
-  let liveset1, liveset2 = Fiber.pair
-      (fun () -> load_liveset ~domain_mgr file1)
-      (fun () -> load_liveset ~domain_mgr file2)
-  in
 
-  let liveset_patch = Liveset.diff liveset1 liveset2 in
-  let has_changes = not (Liveset.Patch.is_empty liveset_patch) in
+let render_stats ~config ~reference_path views =
+  let base_renderer_config = build_base_renderer_config ~default_config:stats_default ~reference_path config in
+  (* Stats mode doesn't use prefix/note_style/max_items, so no merging needed *)
+  Stats_renderer.render base_renderer_config views
 
-  let liveset_change =
-    if has_changes then
-      `Modified liveset_patch
+let render_tree ~config ~reference_path views =
+  let base_renderer_config = build_base_renderer_config ~default_config:Text_renderer.quiet ~reference_path config in
+  let renderer_config = {
+    base_renderer_config with
+    prefix_added = (match config.prefix_added with Some s -> s | None -> base_renderer_config.prefix_added);
+    prefix_removed = (match config.prefix_removed with Some s -> s | None -> base_renderer_config.prefix_removed);
+    prefix_modified = (match config.prefix_modified with Some s -> s | None -> base_renderer_config.prefix_modified);
+    prefix_unchanged = (match config.prefix_unchanged with Some s -> s | None -> base_renderer_config.prefix_unchanged);
+    note_name_style = (match config.note_name_style with Some s -> s | None -> base_renderer_config.note_name_style);
+    max_collection_items = (match config.max_collection_items with Some n -> Some n | None -> base_renderer_config.max_collection_items);
+  } in
+  Text_renderer.render renderer_config views
+
+let diff_cmd ~config ~domain_mgr : int =
+  if config.output_mode = Stats && stats_incompatible_flags_provided config then begin
+    Fmt.epr "Error: --mode stats is incompatible with --prefix-*, \
+             --note-name-style, and --max-collection-items@.";
+    if config.git_mode then 2 else 1
+  end else begin
+    let file1, file2, reference_path =
+      if config.git_mode then
+        match parse_git_args config.positional_args with
+        | Error msg -> failwith msg
+        | Ok git_args -> (git_args.old_file, git_args.new_file, git_args.path)
+      else
+        match config.positional_args with
+        | [f1; f2] -> (f1, f2, f2)
+        | _ -> failwith "FILE1.als and FILE2.als are required for diff"
+    in
+
+    let liveset1, liveset2 = Fiber.pair
+        (fun () -> load_liveset ~domain_mgr file1)
+        (fun () -> load_liveset ~domain_mgr file2)
+    in
+
+    let liveset_patch = Liveset.diff liveset1 liveset2 in
+    let has_changes = not (Liveset.Patch.is_empty liveset_patch) in
+
+    let liveset_change =
+      if has_changes then
+        `Modified liveset_patch
+      else
+        `Unchanged
+    in
+
+    let note_name_style = match config.note_name_style with
+      | Some style -> style
+      | None -> View_model.Sharp
+    in
+    let views = create_views ~note_name_style liveset_change in
+
+    let output = match config.output_mode with
+      | Stats -> render_stats ~config ~reference_path views
+      | Tree -> render_tree ~config ~reference_path views
+    in
+
+    Fmt.pr "%s@." output;
+
+    if config.git_mode then
+      if has_changes then 1 else 0
     else
-      `Unchanged
-  in
-
-  let views = create_views liveset_change in
-
-  let output = render_views renderer_config views in
-  Fmt.pr "%s@." output;
-
-  (* Exit code: git mode uses trustExitCode semantics *)
-  if config.git_mode then
-    if has_changes then 1 else 0
-  else
-    0
+      0
+  end
 
 let positional_args =
   let doc = "Positional arguments. Normal mode: FILE1.als FILE2.als. \
@@ -239,6 +259,14 @@ let max_collection_items =
   let doc = "Maximum number of items to show in collections (default from preset: None/10/50 depending on preset)" in
   Arg.(value & opt (some int) None & info ["max-collection-items"] ~docv:"N" ~doc)
 
+let stats_mode_doc =
+  "Stats mode supports --config and --preset for customizing which types appear in statistics. \
+   Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
+
+let output_mode =
+  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. " ^ stats_mode_doc in
+  Arg.(value & opt (enum ["tree", Tree; "stats", Stats]) Tree & info ["mode"] ~docv:"MODE" ~doc)
+
 let dump_schema =
   let doc = "Dump JSON schema for configuration to stdout and exit. Does not require FILE1.als or FILE2.als." in
   Arg.(value & flag & info ["dump-schema"] ~doc)
@@ -246,6 +274,7 @@ let dump_schema =
 let validate_config =
   let doc = "Validate a configuration file against the JSON schema and exit. Reports validation errors without running diff." in
   Arg.(value & opt (some string) None & info ["validate-config"] ~docv:"FILE" ~doc)
+
 
 let config_ref = ref None
 
@@ -259,6 +288,8 @@ let cmd =
     `S Manpage.s_examples;
     `P "Compare two files with default quiet preset:";
     `Pre "$(cmd) v1.als v2.als";
+    `P "Show change statistics summary:";
+    `Pre "$(cmd) v1.als v2.als --mode stats";
     `P "Compare with compact output:";
     `Pre "$(cmd) v1.als v2.als --preset compact";
     `P "Compare with full details:";
@@ -312,6 +343,8 @@ let cmd =
     `P "Git mode with config file:";
     `Pre "$(cmd) --config myconfig.json --git path old-file old-hex old-mode new-file new-hex new-mode";
     `S Manpage.s_options;
+    `P ("$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. \
+         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). " ^ stats_mode_doc);
     `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery. The --preset option is ignored when --config is specified. Individual CLI options override values from config file.";
     `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over auto-discovery but ignored when --config is specified.";
     `P "$(b,--prefix-added PREFIX) overrides prefix for added items from config file.";
@@ -336,8 +369,8 @@ let cmd =
   Cmd.make (Cmd.info "alsdiff" ~version:(match version () with
       | None -> "dev"
       | Some v -> Version.to_string v) ~doc ~man ~exits) @@
-  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ max_collection_items and+ dump_schema and+ validate_config in
-  let cfg = { positional_args; git_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; max_collection_items; dump_schema; validate_config } in
+  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ max_collection_items and+ output_mode and+ dump_schema and+ validate_config in
+  let cfg = { positional_args; git_mode; output_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; max_collection_items; dump_schema; validate_config } in
   config_ref := Some cfg;
   ()
 
@@ -361,15 +394,7 @@ let main () =
           (* Handle --dump-preset first *)
           (match cfg.dump_preset with
            | Some preset ->
-             let preset_config = match preset with
-               | `Compact -> Text_renderer.compact
-               | `Composer -> Text_renderer.composer
-               | `Full -> Text_renderer.full
-               | `Inline -> Text_renderer.inline
-               | `Mixing -> Text_renderer.mixing
-               | `Quiet -> Text_renderer.quiet
-               | `Verbose -> Text_renderer.verbose
-             in
+             let preset_config = parse_preset_args preset in
              let json = Text_renderer.detail_config_to_yojson_with_schema preset_config in
              print_endline (Yojson.Safe.pretty_to_string json);
              0
@@ -449,7 +474,6 @@ let main () =
       Fmt.epr "Please report this bug at https://github.com/krfantasy/alsdiff/issues@.";
       error_exit_code ()
   in
-
   safe_run cmd
 
 let () =

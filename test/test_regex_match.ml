@@ -161,6 +161,21 @@ let test_regex_no_matches () =
   let no_results = Upath.find_all "/**/'MacroControls\\.[9][9-9]'" xml in
   Alcotest.(check (int)) "no 99+ matched" 0 (List.length no_results)
 
+let test_regex_escape_preservation () =
+  let xml = Xml.read_string "<Root><a.b/><axb/></Root>" in
+
+  let escaped_results = Upath.find_all "/**/'a\\.b$'" xml in
+  let escaped_paths = List.map fst escaped_results in
+  Alcotest.(check (int)) "escaped dot regex matches one element" 1 (List.length escaped_results);
+  Alcotest.(check bool) "escaped dot regex matches a.b" true (List.mem "/Root/a.b" escaped_paths);
+  Alcotest.(check bool) "escaped dot regex does not match axb" false (List.mem "/Root/axb" escaped_paths);
+
+  let unescaped_results = Upath.find_all "/**/'a.b$'" xml in
+  let unescaped_paths = List.map fst unescaped_results in
+  Alcotest.(check (int)) "unescaped dot regex matches both elements" 2 (List.length unescaped_results);
+  Alcotest.(check bool) "unescaped dot regex matches a.b" true (List.mem "/Root/a.b" unescaped_paths);
+  Alcotest.(check bool) "unescaped dot regex matches axb" true (List.mem "/Root/axb" unescaped_paths)
+
 let () =
   Alcotest.run "RegexMatch" [
     "regex_matching", [
@@ -176,5 +191,6 @@ let () =
       Alcotest.test_case "regex with attributes" `Quick test_regex_with_attributes;
       Alcotest.test_case "regex index access" `Quick test_regex_index_access;
       Alcotest.test_case "regex no matches" `Quick test_regex_no_matches;
+      Alcotest.test_case "regex escape preservation" `Quick test_regex_escape_preservation;
     ]
   ]

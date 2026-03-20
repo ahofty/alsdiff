@@ -30,11 +30,18 @@ let xml_testable = Alcotest.testable pp_xml xml_equal_ignore_parent
     This function detects the correct path by checking if files exist in the expected locations.
 *)
 let resolve_test_data_path filename =
-  (* Try test/ prefix first (for dune runtest from project root) *)
-  if Sys.file_exists ("test/" ^ filename) then
-    "test/" ^ filename
-    (* Try direct filename (for when working directory is test/) *)
+  (* When running tests via dune runtest from project root, try data/ prefix first
+     (dune copies test/data/* to _build/default/test/data/ and runs from project root) *)
+  if Sys.file_exists ("data/" ^ filename) then
+    "data/" ^ filename
+    (* Try direct filename (for when working directory is test/ or _build/default/test/) *)
   else if Sys.file_exists filename then
     filename
+    (* Try test/data/ prefix (for dune runtest from project root) *)
+  else if Sys.file_exists ("test/data/" ^ filename) then
+    "test/data/" ^ filename
+    (* Try test/ prefix (legacy support) *)
+  else if Sys.file_exists ("test/" ^ filename) then
+    "test/" ^ filename
   else
     failwith (Printf.sprintf "Cannot find test data file: %s" filename)
