@@ -5,6 +5,7 @@
    view_model
    config
    text_renderer
+   stats_renderer
    flowchart
    mermaid_renderer
    dot_renderer)
