@@ -397,7 +397,16 @@ let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
   in
 
   let resolve_input_source_node_id (r : Track.Routing.t) : string option =
-    resolve_track_node_id_from_target ~target:r.target ~track_id_map
+    match resolve_track_node_id_from_target ~target:r.target ~track_id_map with
+    | Some id -> Some id
+    | None when options.include_external ->
+      let label =
+        match String.trim (input_routing_label r) with
+        | "" -> routing_label_target r
+        | s -> s
+      in
+      Some (get_external_node_id ~label)
+    | None -> None
   in
 
   let edges = ref [] in

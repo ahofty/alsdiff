@@ -16,7 +16,7 @@ let render_edge (e : edge) : string =
   if String.trim e.label = "" then
     Printf.sprintf "%s %s %s" e.from_id arrow e.to_id
   else
-    Printf.sprintf "%s %s|%s| %s" e.from_id arrow e.label e.to_id
+    Printf.sprintf "%s %s|%s| %s" e.from_id arrow (sanitize_label e.label) e.to_id
 
 let render_nodes_with_groups
     ~(direction : string)
@@ -59,7 +59,7 @@ let render_nodes_with_groups
   in
 
   let render_node ~(level : int) (n : node) =
-    let node_def = Printf.sprintf "%s[\"%s\"]" n.id n.label in
+    let node_def = Printf.sprintf "%s[\"%s\"]" n.id (sanitize_label n.label) in
     Buffer.add_string buf (indent ~level ~s:node_def);
     Buffer.add_char buf '\n'
   in

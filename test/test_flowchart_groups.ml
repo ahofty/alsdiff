@@ -394,14 +394,12 @@ let test_external_input_node_created_for_audioin_external () =
   let _track_info_map, _main_node, external_nodes, edges, _group_info =
     build_graph ~xml ~liveset ~options
   in
-  (* Note: External input nodes for AudioIn/External are not currently created.
-     The code only creates external nodes for output routing and sends, not for input routing. *)
-  check bool "external input node count" true (List.length external_nodes = 0);
-  let has_input_edge = List.exists (fun (e : edge) ->
-      e.style = InputRouting
+  (* External input nodes are now created for AudioIn/External sources *)
+  check bool "external input node created" true (List.length external_nodes > 0);
+  let has_external_input_edge = List.exists (fun (e : edge) ->
+      e.style = InputRouting && String.contains e.from_id '_'
     ) edges in
-  (* Input routing edges are also not created for external inputs *)
-  check bool "input routing edge count" false has_input_edge
+  check bool "external input edge created" true has_external_input_edge
 
 let test_resolve_track_node_id_from_target () =
   let open Flowchart in
