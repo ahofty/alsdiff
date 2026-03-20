@@ -104,25 +104,19 @@ let render_nodes_with_groups
       visited
   in
 
-  let top_level_groups =
-    IntSet.filter (fun gid -> effective_parent gid = None) group_info.group_ids
-    |> IntSet.elements
-  in
-
   let _visited =
-    List.fold_left (fun v gid -> render_group_subgraph ~level:1 v gid) IntSet.empty top_level_groups
+    List.fold_left (fun visited id ->
+        if effective_parent id = None then
+          if is_group_id id then
+            render_group_subgraph ~level:1 visited id
+          else (
+            match IntMap.find_opt id track_info_map with
+            | Some info -> render_node ~level:1 info.node; visited
+            | None -> visited
+          )
+        else visited
+      ) IntSet.empty group_info.track_order
   in
-
-  let ungrouped_tracks =
-    group_info.track_order
-    |> List.filter (fun id -> effective_parent id = None && not (is_group_id id))
-  in
-
-  List.iter (fun id ->
-      match IntMap.find_opt id track_info_map with
-      | Some info -> render_node ~level:1 info.node
-      | None -> ()
-    ) ungrouped_tracks;
 
   let main_is_connected =
     List.exists (fun e -> e.from_id = main_node.id || e.to_id = main_node.id) edges

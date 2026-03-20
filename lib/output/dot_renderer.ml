@@ -32,18 +32,19 @@ let render_edge (e : edge) : string =
       | Routing -> Printf.sprintf "%s -> %s;" e.from_id e.to_id
       | Send | InputRouting -> Printf.sprintf "%s -> %s [style=dashed];" e.from_id e.to_id
     else
+      let sanitized_label = sanitize_label e.label in
       match e.style with
-      | Routing -> Printf.sprintf "%s -> %s [label=\"%s\"];" e.from_id e.to_id e.label
-      | Send | InputRouting -> Printf.sprintf "%s -> %s [label=\"%s\", style=dashed];" e.from_id e.to_id e.label
+      | Routing -> Printf.sprintf "%s -> %s [label=\"%s\"];" e.from_id e.to_id sanitized_label
+      | Send | InputRouting -> Printf.sprintf "%s -> %s [label=\"%s\", style=dashed];" e.from_id e.to_id sanitized_label
   in
   indent ~level:1 ~s:edge_def
 
 let render_node (n : node) : string =
-  let node_def = Printf.sprintf "%s [label=\"%s\", shape=box];" n.id n.label in
+  let node_def = Printf.sprintf "%s [label=\"%s\", shape=box];" n.id (sanitize_label n.label) in
   indent ~level:1 ~s:node_def
 
 let render_node_indented (n : node) : string =
-  let node_def = Printf.sprintf "%s [label=\"%s\", shape=box];" n.id n.label in
+  let node_def = Printf.sprintf "%s [label=\"%s\", shape=box];" n.id (sanitize_label n.label) in
   indent ~level:2 ~s:node_def
 
 let render_subgraph_header (id : string) : string =

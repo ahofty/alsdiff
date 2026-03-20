@@ -276,6 +276,82 @@ let test_parse_target_track_id_no_false_s_suffix_parse () =
   let parsed = parse_target_track_id "AudioIn/External/S1" in
   check (option int) "do not parse trailing S1 as track id" None parsed
 
+let test_external_input_node_created_for_audioin_external () =
+  let open Flowchart in
+  let open Alsdiff_base in
+  let open Alsdiff_live in
+  (* Create a minimal audio track with external input routing *)
+  let audio_track = Track.Audio {
+    id = 68;
+    name = "Test Track";
+    color = 0;
+    routings = {
+      audio_in = {
+        route_type = Track.Routing.AudioIn;
+        target = "AudioIn/External/S1";
+        upper_string = "Ext. In";
+        lower_string = "1/2";
+      };
+      audio_out = {
+        route_type = Track.Routing.AudioOut;
+        target = "Main";
+        upper_string = "Main";
+        lower_string = "";
+      };
+    };
+    mixer = {
+      volume = { value = Device.Float 1.0; id = None; automation = None };
+      pan = { value = Device.Float 0.0; id = None; automation = None };
+      mute = { value = Device.Bool false; id = None; automation = None };
+      solo = { value = Device.Bool false; id = None; automation = None };
+      sends = [];
+    };
+    devices = [];
+    clips = [];
+    automations = [];
+  } in
+  let liveset = {
+    Liveset.name = "Test";
+    version = { major = 12; minor = 0; patch = 0; revision = 0 };
+    creator = "Test";
+    tracks = [audio_track];
+    returns = [];
+    main = Track.Main {
+      mixer = {
+        volume = { value = Device.Float 1.0; id = None; automation = None };
+        pan = { value = Device.Float 0.0; id = None; automation = None };
+        mute = { value = Device.Bool false; id = None; automation = None };
+        solo = { value = Device.Bool false; id = None; automation = None };
+        sends = [];
+        tempo = { value = Device.Float 120.0; id = None; automation = None };
+        time_signature_numerator = { value = Device.Int 4; id = None; automation = None };
+        time_signature_denominator = { value = Device.Int 4; id = None; automation = None };
+        crossfade = { value = Device.Float 0.5; id = None; automation = None };
+        global_groove_amount = { value = Device.Float 1.0; id = None; automation = None };
+      };
+      devices = [];
+      automations = [];
+    };
+    locators = [];
+    pointees = Liveset.IntHashtbl.create 0;
+  } in
+  let xml = Xml.Element { name = "Ableton"; attrs = []; childs = [] } in
+  let options = {
+    direction = "LR";
+    include_external = true;
+    include_routing = true;
+    include_sends = false;
+    use_subgraph_id_for_groups = false;
+  } in
+  let _track_info_map, _main_node, external_nodes, edges, _group_info =
+    build_graph ~xml ~liveset ~options
+  in
+  check bool "external input node created" true (List.length external_nodes > 0);
+  let has_external_edge = List.exists (fun (e : edge) ->
+      e.style = InputRouting && String.contains e.from_id '_'
+    ) edges in
+  check bool "external input edge created" true has_external_edge
+
 let test_resolve_track_node_id_from_target () =
   let open Flowchart in
   let track_id_map =
@@ -349,6 +425,8 @@ let () =
           `Quick test_parse_target_track_id_from_audio_input_target;
         test_case "parse target track id no false suffix parse"
           `Quick test_parse_target_track_id_no_false_s_suffix_parse;
+        test_case "external input node created for AudioIn/External"
+          `Quick test_external_input_node_created_for_audioin_external;
         test_case "resolve track node id from target"
           `Quick test_resolve_track_node_id_from_target;
         test_case "input routing edge direction and style"
