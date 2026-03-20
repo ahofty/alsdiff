@@ -432,12 +432,16 @@ let test_input_routing_edge_direction_and_style () =
   check bool "input edge preserves route label" true
     (contains_substring ~haystack:rendered ~needle:"3/4-Opal")
 
-let test_is_no_output_none_variants () =
+let test_is_no_route_none_variants () =
   let open Flowchart in
-  check bool "None is no-output" true (is_no_output "None");
-  check bool "MidiOut/None is no-output" true (is_no_output "MidiOut/None");
-  check bool "AudioOut/None is no-output" true (is_no_output "AudioOut/None");
-  check bool "Main is not no-output" false (is_no_output "Main")
+  (* Output-side none variants *)
+  check bool "None is no-route" true (is_no_route "None");
+  check bool "MidiOut/None is no-route" true (is_no_route "MidiOut/None");
+  check bool "AudioOut/None is no-route" true (is_no_route "AudioOut/None");
+  (* Input-side none variants (fixes bogus external nodes) *)
+  check bool "MidiIn/None is no-route" true (is_no_route "MidiIn/None");
+  check bool "AudioIn/None is no-route" true (is_no_route "AudioIn/None");
+  check bool "Main is not no-route" false (is_no_route "Main")
 
 let test_should_skip_routing_for_no_output_destination () =
   let open Flowchart in
@@ -480,7 +484,7 @@ let () =
           `Quick test_resolve_track_node_id_from_target;
         test_case "input routing edge direction and style"
           `Quick test_input_routing_edge_direction_and_style;
-        test_case "none variants classify as no-output" `Quick test_is_no_output_none_variants;
+        test_case "none variants classify as no-route" `Quick test_is_no_route_none_variants;
         test_case "routing to no-output is skipped"
           `Quick test_should_skip_routing_for_no_output_destination;
       ]);

@@ -55,11 +55,9 @@ let sanitize_id (s : string) : string =
     | _ -> "n_" ^ out
 
 (* Basic label sanitizer for internal use (used by track_node_info).
-   Each renderer has its own additional escaping for output. *)
+   Only normalizes whitespace; quote escaping is handled by each renderer. *)
 let sanitize_label (s : string) : string =
-  let s = String.map (fun ch -> if ch = '\n' || ch = '\r' then ' ' else ch) s in
-  let s = String.concat "\\\"" (String.split_on_char '"' s) in
-  s
+  String.map (fun ch -> if ch = '\n' || ch = '\r' then ' ' else ch) s
 
 let collapse_whitespace (s : string) : string =
   let buf = Buffer.create (String.length s) in
@@ -112,9 +110,11 @@ let send_label (s : Track.Send.t) : string =
   let amt = format_generic_param s.amount in
   Printf.sprintf "send=%s" amt
 
-let is_no_output (s : string) : bool =
+let is_no_route (s : string) : bool =
   let s = collapse_whitespace s |> String.lowercase_ascii in
-  s = "" || s = "none" || s = "no output" || s = "midiout/none" || s = "audioout/none"
+  s = "" || s = "none" || s = "no output"
+  || s = "midiout/none" || s = "audioout/none"
+  || s = "midiin/none" || s = "audioin/none"
 
 let parse_trailing_int (s : string) : int option =
   let len = String.length s in
@@ -173,8 +173,8 @@ let parse_target_track_id (target : string) : int option =
        else parse_trailing_int target)
 
 let routing_label_target (r : Track.Routing.t) : string =
-  if not (is_no_output r.upper_string) then r.upper_string
-  else if not (is_no_output r.lower_string) then r.lower_string
+  if not (is_no_route r.upper_string) then r.upper_string
+  else if not (is_no_route r.lower_string) then r.lower_string
   else r.target
 
 let is_group_keyword (s : string) : bool =
@@ -190,7 +190,7 @@ let group_subgraph_id (group_id : int) : string =
   sanitize_id ("group_" ^ string_of_int group_id)
 
 let should_skip_routing (r : Track.Routing.t) : bool =
-  is_no_output r.target && is_no_output (routing_label_target r)
+  is_no_route r.target && is_no_route (routing_label_target r)
 
 (* render_edge is now renderer-specific:
    - Mermaid_renderer.render_edge: uses `-->` and `-.->`
@@ -290,10 +290,10 @@ let should_suppress_parent_group_routing_edge
 
 let input_routing_label (r : Track.Routing.t) : string =
   let lower = String.trim r.lower_string in
-  if lower <> "" && not (is_no_output lower) then lower
+  if lower <> "" && not (is_no_route lower) then lower
   else
     let upper = String.trim r.upper_string in
-    if upper <> "" && not (is_no_output upper) then upper
+    if upper <> "" && not (is_no_route upper) then upper
     else ""
 
 let resolve_track_node_id_from_target ~(target : string) ~(track_id_map : string IntMap.t) : string option =
