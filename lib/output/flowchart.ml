@@ -85,7 +85,7 @@ let normalize_external_label (s : string) : string * string =
   let display =
     match key with
     | "no output" -> "No Output"
-    | _ -> key
+    | _ -> collapsed
   in
   (display, key)
 
@@ -383,14 +383,11 @@ let build_graph ~(xml : Xml.t) ~(liveset : Liveset.t) ~(options : options)
        | None -> fallback_external ())
     | None ->
       if is_group_routing_target r then
-        match resolve_group_parent_node_id
-                ~source_track_id
-                ~track_parent:group_info.track_parent
-                ~group_ids:group_info.group_ids
-                ~track_id_map
-        with
-        | Some node_id -> Some node_id
-        | None -> fallback_external ()
+        resolve_group_parent_node_id
+          ~source_track_id
+          ~track_parent:group_info.track_parent
+          ~group_ids:group_info.group_ids
+          ~track_id_map
       else if is_main_keyword r.target || is_main_keyword (routing_label_target r) then
         Some main_node.id
       else fallback_external ()
