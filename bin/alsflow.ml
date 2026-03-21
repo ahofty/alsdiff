@@ -53,7 +53,7 @@ let direction_arg =
 
 let include_external_arg =
   let doc = "Include external routing nodes." in
-  Arg.(value & opt bool true & info ["include-external"] ~doc)
+  Arg.(value & opt bool false & info ["include-external"] ~doc)
 
 let include_routing_arg =
   let doc = "Include routing edges." in
