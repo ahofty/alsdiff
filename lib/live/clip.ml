@@ -35,17 +35,13 @@ end
 
 module MidiNote = struct
   type t = {
-    id : int;
+    id : int; [@id.id]
     note : int;
     time : float;
     duration : float;
     velocity : float;
     off_velocity : float;
-  } [@@deriving eq]
-
-  let has_same_id a b = a.id = b.id
-
-  let id_hash a = Hashtbl.hash a.id
+  } [@@deriving eq, id]
 
   let create (note: int) (xml : Xml.t) : t =
     match xml with
@@ -140,14 +136,14 @@ end
 
 module MidiClip = struct
   type t = {
-    id : int;
+    id : int; [@id.id]
     name : string;
     start_time : float;
     end_time : float;
     loop : Loop.t;
     signature : TimeSignature.t;
     notes : MidiNote.t list;
-  } [@@deriving eq]
+  } [@@deriving eq, id]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -178,9 +174,6 @@ module MidiClip = struct
 
       { id; name; start_time; end_time; loop; signature; notes }
     | _ -> raise (Xml.Xml_error (xml, "Expected MidiClip element"))
-
-  let has_same_id a b = a.id = b.id
-  let id_hash t = Hashtbl.hash t.id
 
 
   module Patch = struct
@@ -370,7 +363,7 @@ end
 module AudioClip = struct
   (* TODO: support warp related settings *)
   type t = {
-    id : int;
+    id : int; [@id.id]
     name : string;
     start_time : float;
     end_time : float;
@@ -378,7 +371,7 @@ module AudioClip = struct
     signature : TimeSignature.t;
     sample_ref : SampleRef.t;
     fade : Fade.t option;
-  } [@@deriving eq]
+  } [@@deriving eq, id]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -408,9 +401,6 @@ module AudioClip = struct
 
       { id; name; start_time; end_time; loop; signature; sample_ref; fade }
     | _ -> raise (Xml.Xml_error (xml, "Expected AudioClip element"))
-
-  let has_same_id a b = a.id = b.id
-  let id_hash t = Hashtbl.hash t.id
 
 
   module Patch = struct
