@@ -3,7 +3,7 @@ open Alsdiff_base.Diff
 
 
 module TimeSignature = struct
-  type t = { numer : int; denom : int } [@@deriving eq]
+  type t = { numer : int; denom : int } [@@deriving eq, patch]
   let create (xml : Xml.t) : t =
     match xml with
     | Xml.Element { name = "RemoteableTimeSignature"; _ } ->
@@ -11,18 +11,6 @@ module TimeSignature = struct
       let denom = Upath.get_int_attr "/Denominator" "Value" xml in
       { numer; denom }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating TimeSignature"))
-
-  module Patch = struct
-    type t = {
-      numer : int atomic_update;
-      denom : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.numer &&
-      is_unchanged_atomic_update p.denom
-  end
-
 
   let diff (old_sig : t) (new_sig : t) : Patch.t =
     let { numer = old_numer; denom = old_denom } = old_sig in
@@ -35,13 +23,13 @@ end
 
 module MidiNote = struct
   type t = {
-    id : int; [@id.id]
+    id : int; [@id.id] [@patch.skip]
     note : int;
     time : float;
     duration : float;
     velocity : float;
     off_velocity : float;
-  } [@@deriving eq, id]
+  } [@@deriving eq, id, patch]
 
   let create (note: int) (xml : Xml.t) : t =
     match xml with
@@ -53,26 +41,6 @@ module MidiNote = struct
       let off_velocity = Xml.get_float_attr "OffVelocity" xml in
       { id; note; time; duration; velocity; off_velocity }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating MidiNote"))
-
-
-  module Patch = struct
-    type t = {
-      time : float atomic_update;
-      duration : float atomic_update;
-      velocity : float atomic_update;
-      off_velocity : float atomic_update;
-      note : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.time &&
-      is_unchanged_atomic_update p.duration &&
-      is_unchanged_atomic_update p.velocity &&
-      is_unchanged_atomic_update p.off_velocity &&
-      is_unchanged_atomic_update p.note
-
-  end
-
 
   let diff (old_note : t) (new_note : t) : Patch.t =
     let  { id = _; time = old_time; duration = old_duration; velocity = old_velocity; off_velocity = old_off_velocity; note = old_note } : t = old_note in
@@ -98,7 +66,7 @@ module Loop = struct
     start_time : float;
     end_time : float;
     on : bool;
-  } [@@deriving eq]
+  } [@@deriving eq, patch]
 
 
   let create (xml : Xml.t) : t =
@@ -111,21 +79,6 @@ module Loop = struct
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Loop"))
 
 
-  module Patch = struct
-    type t = {
-      start_time : float atomic_update;
-      end_time : float atomic_update;
-      on : bool atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.start_time &&
-      is_unchanged_atomic_update p.end_time &&
-      is_unchanged_atomic_update p.on
-
-  end
-
-
   let diff (old_loop : t) (new_loop : t) : Patch.t =
     let start_time_change = diff_atomic_value (module Float) old_loop.start_time new_loop.start_time in
     let end_time_change = diff_atomic_value (module Float) old_loop.end_time new_loop.end_time in
@@ -136,14 +89,14 @@ end
 
 module MidiClip = struct
   type t = {
-    id : int; [@id.id]
+    id : int; [@id.id] [@patch.identity]
     name : string;
     start_time : float;
     end_time : float;
     loop : Loop.t;
     signature : TimeSignature.t;
     notes : MidiNote.t list;
-  } [@@deriving eq, id]
+  } [@@deriving eq, id, patch]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -174,29 +127,6 @@ module MidiClip = struct
 
       { id; name; start_time; end_time; loop; signature; notes }
     | _ -> raise (Xml.Xml_error (xml, "Expected MidiClip element"))
-
-
-  module Patch = struct
-    type note_change = (MidiNote.t, MidiNote.Patch.t) structured_change
-
-    type t = {
-      id : int;
-      name : string atomic_update;
-      start_time : float atomic_update;
-      end_time : float atomic_update;
-      loop : Loop.Patch.t structured_update;
-      signature : TimeSignature.Patch.t structured_update;
-      notes : note_change list;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.name &&
-      is_unchanged_atomic_update p.start_time &&
-      is_unchanged_atomic_update p.end_time &&
-      is_unchanged_update (module Loop.Patch) p.loop &&
-      is_unchanged_update (module TimeSignature.Patch) p.signature &&
-      List.for_all (is_unchanged_change (module MidiNote.Patch)) p.notes
-  end
 
   let diff (old_clip : t) (new_clip : t) : Patch.t =
     let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; notes = old_notes } = old_clip in
@@ -235,20 +165,7 @@ module SampleRef = struct
     file_path : string;
     crc : string;
     last_modified_date : int; (* unix timestamp *)
-  } [@@deriving eq]
-
-  module Patch = struct
-    type t = {
-      file_path : string atomic_update;
-      crc : string atomic_update;
-      last_modified_date : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.file_path &&
-      is_unchanged_atomic_update p.crc &&
-      is_unchanged_atomic_update p.last_modified_date
-  end
+  } [@@deriving eq, patch]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -284,7 +201,7 @@ module Fade = struct
     fade_out_curve_slope : float;
     is_default_fade_in : bool;
     is_default_fade_out : bool;
-  } [@@deriving eq]
+  } [@@deriving eq, patch]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -306,33 +223,6 @@ module Fade = struct
         is_default_fade_in; is_default_fade_out;
       }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Fade"))
-
-  module Patch = struct
-    type t = {
-      fade_in_length : float atomic_update;
-      fade_out_length : float atomic_update;
-      is_initialized : bool atomic_update;
-      crossfade_state : int atomic_update;
-      fade_in_curve_skew : float atomic_update;
-      fade_in_curve_slope : float atomic_update;
-      fade_out_curve_skew : float atomic_update;
-      fade_out_curve_slope : float atomic_update;
-      is_default_fade_in : bool atomic_update;
-      is_default_fade_out : bool atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.fade_in_length &&
-      is_unchanged_atomic_update p.fade_out_length &&
-      is_unchanged_atomic_update p.is_initialized &&
-      is_unchanged_atomic_update p.crossfade_state &&
-      is_unchanged_atomic_update p.fade_in_curve_skew &&
-      is_unchanged_atomic_update p.fade_in_curve_slope &&
-      is_unchanged_atomic_update p.fade_out_curve_skew &&
-      is_unchanged_atomic_update p.fade_out_curve_slope &&
-      is_unchanged_atomic_update p.is_default_fade_in &&
-      is_unchanged_atomic_update p.is_default_fade_out
-  end
 
   let diff (old_fade : t) (new_fade : t) : Patch.t =
     let fade_in_length_change = diff_atomic_value (module Float) old_fade.fade_in_length new_fade.fade_in_length in
@@ -363,7 +253,7 @@ end
 module AudioClip = struct
   (* TODO: support warp related settings *)
   type t = {
-    id : int; [@id.id]
+    id : int; [@id.id] [@patch.identity]
     name : string;
     start_time : float;
     end_time : float;
@@ -371,7 +261,7 @@ module AudioClip = struct
     signature : TimeSignature.t;
     sample_ref : SampleRef.t;
     fade : Fade.t option;
-  } [@@deriving eq, id]
+  } [@@deriving eq, id, patch]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -401,30 +291,6 @@ module AudioClip = struct
 
       { id; name; start_time; end_time; loop; signature; sample_ref; fade }
     | _ -> raise (Xml.Xml_error (xml, "Expected AudioClip element"))
-
-
-  module Patch = struct
-    type t = {
-      id : int;
-      name : string atomic_update;
-      start_time : float atomic_update;
-      end_time : float atomic_update;
-      loop : Loop.Patch.t structured_update;
-      signature : TimeSignature.Patch.t structured_update;
-      sample_ref : SampleRef.Patch.t structured_update;
-      fade : (Fade.t, Fade.Patch.t) structured_change;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.name &&
-      is_unchanged_atomic_update p.start_time &&
-      is_unchanged_atomic_update p.end_time &&
-      is_unchanged_update (module Loop.Patch) p.loop &&
-      is_unchanged_update (module TimeSignature.Patch) p.signature &&
-      is_unchanged_update (module SampleRef.Patch) p.sample_ref &&
-      is_unchanged_change (module Fade.Patch) p.fade
-  end
-
 
   let diff (old_clip : t) (new_clip : t) : Patch.t =
     let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade } = old_clip in
