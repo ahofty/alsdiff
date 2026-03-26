@@ -1,3 +1,5 @@
+[@@@warning "-unused-var"]
+[@@@warning "-unused-open"]
 open Ppxlib
 module List = ListLabels
 
@@ -9,13 +11,13 @@ type patch_attribute = Skip | Id | Eq of string
 
 (** Metadata about how to generate the is_unchanged check for a field *)
 type check_kind =
-  | AtomicUpdate                          (* is_unchanged_atomic_update *)
-  | AtomicChange                          (* is_unchanged_atomic_change *)
-  | StructuredUpdate of Longident.t       (* is_unchanged_update (module M) *)
-  | StructuredChange of Longident.t       (* is_unchanged_change (module M) *)
-  | AtomicChangeList                      (* List.for_all is_unchanged_atomic_change *)
-  | StructuredChangeList of Longident.t   (* List.for_all (is_unchanged_change (module M)) *)
-  | Identity                              (* field in Patch.t but no is_unchanged check (for traceability) *)
+  | AtomicUpdate                               (* is_unchanged_atomic_update *)
+  | AtomicChange                               (* is_unchanged_atomic_change *)
+  | AtomicChangeList                           (* List.for_all is_unchanged_atomic_change *)
+  | StructuredUpdate of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_update (module M.Patch), diff_complex_value (module M) *)
+  | StructuredChange of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_change (module M.Patch), diff_complex_value_opt (module M) *)
+  | StructuredChangeList of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_change (module M.Patch), diff_list_id (module M) *)
+  | Identity                                   (* field in Patch.t but no is_unchanged check (for traceability) *)
 
 type patch_field_info = {
   field_name: string;
@@ -33,6 +35,16 @@ let get_atomic_type_name (ptyp: core_type) : string =
   match ptyp.ptyp_desc with
   | Ptyp_constr ({ txt = Lident name; _ }, []) -> name
   | _ -> assert false
+
+(** Get the atomic module name (Int, Float, String, Bool) for diff_atomic_value calls *)
+let get_atomic_module_name ~loc (ptyp: core_type) : expression =
+  let open Ast_builder.Default in
+  match ptyp.ptyp_desc with
+  | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> [%expr Int]
+  | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> [%expr Float]
+  | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> [%expr String]
+  | Ptyp_constr ({ txt = Lident "bool"; _ }, []) -> [%expr Bool]
+  | _ -> [%expr failwith "Unsupported atomic type for diff"]
 
 (** Helper to create a type constructor with a string name *)
 let mk_typ_constr_str loc name args =
@@ -75,6 +87,17 @@ let patch_module_of_type_lid (lid: Longident.t) : Longident.t =
   (* Fallback for other cases (including Lident with no dot or deeply nested) *)
   | _ -> Ldot (lid, "Patch")
 
+(** Extract the full module name from a type like Loop.t or Foo.Bar.t
+    This is used for module references like (module Loop) in diff_complex_value calls
+*)
+let full_module_of_type_lid (lid: Longident.t) : Longident.t =
+  (* Convert Module.t to Module by removing the "t" suffix *)
+  match lid with
+  (* Handle Module.t -> Module *)
+  | Ldot (prefix, "t") -> prefix
+  (* Fallback: return as-is for other cases *)
+  | _ -> lid
+
 (** Check if a field has [@patch.skip] attribute *)
 let field_has_skip_attr (ld : label_declaration) : bool =
   List.exists ld.pld_attributes ~f:(fun attr ->
@@ -85,6 +108,20 @@ let field_has_skip_attr (ld : label_declaration) : bool =
 let field_has_identity_attr (ld : label_declaration) : bool =
   List.exists ld.pld_attributes ~f:(fun attr ->
       String.equal attr.attr_name.txt "patch.identity"
+    )
+
+(** Check if a type declaration has [@@@patch.generate_diff] attribute *)
+let type_has_generate_diff_attr (type_decl : type_declaration) : bool =
+  List.exists type_decl.ptype_attributes ~f:(fun attr ->
+      String.equal attr.attr_name.txt "patch.generate_diff"
+    )
+
+(** Check if a type has any field with [@id.id] attribute (from [@@deriving id]) *)
+let type_has_id_field (fields : label_declaration list) : bool =
+  List.exists fields ~f:(fun ld ->
+      List.exists ld.pld_attributes ~f:(fun attr ->
+          String.equal attr.attr_name.txt "id.id"
+        )
     )
 
 (** Classify a type and return the corresponding Patch.t field type as an AST *)
@@ -169,34 +206,111 @@ let classify_patch_field (loc: Location.t) (ld: label_declaration) : patch_field
         (match arg.ptyp_desc with
          | Ptyp_constr ({ txt = lid; _ }, []) ->
            let patch_module_type = patch_module_type_of_type_lid lid in
+           let full_module = full_module_of_type_lid lid in
            let patch_module = patch_module_of_type_lid lid in
            let typ = mk_typ_constr_str loc "list"
                [mk_typ_constr_str loc "structured_change"
                   [ mk_typ_constr_lid loc lid [];
                     mk_typ_constr_lid loc patch_module_type [] ]] in
-           (typ, StructuredChangeList patch_module)
+           (typ, StructuredChangeList (full_module, patch_module))
          | _ -> Location.raise_errorf ~loc "Unsupported type in list: %a" Pprintast.core_type arg)
       (* Structured type Foo.t -> Foo.Patch.t structured_update *)
       | Ptyp_constr ({ txt = lid; _ }, []) ->
         let patch_module_type = patch_module_type_of_type_lid lid in
+        let full_module = full_module_of_type_lid lid in
         let patch_module = patch_module_of_type_lid lid in
         let typ = mk_typ_constr_str loc "structured_update"
             [mk_typ_constr_lid loc patch_module_type []] in
-        (typ, StructuredUpdate patch_module)
+        (typ, StructuredUpdate (full_module, patch_module))
       (* Structured type Foo.t option -> (Foo.t, Foo.Patch.t) structured_change *)
       | Ptyp_constr ({ txt = Lident "option"; _ }, [arg]) ->
         (match arg.ptyp_desc with
          | Ptyp_constr ({ txt = lid; _ }, []) ->
            let patch_module_type = patch_module_type_of_type_lid lid in
+           let full_module = full_module_of_type_lid lid in
            let patch_module = patch_module_of_type_lid lid in
            let typ = mk_typ_constr_str loc "structured_change"
                [ mk_typ_constr_lid loc lid [];
                  mk_typ_constr_lid loc patch_module_type [] ] in
-           (typ, StructuredChange patch_module)
+           (typ, StructuredChange (full_module, patch_module))
          | _ -> Location.raise_errorf ~loc "Unsupported type in option: %a" Pprintast.core_type arg)
       | _ -> Location.raise_errorf ~loc "Unsupported type for patch derivation: %a" Pprintast.core_type original_type
     in
     Some { field_name; patch_type; check_kind }
+
+(** Generate the diffing expression for a single field *)
+let generate_field_diff ~loc old_var new_var (fi: patch_field_info) : string * expression =
+  let open Ast_builder.Default in
+  let field_name = fi.field_name in
+  let old_access = pexp_field ~loc old_var { txt = Lident field_name; loc } in
+  let new_access = pexp_field ~loc new_var { txt = Lident field_name; loc } in
+
+  match fi.check_kind with
+  | AtomicUpdate ->
+    (* diff_atomic_value (module Type) old_field new_field *)
+    (* Extract the inner atomic type from atomic_update wrapper *)
+    let mod_name = match fi.patch_type.ptyp_desc with
+      | Ptyp_constr ({ txt = Lident "atomic_update"; _ }, [arg]) ->
+        (match arg.ptyp_desc with
+         | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> "Int"
+         | Ptyp_constr ({ txt = Lident "float"; _ }, []) -> "Float"
+         | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> "String"
+         | Ptyp_constr ({ txt = Lident "bool"; _ }, []) -> "Bool"
+         | _ -> "Int")
+      | _ -> "Int" in
+    let mod_pack = pexp_pack ~loc (pmod_ident ~loc { txt = Lident mod_name; loc }) in
+    let diff_fn = pexp_ident ~loc { txt = Lident "diff_atomic_value"; loc } in
+    let diff_call = pexp_apply ~loc diff_fn [Nolabel, mod_pack; Nolabel, old_access; Nolabel, new_access] in
+    (field_name, diff_call)
+
+  | StructuredUpdate (full_module, _patch_module) ->
+    (* diff_complex_value (module Type) old_field new_field *)
+    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = full_module; loc }) in
+    let diff_fn = pexp_ident ~loc { txt = Lident "diff_complex_value"; loc } in
+    let diff_call = pexp_apply ~loc diff_fn [Nolabel, module_expr; Nolabel, old_access; Nolabel, new_access] in
+    (field_name, diff_call)
+
+  | StructuredChange (full_module, _patch_module) ->
+    (* diff_complex_value_opt (module Type) old_field new_field *)
+    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = full_module; loc }) in
+    let diff_fn = pexp_ident ~loc { txt = Lident "diff_complex_value_opt"; loc } in
+    let diff_call = pexp_apply ~loc diff_fn [Nolabel, module_expr; Nolabel, old_access; Nolabel, new_access] in
+    (field_name, diff_call)
+
+  | AtomicChange ->
+    (* diff_atomic_value_opt (module Type) old_field new_field *)
+    let mod_name = match fi.patch_type.ptyp_desc with
+      | Ptyp_constr ({ txt = Lident "int"; _ }, [_]) -> "Int"
+      | Ptyp_constr ({ txt = Lident "float"; _ }, [_]) -> "Float"
+      | Ptyp_constr ({ txt = Lident "string"; _ }, [_]) -> "String"
+      | Ptyp_constr ({ txt = Lident "bool"; _ }, [_]) -> "Bool"
+      | _ -> "Int" in
+    let mod_pack = pexp_pack ~loc (pmod_ident ~loc { txt = Lident mod_name; loc }) in
+    let diff_fn = pexp_ident ~loc { txt = Lident "diff_atomic_value_opt"; loc } in
+    let diff_call = pexp_apply ~loc diff_fn [Nolabel, mod_pack; Nolabel, old_access; Nolabel, new_access] in
+    (field_name, diff_call)
+
+  | AtomicChangeList ->
+    (* For atomic lists, we don't diff - just copy from new *)
+    (field_name, new_access)
+
+  | StructuredChangeList (full_module, patch_module) ->
+    (* diff_list_id (module Type) old_field new_field |> filter_changes (module Type.Patch) *)
+    (* full_module is the full module (e.g., MidiNote), patch_module is the Patch submodule (e.g., MidiNote.Patch) *)
+    let full_module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = full_module; loc }) in
+    let patch_module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = patch_module; loc }) in
+    (* Build the pipeline: diff_list_id ... |> filter_changes ... *)
+    let diff_list_fn = pexp_ident ~loc { txt = Lident "diff_list_id"; loc } in
+    let diff_list_call = pexp_apply ~loc diff_list_fn [Nolabel, full_module_expr; Nolabel, old_access; Nolabel, new_access] in
+    let filter_fn = pexp_ident ~loc { txt = Lident "filter_changes"; loc } in
+    let filter_call = pexp_apply ~loc filter_fn [Nolabel, patch_module_expr] in
+    (* Build the pipe operator application *)
+    let diff_call = pexp_apply ~loc (pexp_ident ~loc { txt = Lident "|>"; loc }) [Nolabel, diff_list_call; Nolabel, filter_call] in
+    (field_name, diff_call)
+
+  | Identity ->
+    (* Copy from new_value (no diffing) *)
+    (field_name, new_access)
 
 (** Generate the is_unchanged_* check expression for a single field *)
 let generate_field_check ~loc (p_var: expression) (field_info: patch_field_info) : expression =
@@ -213,16 +327,16 @@ let generate_field_check ~loc (p_var: expression) (field_info: patch_field_info)
     (* is_unchanged_atomic_change p.field *)
     [%expr is_unchanged_atomic_change [%e field_access]]
 
-  | StructuredUpdate module_lid ->
+  | StructuredUpdate (_full_module, patch_module) ->
     (* is_unchanged_update (module Foo.Patch) p.field *)
     (* Use pexp_pack with pmod_ident to create (module Foo.Patch) *)
-    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = module_lid; loc }) in
+    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = patch_module; loc }) in
     let check_fn = pexp_ident ~loc { txt = Lident "is_unchanged_update"; loc } in
     pexp_apply ~loc check_fn [Nolabel, module_expr; Nolabel, field_access]
 
-  | StructuredChange module_lid ->
+  | StructuredChange (_full_module, patch_module) ->
     (* is_unchanged_change (module Foo.Patch) p.field *)
-    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = module_lid; loc }) in
+    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = patch_module; loc }) in
     let check_fn = pexp_ident ~loc { txt = Lident "is_unchanged_change"; loc } in
     pexp_apply ~loc check_fn [Nolabel, module_expr; Nolabel, field_access]
 
@@ -230,10 +344,10 @@ let generate_field_check ~loc (p_var: expression) (field_info: patch_field_info)
     (* List.for_all is_unchanged_atomic_change p.field *)
     [%expr List.for_all is_unchanged_atomic_change [%e field_access]]
 
-  | StructuredChangeList module_lid ->
+  | StructuredChangeList (_full_module, patch_module) ->
     (* List.for_all (fun x -> is_unchanged_change (module Foo.Patch) x) p.field *)
     let for_all = pexp_ident ~loc { txt = Ldot (Lident "List", "for_all"); loc } in
-    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = module_lid; loc }) in
+    let module_expr = pexp_pack ~loc (pmod_ident ~loc { txt = patch_module; loc }) in
     let check_fn = pexp_ident ~loc { txt = Lident "is_unchanged_change"; loc } in
     let pat_x = ppat_var ~loc { txt = "x"; loc } in
     let exp_x = pexp_ident ~loc { txt = Lident "x"; loc } in
@@ -256,6 +370,41 @@ let chain_and ~loc (exprs: expression list) : expression =
         [%expr [%e acc] && [%e expr]]
       )
 
+(** Generate ID validation expression for diff function
+    Returns None if no ID field, Some validation expression otherwise
+*)
+let generate_id_validation ~loc type_name fields old_var new_var : expression option =
+  let open Ast_builder.Default in
+  (* Find all fields with [@id.id] attribute but NOT [@patch.skip] *)
+  let id_fields = List.filter fields ~f:(fun ld ->
+      let has_id_attr = List.exists ld.pld_attributes ~f:(fun attr ->
+          String.equal attr.attr_name.txt "id.id"
+        ) in
+      let not_skipped = not (field_has_skip_attr ld) in
+      has_id_attr && not_skipped
+    ) in
+  match id_fields with
+  | [] -> None
+  | [id_field] ->
+    (* Single ID field - use direct comparison *)
+    let field_name = id_field.pld_name.txt in
+    let old_id = pexp_field ~loc old_var { txt = Lident field_name; loc } in
+    let new_id = pexp_field ~loc new_var { txt = Lident field_name; loc } in
+    Some [%expr
+      if [%e old_id] <> [%e new_id] then
+        failwith (Printf.sprintf "Cannot diff two %s with different Ids" [%e estring ~loc type_name])
+      else
+        ()
+    ]
+  | _ ->
+    (* Multiple ID fields - use Id.has_same_id *)
+    Some [%expr
+      if not (Id.has_same_id [%e old_var] [%e new_var]) then
+        failwith (Printf.sprintf "Cannot diff two %s with different Ids" [%e estring ~loc type_name])
+      else
+        ()
+    ]
+
 (** Generate the is_empty function implementation *)
 let generate_is_empty_impl ~loc (fields: patch_field_info list) : structure =
   let open Ast_builder.Default in
@@ -276,13 +425,59 @@ let generate_is_empty_impl ~loc (fields: patch_field_info list) : structure =
 let generate_is_empty_sig ~loc : signature =
   [%sig: val is_empty : t -> bool]
 
+(** Generate signature for diff function *)
+let generate_diff_sig ~loc : signature =
+  [%sig: val diff : t -> t -> Patch.t]
+
+(** Generate the diff function implementation *)
+let generate_diff_impl ~ctxt:_ type_decl field_infos =
+  let open Ast_builder.Default in
+  let loc = type_decl.ptype_loc in
+  let type_name = type_decl.ptype_name.txt in
+
+  (* Get fields for ID detection *)
+  let fields = match type_decl.ptype_kind with
+    | Ptype_record fields -> fields
+    | _ -> []
+  in
+
+  (* Variable names: old_t and new_t *)
+  let old_var = pexp_ident ~loc { txt = Lident "old_t"; loc } in
+  let new_var = pexp_ident ~loc { txt = Lident "new_t"; loc } in
+
+  (* Generate field diffing expressions *)
+  let field_diffs = List.map field_infos ~f:(fun fi ->
+      generate_field_diff ~loc old_var new_var fi
+    ) in
+
+  (* Generate body with optional ID validation *)
+  let body =
+    let id_validation = generate_id_validation ~loc type_name fields old_var new_var in
+    (* Convert string field names to longident for pexp_record *)
+    let record_fields = List.map field_diffs ~f:(fun (n, e) -> ({ txt = Lident n; loc }, e)) in
+    let record_expr = pexp_record ~loc record_fields None in
+    match id_validation with
+    | None -> record_expr
+    | Some validation -> pexp_sequence ~loc validation record_expr
+  in
+
+  (* Generate function using meta-quotation *)
+  [%str
+    let diff (old_t : t) (new_t : t) : Patch.t =
+      [%e body]
+  ]
+
 (** Generate the Patch module containing only the t type *)
-let generate_patch_module ~ctxt:_ type_decl =
+(* Returns a list of structure items: the Patch module and optionally the diff function *)
+let generate_patch_module ~ctxt type_decl =
   let loc = type_decl.ptype_loc in
   match type_decl.ptype_kind with
   | Ptype_record fields ->
     (* Classify fields and get check info (filter out skipped fields) *)
     let field_infos = List.filter_map fields ~f:(fun ld -> classify_patch_field loc ld) in
+
+    (* Check if diff generation is requested *)
+    let has_generate_diff = type_has_generate_diff_attr type_decl in
 
     (* Generate Patch.t record fields *)
     let patch_fields = List.map field_infos ~f:(fun fi ->
@@ -308,14 +503,25 @@ let generate_patch_module ~ctxt:_ type_decl =
     (* Generate is_empty function *)
     let is_empty_impl = generate_is_empty_impl ~loc field_infos in
 
-    (* Create Patch module with both type and function *)
-    let module_binding =
+    (* Create Patch module with type and is_empty *)
+    let patch_module_contents = patch_structure_item :: is_empty_impl in
+    let patch_module_binding =
       { pmb_name = { txt = Some "Patch"; loc };
-        pmb_expr = Ast_builder.Default.pmod_structure ~loc (patch_structure_item :: is_empty_impl);
+        pmb_expr = Ast_builder.Default.pmod_structure ~loc patch_module_contents;
         pmb_attributes = [];
         pmb_loc = loc }
     in
-    Ast_builder.Default.pstr_module ~loc module_binding
+    let patch_module = Ast_builder.Default.pstr_module ~loc patch_module_binding in
+
+    (* Generate module-level diff function if attribute is present *)
+    let diff_function = if has_generate_diff then
+        generate_diff_impl ~ctxt type_decl field_infos
+      else
+        []
+    in
+
+    (* Return Patch module and diff function *)
+    patch_module :: diff_function
   | Ptype_abstract | Ptype_variant _ | Ptype_open ->
     Location.raise_errorf ~loc "Cannot derive patch for non-record types"
 
@@ -323,7 +529,7 @@ let generate_impl ~ctxt (_rec_flag, type_declarations) =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
   List.map type_declarations ~f:(fun td ->
       match td.ptype_kind with
-      | Ptype_record _ -> [generate_patch_module ~ctxt td]
+      | Ptype_record _ -> generate_patch_module ~ctxt td
       | _ ->
         let ext = Location.error_extensionf ~loc:td.ptype_loc
             "Cannot derive patch for non-record types" in
@@ -339,6 +545,9 @@ let generate_intf ~ctxt (_rec_flag, type_declarations) =
       | Ptype_record fields ->
         (* Classify fields (filter out skipped fields) *)
         let field_infos = List.filter_map fields ~f:(fun ld -> classify_patch_field ld.pld_loc ld) in
+
+        (* Check if diff generation is requested *)
+        let has_generate_diff = type_has_generate_diff_attr td in
 
         (* Generate Patch.t type signature *)
         let patch_fields = List.map field_infos ~f:(fun fi ->
@@ -363,14 +572,25 @@ let generate_intf ~ctxt (_rec_flag, type_declarations) =
         (* Generate is_empty signature *)
         let is_empty_sig = generate_is_empty_sig ~loc in
 
-        (* Create module signature with both type and function *)
+        (* Create module signature with type and is_empty *)
+        let module_sig_contents = patch_sig_item :: is_empty_sig in
         let module_sig =
           { pmd_name = { txt = Some "Patch"; loc };
-            pmd_type = Ast_builder.Default.pmty_signature ~loc (patch_sig_item :: is_empty_sig);
+            pmd_type = Ast_builder.Default.pmty_signature ~loc module_sig_contents;
             pmd_attributes = [];
             pmd_loc = loc }
         in
-        [Ast_builder.Default.psig_module ~loc module_sig]
+        let patch_module_sig = Ast_builder.Default.psig_module ~loc module_sig in
+
+        (* Generate module-level diff signature if attribute is present *)
+        let diff_sig = if has_generate_diff then
+            generate_diff_sig ~loc
+          else
+            []
+        in
+
+        (* Return Patch module signature and diff signature *)
+        patch_module_sig :: diff_sig
       | _ ->
         let ext = Location.error_extensionf ~loc:td.ptype_loc
             "Cannot derive patch for non-record types" in

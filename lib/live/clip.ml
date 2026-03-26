@@ -3,7 +3,7 @@ open Alsdiff_base.Diff
 
 
 module TimeSignature = struct
-  type t = { numer : int; denom : int } [@@deriving eq, patch]
+  type t = { numer : int; denom : int } [@@deriving eq, patch] [@@patch.generate_diff]
   let create (xml : Xml.t) : t =
     match xml with
     | Xml.Element { name = "RemoteableTimeSignature"; _ } ->
@@ -11,13 +11,6 @@ module TimeSignature = struct
       let denom = Upath.get_int_attr "/Denominator" "Value" xml in
       { numer; denom }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating TimeSignature"))
-
-  let diff (old_sig : t) (new_sig : t) : Patch.t =
-    let { numer = old_numer; denom = old_denom } = old_sig in
-    let { numer = new_numer; denom = new_denom } = new_sig in
-    let numer = diff_atomic_value (module Int) old_numer new_numer in
-    let denom = diff_atomic_value (module Int) old_denom new_denom in
-    { numer; denom }
 end
 
 
@@ -29,7 +22,7 @@ module MidiNote = struct
     duration : float;
     velocity : float;
     off_velocity : float;
-  } [@@deriving eq, id, patch]
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (note: int) (xml : Xml.t) : t =
     match xml with
@@ -41,24 +34,6 @@ module MidiNote = struct
       let off_velocity = Xml.get_float_attr "OffVelocity" xml in
       { id; note; time; duration; velocity; off_velocity }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating MidiNote"))
-
-  let diff (old_note : t) (new_note : t) : Patch.t =
-    let  { id = _; time = old_time; duration = old_duration; velocity = old_velocity; off_velocity = old_off_velocity; note = old_note } : t = old_note in
-    let { id = _; time = new_time; duration = new_duration; velocity = new_velocity; off_velocity = new_off_velocity; note = new_note } : t = new_note in
-
-    let time_change = diff_atomic_value (module Float) old_time new_time in
-    let duration_change = diff_atomic_value (module Float) old_duration new_duration in
-    let velocity_change = diff_atomic_value (module Float) old_velocity new_velocity in
-    let off_velocity_change = diff_atomic_value (module Float) old_off_velocity new_off_velocity in
-    let note_change = diff_atomic_value (module Int) old_note new_note in
-    {
-      time = time_change;
-      duration = duration_change;
-      velocity = velocity_change;
-      off_velocity = off_velocity_change;
-      note = note_change;
-    }
-
 end
 
 module Loop = struct
@@ -66,7 +41,7 @@ module Loop = struct
     start_time : float;
     end_time : float;
     on : bool;
-  } [@@deriving eq, patch]
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 
 
   let create (xml : Xml.t) : t =
@@ -77,13 +52,6 @@ module Loop = struct
       let on = Upath.get_bool_attr "/LoopOn" "Value" xml in
       { start_time = start; end_time = end_; on; }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Loop"))
-
-
-  let diff (old_loop : t) (new_loop : t) : Patch.t =
-    let start_time_change = diff_atomic_value (module Float) old_loop.start_time new_loop.start_time in
-    let end_time_change = diff_atomic_value (module Float) old_loop.end_time new_loop.end_time in
-    let on_change = diff_atomic_value (module Bool) old_loop.on new_loop.on in
-    { start_time = start_time_change; end_time = end_time_change; on = on_change }
 end
 
 
@@ -96,7 +64,7 @@ module MidiClip = struct
     loop : Loop.t;
     signature : TimeSignature.t;
     notes : MidiNote.t list;
-  } [@@deriving eq, id, patch]
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -127,36 +95,6 @@ module MidiClip = struct
 
       { id; name; start_time; end_time; loop; signature; notes }
     | _ -> raise (Xml.Xml_error (xml, "Expected MidiClip element"))
-
-  let diff (old_clip : t) (new_clip : t) : Patch.t =
-    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; notes = old_notes } = old_clip in
-    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; notes = new_notes } = new_clip in
-
-    (* Only compare clips with the same id *)
-    if old_id <> new_id then
-      failwith "cannot diff two clips with different Id"
-    else
-      let name_change = diff_atomic_value (module String) old_name new_name in
-      let start_time_change = diff_atomic_value (module Float) old_start new_start in
-      let end_time_change = diff_atomic_value (module Float) old_end new_end in
-      let signature_change =
-        diff_complex_value (module TimeSignature) old_sig new_sig in
-      (* Use diff_list for notes - cleaner and more consistent *)
-      let notes_change =
-        diff_list_id (module MidiNote) old_notes new_notes
-        |> filter_changes (module MidiNote.Patch)
-      in
-      let loop_change = diff_complex_value (module Loop) old_loop new_loop in
-
-      {
-        id = new_id;
-        name = name_change;
-        start_time = start_time_change;
-        end_time = end_time_change;
-        loop = loop_change;
-        signature = signature_change;
-        notes = notes_change;
-      }
 end
 
 
@@ -165,7 +103,7 @@ module SampleRef = struct
     file_path : string;
     crc : string;
     last_modified_date : int; (* unix timestamp *)
-  } [@@deriving eq, patch]
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -175,16 +113,6 @@ module SampleRef = struct
       let crc = Upath.get_attr "FileRef/OriginalCrc" "Value" xml in
       { file_path; crc; last_modified_date }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating SampleRef"))
-
-
-  let diff (old_sample_ref : t) (new_sample_ref : t) : Patch.t =
-    let { file_path = old_file_path; crc = old_crc; last_modified_date = old_date } = old_sample_ref in
-    let { file_path = new_file_path; crc = new_crc; last_modified_date = new_date } = new_sample_ref in
-
-    let file_path_change = diff_atomic_value (module String) old_file_path new_file_path in
-    let crc_change = diff_atomic_value (module String) old_crc new_crc in
-    let last_modified_date_change = diff_atomic_value (module Int) old_date new_date in
-    { file_path = file_path_change; crc = crc_change; last_modified_date = last_modified_date_change }
 
 end
 
@@ -201,7 +129,7 @@ module Fade = struct
     fade_out_curve_slope : float;
     is_default_fade_in : bool;
     is_default_fade_out : bool;
-  } [@@deriving eq, patch]
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -224,29 +152,6 @@ module Fade = struct
       }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Fade"))
 
-  let diff (old_fade : t) (new_fade : t) : Patch.t =
-    let fade_in_length_change = diff_atomic_value (module Float) old_fade.fade_in_length new_fade.fade_in_length in
-    let fade_out_length_change = diff_atomic_value (module Float) old_fade.fade_out_length new_fade.fade_out_length in
-    let is_initialized_change = diff_atomic_value (module Bool) old_fade.is_initialized new_fade.is_initialized in
-    let crossfade_state_change = diff_atomic_value (module Int) old_fade.crossfade_state new_fade.crossfade_state in
-    let fade_in_curve_skew_change = diff_atomic_value (module Float) old_fade.fade_in_curve_skew new_fade.fade_in_curve_skew in
-    let fade_in_curve_slope_change = diff_atomic_value (module Float) old_fade.fade_in_curve_slope new_fade.fade_in_curve_slope in
-    let fade_out_curve_skew_change = diff_atomic_value (module Float) old_fade.fade_out_curve_skew new_fade.fade_out_curve_skew in
-    let fade_out_curve_slope_change = diff_atomic_value (module Float) old_fade.fade_out_curve_slope new_fade.fade_out_curve_slope in
-    let is_default_fade_in_change = diff_atomic_value (module Bool) old_fade.is_default_fade_in new_fade.is_default_fade_in in
-    let is_default_fade_out_change = diff_atomic_value (module Bool) old_fade.is_default_fade_out new_fade.is_default_fade_out in
-    {
-      fade_in_length = fade_in_length_change;
-      fade_out_length = fade_out_length_change;
-      is_initialized = is_initialized_change;
-      crossfade_state = crossfade_state_change;
-      fade_in_curve_skew = fade_in_curve_skew_change;
-      fade_in_curve_slope = fade_in_curve_slope_change;
-      fade_out_curve_skew = fade_out_curve_skew_change;
-      fade_out_curve_slope = fade_out_curve_slope_change;
-      is_default_fade_in = is_default_fade_in_change;
-      is_default_fade_out = is_default_fade_out_change;
-    }
 end
 
 
