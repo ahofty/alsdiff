@@ -282,7 +282,7 @@ let generate_field_diff ~loc old_var new_var (fi: patch_field_info) : string * e
     (* Extract the inner atomic type from atomic_update wrapper *)
     let atomic_type = match extract_atomic_type_from_patch_type fi.patch_type with
       | Some t -> t
-      | None -> Int in
+      | None -> Location.raise_errorf ~loc "Could not extract atomic type from patch type" in
     let mod_pack = atomic_module_expr ~loc atomic_type in
     let diff_fn = pexp_ident ~loc { txt = Lident "diff_atomic_value"; loc } in
     let diff_call = pexp_apply ~loc diff_fn [Nolabel, mod_pack; Nolabel, old_access; Nolabel, new_access] in
@@ -306,7 +306,7 @@ let generate_field_diff ~loc old_var new_var (fi: patch_field_info) : string * e
     (* diff_atomic_value_opt (module Type) old_field new_field *)
     let atomic_type = match extract_atomic_type_from_patch_type fi.patch_type with
       | Some t -> t
-      | None -> Int in
+      | None -> Location.raise_errorf ~loc "Could not extract atomic type from patch type" in
     let mod_pack = atomic_module_expr ~loc atomic_type in
     let diff_fn = pexp_ident ~loc { txt = Lident "diff_atomic_value_opt"; loc } in
     let diff_call = pexp_apply ~loc diff_fn [Nolabel, mod_pack; Nolabel, old_access; Nolabel, new_access] in
@@ -317,7 +317,7 @@ let generate_field_diff ~loc old_var new_var (fi: patch_field_info) : string * e
     (* Extract the atomic type from the patch type *)
     let atomic_type = match extract_atomic_type_from_patch_type fi.patch_type with
       | Some t -> t
-      | None -> Int in
+      | None -> Location.raise_errorf ~loc "Could not extract atomic type from patch type" in
     let mod_name = atomic_module_name atomic_type in
     (* Build module expressions *)
     let mod_pack = atomic_module_expr ~loc atomic_type in
@@ -421,11 +421,7 @@ let generate_id_validation ~loc type_name fields old_var new_var : expression op
   let open Ast_builder.Default in
   (* Find all fields with [@id.id] attribute but NOT [@patch.skip] *)
   let id_fields = List.filter fields ~f:(fun ld ->
-      let has_id_attr = List.exists ld.pld_attributes ~f:(fun attr ->
-          String.equal attr.attr_name.txt "id.id"
-        ) in
-      let not_skipped = not (field_has_skip_attr ld) in
-      has_id_attr && not_skipped
+      field_has_id_attr ld && not (field_has_skip_attr ld)
     ) in
   match id_fields with
   | [] -> None
