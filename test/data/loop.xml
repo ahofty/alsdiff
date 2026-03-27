@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<Loop>
+  <LoopStart Value="92"/>
+  <LoopEnd Value="112"/>
+  <StartRelative Value="0"/>
+  <LoopOn Value="false"/>
+  <OutMarker Value="112"/>
+  <HiddenLoopStart Value="92"/>
+  <HiddenLoopEnd Value="112"/>
+</Loop>

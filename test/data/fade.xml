@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<Fades>
+  <FadeInLength Value="0"/>
+  <FadeOutLength Value="8.4680920641858144"/>
+  <ClipFadesAreInitialized Value="true"/>
+  <CrossfadeInState Value="1"/>
+  <FadeInCurveSkew Value="0"/>
+  <FadeInCurveSlope Value="0"/>
+  <FadeOutCurveSkew Value="0"/>
+  <FadeOutCurveSlope Value="0"/>
+  <IsDefaultFadeIn Value="false"/>
+  <IsDefaultFadeOut Value="false"/>
+</Fades>
