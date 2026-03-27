@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<SampleRef>
+  <FileRef>
+    <RelativePathType Value="3"/>
+    <RelativePath Value="Samples/Processed/Crop/Metal Sheet [2022-04-27 164454].wav"/>
+    <Path Value="/Users/krfantasy/Desktop/Prelude/Thick Air Project/Samples/Processed/Crop/Metal Sheet [2022-04-27 164454].wav"/>
+    <Type Value="2"/>
+    <LivePackName Value=""/>
+    <LivePackId Value=""/>
+    <OriginalFileSize Value="2572202"/>
+    <OriginalCrc Value="48320"/>
+  </FileRef>
+  <LastModDate Value="1742403845"/>
+  <SourceContext/>
+  <SampleUsageHint Value="0"/>
+  <DefaultDuration Value="1286079"/>
+  <DefaultSampleRate Value="48000"/>
+  <SamplesToAutoWarp Value="0"/>
+</SampleRef>
