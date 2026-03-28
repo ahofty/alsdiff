@@ -142,7 +142,11 @@
  (modules test_diff_device utils)
  (libraries alsdiff_live alcotest))
 
-;; Tests needing only alsdiff_output
+(test
+ (name test_variant_patch)
+ (modules test_variant_patch)
+ (libraries alsdiff_base alcotest ppx_deriving)
+ (preprocess (pps ppx_deriving.eq ppx_patch)))
 (test
  (name test_text_renderer)
  (modules test_text_renderer utils)
