@@ -9,12 +9,6 @@ module CurveControls = struct
     curve2_x : float;
     curve2_y : float;
   } [@@deriving eq, patch] [@@patch.generate_diff]
-
-  (* For curve controls, we use structural equality since there's no natural ID *)
-  let has_same_id = equal
-
-  let id_hash t =
-    Hashtbl.hash (t.curve1_x, t.curve1_y, t.curve2_x, t.curve2_y)
 end
 
 
