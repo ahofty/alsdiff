@@ -500,16 +500,16 @@ let generate_id_validation ~loc type_name fields old_var new_var : expression op
         ()
     ]
   | _ ->
-    (* Multiple ID fields - fail only when ALL identity fields differ (AND semantics) *)
+    (* Multiple ID fields - fail when ANY identity field differs (OR semantics) *)
     let inequalities = List.map id_fields ~f:(fun id_field ->
         let field_name = id_field.pld_name.txt in
         let old_id = pexp_field ~loc old_var { txt = Lident field_name; loc } in
         let new_id = pexp_field ~loc new_var { txt = Lident field_name; loc } in
         [%expr [%e old_id] <> [%e new_id]]
       ) in
-    let all_differ = Ppx_shared.chain_and ~loc inequalities in
+    let any_differ = Ppx_shared.chain_or ~loc inequalities in
     Some [%expr
-      if [%e all_differ] then
+      if [%e any_differ] then
         failwith (Printf.sprintf "Cannot diff two %s with different Ids" [%e estring ~loc type_name])
       else
         ()
