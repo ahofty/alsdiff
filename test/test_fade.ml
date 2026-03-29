@@ -60,7 +60,7 @@ let test_missing_fade_in_length () =
     let _ = create xml in
     fail "Expected error for missing FadeInLength"
   with
-  | _ -> () (* Expected to fail - missing required attribute *)
+  | Xml.Xml_error _ -> () (* Expected - missing required attribute *)
 
 let test_diff_fade_in_length_change () =
   let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
