@@ -203,7 +203,7 @@ let diff_cmd ~config ~domain_mgr : int =
       | Tree -> render_tree ~config ~reference_path views
     in
 
-    Fmt.pr "%s@." output;
+    Fmt.pr "%s" output;
 
     if config.git_mode then
       if has_changes then 1 else 0

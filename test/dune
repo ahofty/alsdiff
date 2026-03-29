@@ -78,6 +78,37 @@
  (libraries alsdiff_base alsdiff_live alcotest)
  (deps data/midi_clip.xml data/midi_clip_old.xml))
 
+;; Clip module tests (individual module testing)
+(test
+ (name test_midi_note)
+ (modules test_midi_note utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/midi_note.xml))
+
+(test
+ (name test_time_signature)
+ (modules test_time_signature utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/time_signature.xml))
+
+(test
+ (name test_loop)
+ (modules test_loop utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/loop.xml))
+
+(test
+ (name test_sample_ref)
+ (modules test_sample_ref utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/sample_ref.xml))
+
+(test
+ (name test_fade)
+ (modules test_fade utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/fade.xml))
+
 (test
  (name test_device)
  (modules test_device utils)
@@ -142,7 +173,11 @@
  (modules test_diff_device utils)
  (libraries alsdiff_live alcotest))
 
-;; Tests needing only alsdiff_output
+(test
+ (name test_variant_patch)
+ (modules test_variant_patch)
+ (libraries alsdiff_base alcotest ppx_deriving)
+ (preprocess (pps ppx_deriving.eq ppx_patch)))
 (test
  (name test_text_renderer)
  (modules test_text_renderer utils)
