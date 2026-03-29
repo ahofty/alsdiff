@@ -18,7 +18,9 @@ type check_kind =
   | AtomicVariantOption of string             (* Local variant type option: event_value atomic_change *)
   | AtomicVariantList of string               (* Local variant type list: event_value atomic_change list *)
   | StructuredUpdate of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_update (module M.Patch), diff_complex_value (module M) *)
+  | StructuredUpdateId of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_update (module M.Patch), diff_complex_value_id (module M) *)
   | StructuredChange of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_change (module M.Patch), diff_complex_value_opt (module M) *)
+  | StructuredChangeId of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_change (module M.Patch), diff_complex_value_id_opt (module M) *)
   | StructuredChangeList of Longident.t * Longident.t  (* (full_module, patch_module) - is_unchanged_change (module M.Patch), diff_list_id (module M) *)
   | Identity                                   (* field in Patch.t but no is_unchanged check (for traceability) *)
 
@@ -215,6 +217,9 @@ let type_has_generate_diff_attr td = has_attribute td.ptype_attributes "patch.ge
 (** Check if a field has [@id.id] attribute *)
 let field_has_id_attr ld = has_attribute ld.pld_attributes "id.id"
 
+(** Check if a field has [@id.ref] attribute (field's type has identity support) *)
+let field_has_id_ref_attr ld = has_attribute ld.pld_attributes "id.ref"
+
 (** Check if a type has any field with [@id.id] attribute (from [@@deriving id]) *)
 let type_has_id_field fields =
   List.exists fields ~f:field_has_id_attr
@@ -284,6 +289,18 @@ let classify_patch_type (loc: Location.t) (ptyp: core_type) : core_type =
   let { patch_type; check_kind = _ } = classify_type loc ptyp in
   patch_type
 
+(** Promote a check_kind to use ID-based diffing when [@id.ref] is present *)
+let promote_to_id ~loc ~original_type = function
+  | StructuredUpdate (m, p) -> StructuredUpdateId (m, p)
+  | StructuredChange (m, p) -> StructuredChangeId (m, p)
+  | StructuredChangeList _ ->
+    Location.raise_errorf ~loc
+      "[@id.ref] is redundant on list fields (list diffing already uses ID-based matching)"
+  | _ ->
+    Location.raise_errorf ~loc
+      "[@id.ref] can only be used on structured types, not on %a"
+      Pprintast.core_type original_type
+
 (** Classify a field and return both the patch type and the check kind *)
 (* Returns None if the field has [@patch.skip] attribute *)
 (* Returns Some with Identity check_kind if field has [@patch.identity] attribute *)
@@ -298,6 +315,10 @@ let classify_patch_field (loc: Location.t) (ld: label_declaration) : patch_field
     None
   else
     let { patch_type; check_kind } = classify_type loc original_type in
+    let check_kind =
+      if field_has_id_ref_attr ld then promote_to_id ~loc ~original_type check_kind
+      else check_kind
+    in
     Some { field_name; patch_type; check_kind }
 
 (** Generate the diffing expression for a single constructor arg (positional, not named) *)
@@ -317,9 +338,19 @@ let generate_arg_diff ~loc old_expr new_expr (patch_type: core_type) (check_kind
     let diff_fn = pexp_ident ~loc { txt = Lident "diff_complex_value"; loc } in
     pexp_apply ~loc diff_fn [Nolabel, module_expr; Nolabel, old_expr; Nolabel, new_expr]
 
+  | StructuredUpdateId (full_module, _patch_module) ->
+    let module_expr = create_module_expr ~loc full_module in
+    let diff_fn = pexp_ident ~loc { txt = Lident "diff_complex_value_id"; loc } in
+    pexp_apply ~loc diff_fn [Nolabel, module_expr; Nolabel, old_expr; Nolabel, new_expr]
+
   | StructuredChange (full_module, _patch_module) ->
     let module_expr = create_module_expr ~loc full_module in
     let diff_fn = pexp_ident ~loc { txt = Lident "diff_complex_value_opt"; loc } in
+    pexp_apply ~loc diff_fn [Nolabel, module_expr; Nolabel, old_expr; Nolabel, new_expr]
+
+  | StructuredChangeId (full_module, _patch_module) ->
+    let module_expr = create_module_expr ~loc full_module in
+    let diff_fn = pexp_ident ~loc { txt = Lident "diff_complex_value_id_opt"; loc } in
     pexp_apply ~loc diff_fn [Nolabel, module_expr; Nolabel, old_expr; Nolabel, new_expr]
 
   | AtomicChange ->
@@ -403,11 +434,13 @@ let generate_arg_check ~loc (arg_expr: expression) (check_kind: check_kind) : ex
     [%expr is_unchanged_atomic_update [%e arg_expr]]
   | AtomicChange ->
     [%expr is_unchanged_atomic_change [%e arg_expr]]
-  | StructuredUpdate (_full_module, patch_module) ->
+  | StructuredUpdate (_full_module, patch_module)
+  | StructuredUpdateId (_full_module, patch_module) ->
     let module_expr = create_module_expr ~loc patch_module in
     let check_fn = pexp_ident ~loc { txt = Lident "is_unchanged_update"; loc } in
     pexp_apply ~loc check_fn [Nolabel, module_expr; Nolabel, arg_expr]
-  | StructuredChange (_full_module, patch_module) ->
+  | StructuredChange (_full_module, patch_module)
+  | StructuredChangeId (_full_module, patch_module) ->
     let module_expr = create_module_expr ~loc patch_module in
     let check_fn = pexp_ident ~loc { txt = Lident "is_unchanged_change"; loc } in
     pexp_apply ~loc check_fn [Nolabel, module_expr; Nolabel, arg_expr]

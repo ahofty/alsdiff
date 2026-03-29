@@ -44,10 +44,10 @@ end
 
 module RoutingSet = struct
   type t = {
-    audio_in : Routing.t;
-    audio_out : Routing.t;
-    midi_in : Routing.t;
-    midi_out : Routing.t;
+    audio_in : Routing.t;   [@id.ref]
+    audio_out : Routing.t;  [@id.ref]
+    midi_in : Routing.t;    [@id.ref]
+    midi_out : Routing.t;   [@id.ref]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
