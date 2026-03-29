@@ -48,6 +48,7 @@ let make_midi_track id name mixer =
   Midi {
     MidiTrack.id = id;
     name = name;
+    current_name = name;
     clips = [];
     automations = [];
     devices = [];

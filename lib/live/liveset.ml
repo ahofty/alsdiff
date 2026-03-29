@@ -4,10 +4,10 @@ open Alsdiff_base.Diff
 
 module Locator = struct
   type t = {
-    id : int;
+    id : int; [@id.id] [@patch.skip]
     name : string;
     time : float;
-  } [@@deriving eq]
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) (_file_path : string) : t =
     match xml with
@@ -17,32 +17,6 @@ module Locator = struct
       let time = Upath.get_float_attr "/Time" "Value" xml in
       { id; name; time }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Locator"))
-
-  let has_same_id a b = a.id = b.id
-  let id_hash t = Hashtbl.hash t.id
-
-  module Patch = struct
-    type t = {
-      name : string atomic_update;
-      time : float atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.name &&
-      is_unchanged_atomic_update p.time
-  end
-
-  let diff (old_locator : t) (new_locator : t) : Patch.t =
-    let { id = old_id; name = old_name; time = old_time } = old_locator in
-    let { id = new_id; name = new_name; time = new_time } = new_locator in
-
-    (* Only compare locators with the same id *)
-    if old_id <> new_id then
-      failwith "cannot diff two locators with different Id"
-    else
-      let name_change = diff_atomic_value (module String) old_name new_name in
-      let time_change = diff_atomic_value (module Float) old_time new_time in
-      { name = name_change; time = time_change }
 end
 
 module Version = struct
@@ -50,36 +24,7 @@ module Version = struct
     major : string;
     minor : string;
     revision : string;
-  }
-
-  let equal v1 v2 =
-    v1.major = v2.major && v1.minor = v2.minor && v1.revision = v2.revision
-
-  module Patch = struct
-    type t = {
-      major : string atomic_update;
-      minor : string atomic_update;
-      revision : string atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.major &&
-      is_unchanged_atomic_update p.minor &&
-      is_unchanged_atomic_update p.revision
-  end
-
-  let diff (old_version : t) (new_version : t) : Patch.t =
-    let { major = old_major; minor = old_minor; revision = old_rev } = old_version in
-    let { major = new_major; minor = new_minor; revision = new_rev } = new_version in
-
-    let major_change = diff_atomic_value (module String) old_major new_major in
-    let minor_change = diff_atomic_value (module String) old_minor new_minor in
-    let rev_change = diff_atomic_value (module String) old_rev new_rev in
-    {
-      Patch.major = major_change;
-      minor = minor_change;
-      revision = rev_change;
-    }
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 end
 
 

@@ -45,9 +45,9 @@ let test_missing_numerator () =
     ]} in
   try
     let _ = create xml in
-    fail "Expected error for missing Numerator"
+    fail "Expected Xml_error for missing Numerator"
   with
-  | _ -> () (* Expected to fail - missing required attribute *)
+  | Upath.Path_not_found _ -> ()
 
 let test_missing_denominator () =
   let xml = Xml.Element { name = "RemoteableTimeSignature"; attrs = ["Id", "0"]; childs = [
@@ -56,9 +56,9 @@ let test_missing_denominator () =
     ]} in
   try
     let _ = create xml in
-    fail "Expected error for missing Denominator"
+    fail "Expected Xml_error for missing Denominator"
   with
-  | _ -> () (* Expected to fail - missing required attribute *)
+  | Upath.Path_not_found _ -> ()
 
 let test_diff_numer_change () =
   let old_sig = { numer = 4; denom = 4 } in

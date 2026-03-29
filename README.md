@@ -512,6 +512,10 @@ You can customize display behavior for specific types of elements using `type_ov
 
 `alsdiff` outputs the raw internal values stored in the `.als` file, which often differ from the visual representation in Ableton Live (e.g., an internal value of `0.75` might appear as `75%` or `-2.5 dB` in the GUI). Since the formatting logic is internal to the Ableton Live application and not stored in the project file, it is not possible to infer exactly how a value is displayed in the GUI solely from the `.als` data.
 
+### Plugin state is opaque binary data
+
+VST2, VST3, and Audio Unit plugins store their internal state as opaque binary blobs. Each plugin serializes its state in its own proprietary format — there is no standard structure, header, or parameter layout. `alsdiff` can detect that a plugin's state changed but cannot interpret individual parameter changes within the blob. Metadata such as plugin name and preset name is available from the surrounding XML elements, but the actual parameter values are not extractable without plugin-specific reverse engineering.
+
 ## License
 
 It's public domain, see [THE-LICENSE.txt](THE-LICENSE.txt) for details.

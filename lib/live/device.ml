@@ -87,13 +87,13 @@ module MIDIMapping = struct
   type mapping_kind = Continuous | OnOff [@@deriving eq]
 
   type t = {
-    target : int;               (* NoteOrController *)
+    target : int;               (* NoteOrController *) [@id.id] [@patch.skip]
     channel : int;              (* 0-15 for MIDI, 16 for Macro *)
-    kind : mapping_kind;
+    kind : mapping_kind;        [@patch.skip]
     low : int;
     high : int;
     (* TODO: MIDI Note mapping *)
-  } [@@deriving eq]
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let is_midi m = m.channel >= 0 && m.channel <= 15 (* MIDI Channel starts from 0 to 15 in Ableton Live .als XML *)
   let is_macro m = m.channel = 16
@@ -147,43 +147,16 @@ module MIDIMapping = struct
     let channel = Upath.get_int_attr "/Channel" "Value" xml in
     (* NOTE: This function was only used for creating a MIDIMapping.t for Solo in the Mixer. Solo only supports on/off mapping *)
     { target; channel; kind = OnOff; low = 64; high = 127; }
-
-  let has_same_id a b = a.target = b.target
-  let id_hash a = Hashtbl.hash a.target
-
-  module Patch = struct
-    type t = {
-      channel : int atomic_update;
-      low : int atomic_update;
-      high : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.channel &&
-      is_unchanged_atomic_update p.low &&
-      is_unchanged_atomic_update p.high
-  end
-
-  let diff (old_mapping : t) (new_mapping : t) : Patch.t =
-    if old_mapping.target <> new_mapping.target then
-      failwith (Printf.sprintf "Cannot compare two MIDIMapping with different targets (%d vs %d)"
-                  old_mapping.target
-                  new_mapping.target)
-    else
-      let channel_change = diff_atomic_value (module Int) old_mapping.channel new_mapping.channel in
-      let low_change = diff_atomic_value (module Int) old_mapping.low new_mapping.low in
-      let high_change = diff_atomic_value (module Int) old_mapping.high new_mapping.high in
-      { channel = channel_change; low = low_change; high = high_change }
 end
 
 module GenericParam = struct
   type t = {
-    name : string;
+    name : string;              [@patch.identity]
     value : param_value;
     automation : int;
     modulation : int;           (* parameter cannot modulated will be set to a negative number *)
-    mapping : MIDIMapping.t option;
-  } [@@deriving eq]
+    mapping : MIDIMapping.t option;  [@patch.skip]
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create ~parse_value xml =
     let name = Xml.get_name xml in
@@ -203,35 +176,6 @@ module GenericParam = struct
 
   let create_bool_manual xml =
     create xml ~parse_value:(fun x -> Bool (Upath.get_bool_attr "/Manual" "Value" x))
-
-  module Patch = struct
-    type t = {
-      name : string;
-      value : param_value atomic_update;
-      automation : int atomic_update;
-      modulation : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.value &&
-      is_unchanged_atomic_update p.automation &&
-      is_unchanged_atomic_update p.modulation
-  end
-
-  let diff (old_param : t) (new_param : t) : Patch.t =
-    let automation_change = diff_atomic_value (module Int) old_param.automation new_param.automation in
-    let modulation_change = diff_atomic_value (module Int) old_param.modulation new_param.modulation in
-    let module ParamValueEq = struct
-      type t = param_value
-      let equal = (=)
-    end in
-    let value_change = diff_atomic_value (module ParamValueEq) old_param.value new_param.value in
-    {
-      name = new_param.name;
-      value = value_change;
-      automation = automation_change;
-      modulation = modulation_change;
-    }
 end
 
 
@@ -246,7 +190,7 @@ end
 module DeviceParam = struct
   type t = {
     base : GenericParam.t;
-  } [@@deriving eq]
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let has_same_id a b = a.base.name = b.base.name
   let id_hash t = Hashtbl.hash t.base.name
@@ -275,20 +219,6 @@ module DeviceParam = struct
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating DeviceParam"))
 
   let create_from_upath_find (path, xml) = create path xml
-
-  module Patch = struct
-    type t = {
-      base : GenericParam.Patch.t structured_update;
-    }
-
-    let is_empty patch =
-      Diff.is_unchanged_update (module GenericParam.Patch) patch.base
-  end
-
-  let diff old_param new_param =
-    let base_change = Diff.diff_complex_value_id (module NameIdGenericParam)
-        old_param.base new_param.base in
-    { Patch.base = base_change }
 end
 
 
@@ -299,20 +229,16 @@ module PresetRef = struct
   [@@deriving eq]
 
   type t = {
-    id : int;                   (* not unique *)
-    name : string;
-    preset_type : preset_type;
+    id : int;                   (* not unique *) [@id.id] [@patch.skip]
+    name : string;              [@patch.skip]
+    preset_type : preset_type;  [@patch.skip]
     relative_path : string;
     path : string;
     pack_name : string;
     pack_id : int;
     file_size : int;
     crc : int;
-  } [@@deriving eq]
-
-  let has_same_id a b = a.id = b.id
-
-  let id_hash t = Hashtbl.hash t.id
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -352,54 +278,15 @@ module PresetRef = struct
 
       { id; name; preset_type; relative_path; path; pack_name; pack_id; file_size; crc }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating PresetRef"))
-
-  module Patch = struct
-    type t = {
-      (* TODO: add the [name] field *)
-      relative_path : string atomic_update;
-      path : string atomic_update;
-      pack_name : string atomic_update;
-      pack_id : int atomic_update;
-      file_size : int atomic_update;
-      crc : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.relative_path &&
-      is_unchanged_atomic_update p.path &&
-      is_unchanged_atomic_update p.pack_name &&
-      is_unchanged_atomic_update p.pack_id &&
-      is_unchanged_atomic_update p.file_size &&
-      is_unchanged_atomic_update p.crc
-  end
-
-  let diff (old_preset : t) (new_preset : t) : Patch.t =
-    if old_preset.id <> new_preset.id then
-      failwith "cannot diff two PresetRefs with different Ids"
-    else
-      let relative_path_change = diff_atomic_value (module String) old_preset.relative_path new_preset.relative_path in
-      let path_change = diff_atomic_value (module String) old_preset.path new_preset.path in
-      let pack_name_change = diff_atomic_value (module String) old_preset.pack_name new_preset.pack_name in
-      let pack_id_change = diff_atomic_value (module Int) old_preset.pack_id new_preset.pack_id in
-      let file_size_change = diff_atomic_value (module Int) old_preset.file_size new_preset.file_size in
-      let crc_change = diff_atomic_value (module Int) old_preset.crc new_preset.crc in
-      {
-        relative_path = relative_path_change;
-        path = path_change;
-        pack_name = pack_name_change;
-        pack_id = pack_id_change;
-        file_size = file_size_change;
-        crc = crc_change;
-      }
 end
 
 
 (* ================== M4L PatchRef module ================== *)
 module PatchRef = struct
   type t = {
-    id : int;
-    name : string;
-    preset_type : PresetRef.preset_type;
+    id : int;                              [@id.id] [@patch.skip]
+    name : string;                         [@patch.skip]
+    preset_type : PresetRef.preset_type;   [@patch.skip]
     relative_path : string;
     path : string;
     pack_name : string;
@@ -407,11 +294,7 @@ module PatchRef = struct
     file_size : int;
     crc : int;
     last_mod_date : int;  (* LastModDate Value attribute - UNIX timestamp *)
-  } [@@deriving eq]
-
-  let has_same_id a b = a.id = b.id
-
-  let id_hash t = Hashtbl.hash t.id
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -446,45 +329,6 @@ module PatchRef = struct
 
       { id; name; preset_type; relative_path; path; pack_name; pack_id; file_size; crc; last_mod_date }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating PatchRef (expected MxPatchRef)"))
-
-  module Patch = struct
-    type t = {
-      relative_path : string atomic_update;
-      path : string atomic_update;
-      pack_name : string atomic_update;
-      pack_id : int atomic_update;
-      file_size : int atomic_update;
-      crc : int atomic_update;
-      last_mod_date : int atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.relative_path &&
-      is_unchanged_atomic_update p.path &&
-      is_unchanged_atomic_update p.pack_name &&
-      is_unchanged_atomic_update p.pack_id &&
-      is_unchanged_atomic_update p.file_size &&
-      is_unchanged_atomic_update p.crc &&
-      is_unchanged_atomic_update p.last_mod_date
-  end
-
-  let diff (old_patch : t) (new_patch : t) : Patch.t =
-    let relative_path_change = diff_atomic_value (module String) old_patch.relative_path new_patch.relative_path in
-    let path_change = diff_atomic_value (module String) old_patch.path new_patch.path in
-    let pack_name_change = diff_atomic_value (module String) old_patch.pack_name new_patch.pack_name in
-    let pack_id_change = diff_atomic_value (module Int) old_patch.pack_id new_patch.pack_id in
-    let file_size_change = diff_atomic_value (module Int) old_patch.file_size new_patch.file_size in
-    let crc_change = diff_atomic_value (module Int) old_patch.crc new_patch.crc in
-    let last_mod_date_change = diff_atomic_value (module Int) old_patch.last_mod_date new_patch.last_mod_date in
-    {
-      relative_path = relative_path_change;
-      path = path_change;
-      pack_name = pack_name_change;
-      pack_id = pack_id_change;
-      file_size = file_size_change;
-      crc = crc_change;
-      last_mod_date = last_mod_date_change;
-    }
 end
 
 
@@ -736,10 +580,10 @@ end
 (* ================== Max4Live device related modules ================== *)
 module Max4LiveParam = struct
   type t = {
-    id : int;                   (* ParameterId *)
+    id : int;                   (* ParameterId *) [@id.id] [@patch.skip]
     index : int;                (* VisualIndex *)
     base : GenericParam.t;
-  } [@@deriving eq]
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   (** Extract enum description from Names/Name/Name structure - specific to M4L *)
   let extract_enum_desc (xml : Xml.t) : enum_desc option =
@@ -788,33 +632,6 @@ module Max4LiveParam = struct
     { id; index; base = name_updated_base; }
 
   let create_from_upath_find (path, xml) = create path xml
-
-  module Patch = struct
-    type t = {
-      index : int atomic_update;
-      base : GenericParam.Patch.t structured_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.index &&
-      is_unchanged_update (module GenericParam.Patch) p.base
-  end
-
-  let has_same_id a b = a.id = b.id
-
-  let id_hash t = Hashtbl.hash t.id
-
-  let diff (old_param : t) (new_param : t) : Patch.t =
-    if old_param.id <> new_param.id then
-      failwith "cannot diff two Max4LiveParams with different Ids"
-    else
-      let index_change = diff_atomic_value (module Int) old_param.index new_param.index in
-      let base_change = diff_complex_value (module GenericParam) old_param.base new_param.base in
-
-      {
-        index = index_change;
-        base = base_change;
-      }
 end
 
 
@@ -826,7 +643,7 @@ module MixerDevice = struct
     speaker : DeviceParam.t;     (* mute or not *)
     volume : DeviceParam.t;      (* volume *)
     pan : DeviceParam.t;         (* panorama/panning *)
-  } [@@deriving eq]
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -839,36 +656,9 @@ module MixerDevice = struct
       { on; speaker; volume; pan }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating MixerDevice"))
 
-  module Patch = struct
-    type t = {
-      on : DeviceParam.Patch.t structured_update;
-      speaker : DeviceParam.Patch.t structured_update;
-      volume : DeviceParam.Patch.t structured_update;
-      pan : DeviceParam.Patch.t structured_update;
-    }
-
-    let is_empty p =
-      is_unchanged_update (module DeviceParam.Patch) p.on &&
-      is_unchanged_update (module DeviceParam.Patch) p.speaker &&
-      is_unchanged_update (module DeviceParam.Patch) p.volume &&
-      is_unchanged_update (module DeviceParam.Patch) p.pan
-  end
-
   (* MixerDevice doesn't have a natural ID, so use placeholder interface *)
   let has_same_id _ _ = true
   let id_hash _ = Hashtbl.hash 0
-
-  let diff (old_mixer : t) (new_mixer : t) : Patch.t =
-    let on_change = diff_complex_value (module DeviceParam) old_mixer.on new_mixer.on in
-    let speaker_change = diff_complex_value (module DeviceParam) old_mixer.speaker new_mixer.speaker in
-    let volume_change = diff_complex_value (module DeviceParam) old_mixer.volume new_mixer.volume in
-    let pan_change = diff_complex_value (module DeviceParam) old_mixer.pan new_mixer.pan in
-    {
-      Patch.on = on_change;
-      speaker = speaker_change;
-      volume = volume_change;
-      pan = pan_change;
-    }
 end
 
 
@@ -893,12 +683,9 @@ let diff_atomic_list (old_list : float list) (new_list : float list) : float ato
 
 module Macro = struct
   type t = {
-    id : int;
+    id : int;               [@id.id] [@patch.skip]
     base : GenericParam.t;
-  } [@@deriving eq]
-
-  let has_same_id a b = a.id = b.id
-  let id_hash t = Hashtbl.hash t.id
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (name_xml : Xml.t) (control_xml : Xml.t) : t =
     (* Extract the macro name from MacroDisplayNames element *)
@@ -909,33 +696,15 @@ module Macro = struct
       raise (Xml.Xml_error (name_xml, "Macro name ID " ^ string_of_int name_id ^ " does not match control ID " ^ string_of_int control_id ^ ". Macro names and controls must be paired correctly."))
     else
       { id=name_id; base; }
-
-  module Patch = struct
-    type t = {
-      base : GenericParam.Patch.t structured_update;
-    }
-
-    let is_empty p = is_unchanged_update (module GenericParam.Patch) p.base
-  end
-
-  let diff (old_macro : t) (new_macro : t) : Patch.t =
-    if old_macro.id <> new_macro.id then
-      failwith "cannot diff two Macros with different Ids"
-    else
-      let base_change = diff_complex_value (module GenericParam) old_macro.base new_macro.base in
-      { base = base_change }
 end
 
 
 module Snapshot = struct
   type t = {
-    id : int;
+    id : int;               [@id.id] [@patch.skip]
     name : string;
     values : float list;
-  } [@@deriving eq]
-
-  let has_same_id a b = a.id = b.id
-  let id_hash t = Hashtbl.hash t.id
+  } [@@deriving eq, id, patch]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -963,17 +732,6 @@ module Snapshot = struct
 
       { id; name; values }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Snapshot"))
-
-  module Patch = struct
-    type t = {
-      name : string atomic_update;
-      values : float atomic_change list;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.name &&
-      List.for_all is_unchanged_atomic_change p.values
-  end
 
   let diff (old_snapshot : t) (new_snapshot : t) : Patch.t =
     if old_snapshot.id <> new_snapshot.id then
