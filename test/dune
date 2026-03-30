@@ -112,7 +112,8 @@
 (test
  (name test_device)
  (modules test_device utils)
- (libraries alsdiff_base alsdiff_live alcotest))
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/mixer_device.xml))
 
 (test
  (name test_real_devices)
@@ -148,7 +149,7 @@
  (name test_plugin_device)
  (modules test_plugin_device utils)
  (libraries alsdiff_base alsdiff_live alcotest)
- (deps data/plugin_device.xml))
+ (deps data/plugin_device.xml data/vst3_plugin_info.xml data/vst2_plugin_info.xml data/au_plugin_info.xml))
 
 (test
  (name test_diff_track)
@@ -171,7 +172,8 @@
 (test
  (name test_diff_device)
  (modules test_diff_device utils)
- (libraries alsdiff_live alcotest))
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/group_device.xml data/m4l_device.xml))
 
 (test
  (name test_variant_patch)
