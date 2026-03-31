@@ -59,79 +59,19 @@ let parse_preset_args = function
   | `Quiet -> Text_renderer.quiet
   | `Verbose -> Text_renderer.verbose
 
-let load_config_from_json file_path =
-  match Text_renderer.load_and_validate_config file_path with
+let build_base_renderer_config ~default_config ~reference_path config =
+  let preset_config = Option.map parse_preset_args config.preset in
+  match Config.resolve_detail_config
+          ~default_config
+          ~reference_path
+          ~config_file:config.config_file
+          ~preset_config
+          ()
+  with
   | Ok cfg -> cfg
   | Error msg ->
     Fmt.epr "%s@." msg;
     exit 1
-
-let find_git_root () =
-  let rec search path =
-    if Sys.file_exists (Filename.concat path ".git") then
-      Some path
-    else
-      let parent = Filename.dirname path in
-      if parent = path then None
-      else search parent
-  in
-  search (Sys.getcwd ())
-
-let get_home_dir () =
-  match Sys.getenv_opt "HOME" with
-  | Some home -> Some home
-  | None ->
-    (* Fallback for Windows systems *)
-    match Sys.getenv_opt "USERPROFILE" with
-    | Some userprofile -> Some userprofile
-    | None -> None
-
-let discover_config_file ~reference_path =
-  (* Try reference_path directory config first - highest priority *)
-  let check_path_dir_config () =
-    let path_dir = Filename.dirname reference_path in
-    let path_config = Filename.concat path_dir ".alsdiff.json" in
-    if Sys.file_exists path_config then Some path_config else None
-  in
-  (* Try git root config *)
-  let check_git_config () =
-    match find_git_root () with
-    | Some git_root ->
-      let git_config = Filename.concat git_root ".alsdiff.json" in
-      if Sys.file_exists git_config then Some git_config else None
-    | None -> None
-  in
-  (* Try home directory config *)
-  let check_home_config () =
-    match get_home_dir () with
-    | Some home ->
-      let home_config = Filename.concat home ".alsdiff.json" in
-      if Sys.file_exists home_config then Some home_config else None
-    | None -> None
-  in
-  (* Priority: path dir > git config > home config *)
-  match check_path_dir_config () with
-  | Some _ as result -> result
-  | None ->
-    match check_git_config () with
-    | Some _ as result -> result
-    | None -> check_home_config ()
-
-let load_and_report_config config_path =
-  Fmt.pr "Loading configuration from %s@." config_path;
-  load_config_from_json config_path
-
-let build_base_renderer_config ~default_config ~reference_path config =
-  match config.config_file with
-  | Some config_path ->
-    load_config_from_json config_path
-  | None ->
-    match config.preset with
-    | Some preset -> parse_preset_args preset
-    | None ->
-      match discover_config_file ~reference_path with
-      | Some auto_config -> load_and_report_config auto_config
-      | None -> default_config
 
 let stats_incompatible_flags_provided config =
   config.prefix_added <> None

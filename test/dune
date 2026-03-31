@@ -162,6 +162,11 @@
  (deps data/t4.xml))
 
 (test
+ (name test_file)
+ (modules test_file)
+ (libraries alsdiff_base alcotest unix))
+
+(test
  (name test_main_track)
  (modules test_main_track utils)
  (libraries alsdiff_base alsdiff_live alcotest)
@@ -187,6 +192,11 @@
  (name test_detail_config_json)
  (modules test_detail_config_json utils)
  (libraries alsdiff_output alcotest))
+
+(test
+ (name test_config_resolution)
+ (modules test_config_resolution)
+ (libraries alsdiff_output alcotest unix))
 
 (test
  (name test_flowchart_groups)

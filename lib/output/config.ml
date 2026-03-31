@@ -683,6 +683,51 @@ let composer = {
   indent_width = 2;
 }
 
+(* ==================== Config Resolution ==================== *)
+
+let find_git_root ?(cwd = Sys.getcwd ()) () =
+  let rec search path =
+    if Sys.file_exists (Filename.concat path ".git") then
+      Some path
+    else
+      let parent = Filename.dirname path in
+      if parent = path then None
+      else search parent
+  in
+  search cwd
+
+let get_home_dir () =
+  match Sys.getenv_opt "HOME" with
+  | Some home -> Some home
+  | None -> Sys.getenv_opt "USERPROFILE"
+
+let discover_config_file ?(cwd = Sys.getcwd ()) ?home_dir ~reference_path () =
+  let check_path_dir_config () =
+    let path_dir = Filename.dirname reference_path in
+    let path_config = Filename.concat path_dir ".alsdiff.json" in
+    if Sys.file_exists path_config then Some path_config else None
+  in
+  let check_git_config () =
+    match find_git_root ~cwd () with
+    | Some git_root ->
+      let git_config = Filename.concat git_root ".alsdiff.json" in
+      if Sys.file_exists git_config then Some git_config else None
+    | None -> None
+  in
+  let check_home_config () =
+    match (match home_dir with Some home -> Some home | None -> get_home_dir ()) with
+    | Some home ->
+      let home_config = Filename.concat home ".alsdiff.json" in
+      if Sys.file_exists home_config then Some home_config else None
+    | None -> None
+  in
+  match check_path_dir_config () with
+  | Some _ as result -> result
+  | None ->
+    match check_git_config () with
+    | Some _ as result -> result
+    | None -> check_home_config ()
+
 (* Helper to create a config with custom prefixes *)
 let with_prefixes ~(added:string) ~(removed:string) ~(modified:string) ~(unchanged:string)
     (cfg : detail_config) : detail_config =
@@ -979,6 +1024,26 @@ let load_and_validate_config (file_path : string) : (detail_config, string) resu
     Error (Printf.sprintf "JSON error in %s: %s" file_path msg)
   | Sys_error msg ->
     Error (Printf.sprintf "File error: %s" msg)
+
+let resolve_detail_config
+    ?(cwd = Sys.getcwd ())
+    ?home_dir
+    ~default_config
+    ~reference_path
+    ~config_file
+    ~preset_config
+    ()
+  =
+  match config_file with
+  | Some config_path ->
+    load_and_validate_config config_path
+  | None ->
+    match preset_config with
+    | Some preset -> Ok preset
+    | None ->
+      match discover_config_file ~cwd ?home_dir ~reference_path () with
+      | Some auto_config -> load_and_validate_config auto_config
+      | None -> Ok default_config
 
 (** Helper function for backward compatibility with configs that don't have indent_width *)
 let detail_config_of_yojson_with_default json =

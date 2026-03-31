@@ -18,17 +18,19 @@ let decompress_als_to_string filename =
     let compressed_size = Unix.stat filename |> (fun st -> st.st_size) in
     let buffer = Buffer.create (estimate_buffer_size compressed_size) in
     let gz_in = Gzip.open_in filename in
-    let chunk = Bytes.create 8192 in
-    let rec copy_loop () =
-      let bytes_read = Gzip.input gz_in chunk 0 (Bytes.length chunk) in
-      if bytes_read > 0 then (
-        Buffer.add_subbytes buffer chunk 0 bytes_read;
-        copy_loop ()
-      )
-    in
-    (try copy_loop () with End_of_file -> ());
-    Gzip.close_in gz_in;
-    Buffer.contents buffer
+    Fun.protect
+      ~finally:(fun () -> Gzip.close_in gz_in)
+      (fun () ->
+         let chunk = Bytes.create 8192 in
+         let rec copy_loop () =
+           let bytes_read = Gzip.input gz_in chunk 0 (Bytes.length chunk) in
+           if bytes_read > 0 then (
+             Buffer.add_subbytes buffer chunk 0 bytes_read;
+             copy_loop ()
+           )
+         in
+         (try copy_loop () with End_of_file -> ());
+         Buffer.contents buffer)
   with
   | Unix.Unix_error (err, func, _) ->
     let msg = Printf.sprintf "%s: %s" func (Unix.error_message err) in
@@ -41,22 +43,53 @@ let decompress_als_to_string filename =
     raise (File_error (filename, "Unexpected error: " ^ Printexc.to_string e))
 
 let decompress_als filename =
-  let basename = Filename.basename filename |> Filename.remove_extension in
-  let temp_file = Filename.temp_file basename ".xml" in
-  let gz_in = Gzip.open_in filename in
-  let out_chan = open_out temp_file in
-  let buffer = Bytes.create 4096 in
-  let rec copy_loop () =
-    let bytes_read = Gzip.input gz_in buffer 0 (Bytes.length buffer) in
-    if bytes_read > 0 then (
-      output out_chan buffer 0 bytes_read;
-      copy_loop ()
-    )
+  let temp_file = ref None in
+  let cleanup_temp_file () =
+    match !temp_file with
+    | Some path when Sys.file_exists path ->
+      (try Sys.remove path with Sys_error _ -> ())
+    | _ -> ()
   in
-  (try copy_loop () with End_of_file -> ());
-  Gzip.close_in gz_in;
-  close_out out_chan;
-  temp_file
+  try
+    let basename = Filename.basename filename |> Filename.remove_extension in
+    let path = Filename.temp_file basename ".xml" in
+    temp_file := Some path;
+    let gz_in = Gzip.open_in filename in
+    Fun.protect
+      ~finally:(fun () -> Gzip.close_in gz_in)
+      (fun () ->
+         let out_chan = open_out path in
+         Fun.protect
+           ~finally:(fun () -> close_out_noerr out_chan)
+           (fun () ->
+              let buffer = Bytes.create 8192 in
+              let rec copy_loop () =
+                let bytes_read = Gzip.input gz_in buffer 0 (Bytes.length buffer) in
+                if bytes_read > 0 then (
+                  output out_chan buffer 0 bytes_read;
+                  copy_loop ()
+                )
+              in
+              (try copy_loop () with End_of_file -> ());
+              path))
+  with
+  | Unix.Unix_error _ as exn ->
+    cleanup_temp_file ();
+    let msg =
+      match exn with
+      | Unix.Unix_error (err, func, _) -> Printf.sprintf "%s: %s" func (Unix.error_message err)
+      | _ -> assert false
+    in
+    raise (File_error (filename, msg))
+  | Sys_error msg ->
+    cleanup_temp_file ();
+    raise (File_error (filename, msg))
+  | Gzip.Error msg ->
+    cleanup_temp_file ();
+    raise (File_error (filename, "Gzip error: " ^ msg))
+  | e ->
+    cleanup_temp_file ();
+    raise (File_error (filename, "Unexpected error: " ^ Printexc.to_string e))
 
 (** open the .als file with [filename], and return the parsed XML tree. *)
 let open_als filename =

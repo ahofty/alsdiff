@@ -117,14 +117,14 @@ and process_group_branches (pointees : pointee IntHashtbl.t) (branches : Device.
 and process_mixer_automation (pointees : pointee IntHashtbl.t)
     (mixer : Track.Mixer.t) (track_name : string) : unit =
   let mixer_params = [
-    (mixer.Track.Mixer.volume.automation, track_name ^ ": Volume");
-    (mixer.Track.Mixer.pan.automation, track_name ^ ": Pan");
-    (mixer.Track.Mixer.mute.automation, track_name ^ ": Mute");
-    (mixer.Track.Mixer.solo.automation, track_name ^ ": Solo");
-    (mixer.Track.Mixer.volume.modulation, track_name ^ ": Volume Modulation");
-    (mixer.Track.Mixer.pan.modulation, track_name ^ ": Pan Modulation");
-    (mixer.Track.Mixer.mute.modulation, track_name ^ ": Mute Modulation");
-    (mixer.Track.Mixer.solo.modulation, track_name ^ ": Solo Modulation");
+    (mixer.Track.Mixer.volume.automation, "Volume");
+    (mixer.Track.Mixer.pan.automation, "Pan");
+    (mixer.Track.Mixer.mute.automation, "Mute");
+    (mixer.Track.Mixer.solo.automation, "Solo");
+    (mixer.Track.Mixer.volume.modulation, "Volume Modulation");
+    (mixer.Track.Mixer.pan.modulation, "Pan Modulation");
+    (mixer.Track.Mixer.mute.modulation, "Mute Modulation");
+    (mixer.Track.Mixer.solo.modulation, "Solo Modulation");
   ] in
   List.iter (fun (param_id, param_name) ->
       IntHashtbl.add pointees param_id (TrackParamPointee (track_name, param_name))
@@ -172,14 +172,14 @@ let build_pointees_table (liveset : t) : unit =
          process_mixer_automation liveset.pointees mixer_base track_name;
          (* Process MainMixer-specific parameters *)
          let main_mixer_params = [
-           (mixer.Track.MainMixer.tempo.automation, track_name ^ ": Tempo");
-           (mixer.Track.MainMixer.time_signature.automation, track_name ^ ": Time Signature");
-           (mixer.Track.MainMixer.crossfade.automation, track_name ^ ": Crossfade");
-           (mixer.Track.MainMixer.global_groove.automation, track_name ^ ": Global Groove");
-           (mixer.Track.MainMixer.tempo.modulation, track_name ^ ": Tempo Modulation");
-           (mixer.Track.MainMixer.time_signature.modulation, track_name ^ ": Time Signature Modulation");
-           (mixer.Track.MainMixer.crossfade.modulation, track_name ^ ": Crossfade Modulation");
-           (mixer.Track.MainMixer.global_groove.modulation, track_name ^ ": Global Groove Modulation");
+           (mixer.Track.MainMixer.tempo.automation, "Tempo");
+           (mixer.Track.MainMixer.time_signature.automation, "Time Signature");
+           (mixer.Track.MainMixer.crossfade.automation, "Crossfade");
+           (mixer.Track.MainMixer.global_groove.automation, "Global Groove");
+           (mixer.Track.MainMixer.tempo.modulation, "Tempo Modulation");
+           (mixer.Track.MainMixer.time_signature.modulation, "Time Signature Modulation");
+           (mixer.Track.MainMixer.crossfade.modulation, "Crossfade Modulation");
+           (mixer.Track.MainMixer.global_groove.modulation, "Global Groove Modulation");
          ] in
          List.iter (fun (param_id, param_name) ->
              IntHashtbl.add liveset.pointees param_id (TrackParamPointee (track_name, param_name))
