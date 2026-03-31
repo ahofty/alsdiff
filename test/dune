@@ -153,7 +153,7 @@
 
 (test
  (name test_diff_track)
- (modules test_diff_track utils)
+ (modules test_diff_track utils track_helpers)
  (libraries alsdiff_base alsdiff_live alcotest))
 
 (test
@@ -167,6 +167,28 @@
  (modules test_main_track utils)
  (libraries alsdiff_base alsdiff_live alcotest)
  (deps data/main_track.xml))
+
+(test
+ (name test_group_track)
+ (modules test_group_track utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/group_track.xml))
+
+(test
+ (name test_return_track)
+ (modules test_return_track utils)
+ (libraries alsdiff_base alsdiff_live alcotest)
+ (deps data/return_track.xml))
+
+(test
+ (name test_track_utils)
+ (modules test_track_utils track_helpers)
+ (libraries alsdiff_base alsdiff_live alcotest))
+
+(test
+ (name test_track_error_handling)
+ (modules test_track_error_handling)
+ (libraries alsdiff_base alsdiff_live alcotest))
 
 ;; Test needing only alsdiff_live
 (test
