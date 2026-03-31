@@ -56,6 +56,23 @@ let make_midi_track id name mixer =
     routings = make_empty_routing_set ();
   }
 
+let make_main_track ?(name = "Main") tempo =
+  let base_mixer = make_mixer 0.8 0.0 in
+  Main {
+    MainTrack.name = name;
+    current_name = name;
+    automations = [];
+    devices = [];
+    mixer = {
+      Track.MainMixer.base = base_mixer;
+      tempo = make_generic_param "Tempo" (Device.Float tempo);
+      time_signature = make_generic_param "TimeSignature" (Device.Int 4);
+      crossfade = make_generic_param "CrossFade" (Device.Float 0.0);
+      global_groove = make_generic_param "GlobalGrooveAmount" (Device.Float 0.0);
+    };
+    routings = make_empty_routing_set ();
+  }
+
 let test_midi_track_diff () =
   let mixer1 = make_mixer 0.8 0.0 in
   let old_track = make_midi_track 1 "Midi Track" mixer1 in
@@ -93,9 +110,36 @@ let test_midi_track_diff () =
       | _ -> Alcotest.fail "Expected mixer to be modified")
    | _ -> Alcotest.fail "Expected MidiPatch")
 
+let test_main_track_diff () =
+  let old_track = make_main_track 120.0 in
+  let new_track = make_main_track 128.0 in
+  let patch = Track.diff old_track new_track in
+
+  match patch with
+  | Track.Patch.MainPatch main_patch ->
+    (match main_patch.Track.MainTrack.Patch.mixer with
+     | `Modified mixer_patch ->
+       (match mixer_patch.Track.MainMixer.Patch.tempo with
+        | `Modified tempo_patch ->
+          (match tempo_patch.Device.GenericParam.Patch.value with
+           | `Modified v ->
+             (match v.Diff.oldval with
+              | Device.Float old_val -> Alcotest.(check (float 0.01)) "old tempo" 120.0 old_val
+              | _ -> Alcotest.fail "Expected Float value");
+             (match v.Diff.newval with
+              | Device.Float new_val -> Alcotest.(check (float 0.01)) "new tempo" 128.0 new_val
+              | _ -> Alcotest.fail "Expected Float value")
+           | _ -> Alcotest.fail "Expected tempo value to be modified")
+        | _ -> Alcotest.fail "Expected tempo to be modified")
+     | _ -> Alcotest.fail "Expected main mixer to be modified")
+  | _ -> Alcotest.fail "Expected MainPatch"
+
 let () =
   Alcotest.run "Diff Track" [
     "midi-track", [
       Alcotest.test_case "Test midi track diff" `Quick test_midi_track_diff;
+    ];
+    "main-track", [
+      Alcotest.test_case "Test main track diff" `Quick test_main_track_diff;
     ];
   ]

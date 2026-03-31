@@ -1,4 +1,5 @@
 open Alcotest
+open Alsdiff_base.Xml
 open Alsdiff_base.Diff
 open Alsdiff_live
 open Alsdiff_live.Clip
@@ -354,6 +355,31 @@ let test_create_automation_item_curve_modified_summary () =
     "Time: 1.00->2.00, Value: 10.00->11.00, Curve: C1X: 0.10->0.20, C1Y: 0.20->0.30, C2X: 0.30->0.40, C2Y: 0.40->0.50"
     summary
 
+let test_create_liveset_item_with_main_only_change () =
+  let path = Utils.resolve_test_data_path "t4.xml" in
+  let xml = read_file path in
+  let liveset1 = Liveset.create xml path in
+  let liveset2 = Liveset.create xml path in
+  let updated_main =
+    match liveset2.Liveset.main with
+    | Track.Main main_track ->
+      let updated_tempo =
+        { main_track.Track.MainTrack.mixer.tempo with value = Device.Float 128.0 }
+      in
+      Track.Main {
+        main_track with
+        mixer = { main_track.Track.MainTrack.mixer with tempo = updated_tempo };
+      }
+    | _ -> fail "Expected Track.Main type for main track"
+  in
+  let patch = Liveset.diff liveset1 { liveset2 with main = updated_main } in
+  let item = create_liveset_item (`Modified patch) in
+  let main_track_section = get_item (find_view_by_name "Main Track" item.children) in
+  let main_track_item = get_item (List.hd main_track_section.children) in
+
+  check bool "main track section exists" true (main_track_section.name = "Main Track");
+  check bool "main track child rendered" true (String.starts_with ~prefix:"MainTrack" main_track_item.name)
+
 let () =
   run "ViewModel" [
     "ViewBuilder.change_type_of", [
@@ -380,5 +406,8 @@ let () =
       test_case "Combined summary includes added curve details" `Quick test_create_automation_item_curve_added_summary;
       test_case "Combined summary includes removed curve details" `Quick test_create_automation_item_curve_removed_summary;
       test_case "Combined summary includes modified curve details" `Quick test_create_automation_item_curve_modified_summary;
+    ];
+    "create_liveset_item", [
+      test_case "Renders main track when it is the only change" `Quick test_create_liveset_item_with_main_only_change;
     ];
   ]

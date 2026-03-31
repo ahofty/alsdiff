@@ -288,6 +288,7 @@ module Patch = struct
     name : string atomic_update;
     version : Version.Patch.t structured_update;
     creator : string atomic_update;
+    main : Track.MainTrack.Patch.t structured_update;
     tracks : (Track.t, Track.Patch.t) structured_change list;
     returns : (Track.t, Track.Patch.t) structured_change list;
     locators : (Locator.t, Locator.Patch.t) structured_change list;
@@ -300,6 +301,7 @@ module Patch = struct
     is_unchanged_atomic_update p.name &&
     is_unchanged_update (module Version.Patch) p.version &&
     is_unchanged_atomic_update p.creator &&
+    is_unchanged_update (module Track.MainTrack.Patch) p.main &&
     List.for_all (is_unchanged_change (module Track.Patch)) p.tracks &&
     List.for_all (is_unchanged_change (module Track.Patch)) p.returns &&
     List.for_all (is_unchanged_change (module Locator.Patch)) p.locators
@@ -310,6 +312,12 @@ let diff (old_liveset : t) (new_liveset : t) : Patch.t =
   let name_change = diff_atomic_value (module String) old_liveset.name new_liveset.name in
   let version_change = diff_complex_value (module Version) old_liveset.version new_liveset.version in
   let creator_change = diff_atomic_value (module String) old_liveset.creator new_liveset.creator in
+  let main_change =
+    match old_liveset.main, new_liveset.main with
+    | Track.Main old_main, Track.Main new_main ->
+      diff_complex_value_id (module Track.MainTrack) old_main new_main
+    | _ -> failwith "Liveset.main must always contain Track.Main"
+  in
   let tracks_changes =
     diff_list_id (module Track) old_liveset.tracks new_liveset.tracks
     |> filter_changes (module Track.Patch)
@@ -327,6 +335,7 @@ let diff (old_liveset : t) (new_liveset : t) : Patch.t =
     Patch.name = name_change;
     version = version_change;
     creator = creator_change;
+    main = main_change;
     tracks = tracks_changes;
     returns = returns_changes;
     locators = locators_changes;

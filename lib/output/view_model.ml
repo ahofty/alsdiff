@@ -2297,22 +2297,13 @@ let create_liveset_item
   in
 
   (* Build Main Track section - special handling for singleton track *)
-  let main_track_item = ViewBuilder.build_item_from_children_with_change c
+  let main_track_item = ViewBuilder.build_item_from_children c
       ~name:"Main Track"
       ~of_value:(fun (ls : Liveset.t) ->
           match ls.Liveset.main with
-          | Track.Main t -> Some t
-          | _ -> None)
-      ~of_patch:(fun (p : Liveset.Patch.t) ->
-          let find_main_track = function
-            | `Added (Track.Main t) -> Some (`Added t)
-            | `Removed (Track.Main t) -> Some (`Removed t)
-            | `Modified (Track.Patch.MainPatch pt) -> Some (`Modified pt)
-            | _ -> None
-          in
-          match List.find_map find_main_track p.tracks with
-          | Some main_change -> main_change
-          | None -> `Unchanged)
+          | Track.Main t -> t
+          | _ -> failwith "Liveset.main must always contain Track.Main")
+      ~of_patch:(fun (p : Liveset.Patch.t) -> p.main)
       ~build_value_children:(fun ct (main_track : Track.MainTrack.t) ->
           [Item (create_main_track_item ~get_pointee_name ~note_name_style (match ct with
                | Added -> `Added main_track
