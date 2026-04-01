@@ -1,0 +1,6 @@
+{
+  "name": "generate-changelog",
+  "version": "0.1.0",
+  "description": "Generate changelogs from git commit history following Keep a Changelog format",
+  "keywords": ["changelog", "git", "markdown", "versioning", "conventional-commits"]
+}
