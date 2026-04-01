@@ -2,8 +2,7 @@
  (public_name alsdiff)
  (name alsdiff)
  (modes byte exe)
- (libraries alsdiff_base alsdiff_live alsdiff_output eio_main cmdliner dune-build-info)
- (promote (until-clean)))
+ (libraries alsdiff_base alsdiff_live alsdiff_output eio_main cmdliner dune-build-info))
 
 (executable
  (public_name alsflow)

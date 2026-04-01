@@ -298,11 +298,10 @@ let build_automation_item_from_event_patch event_patch =
   create_automation_item ~get_pointee_name:(fun _ -> "Target") (`Modified automation_patch)
 
 let get_single_event_summary item =
-  check int "single event field" 1 (List.length item.children);
-  let event_field = get_field (List.hd item.children) in
-  match event_field.oldval with
-  | Some (Fstring s) -> s
-  | _ -> fail "Expected event summary as string old value"
+  check int "single event item" 1 (List.length item.children);
+  let event_item = get_item (List.hd item.children) in
+  (* The summary should be in the item's name *)
+  event_item.name
 
 let test_create_automation_item_curve_added_summary () =
   let event_patch = {
@@ -318,7 +317,7 @@ let test_create_automation_item_curve_added_summary () =
   let item = build_automation_item_from_event_patch event_patch in
   let summary = get_single_event_summary item in
   check string "combined summary with curve add"
-    "Time: 1.00->2.00, Value: 10.00->11.00, Curve Added: Curve1=(0.10,0.20) Curve2=(0.30,0.40)"
+    "Event[0]: Time: 1.00->2.00, Value: 10.00->11.00, Curve Added: Curve1=(0.10,0.20) Curve2=(0.30,0.40)"
     summary
 
 let test_create_automation_item_curve_removed_summary () =
@@ -335,7 +334,7 @@ let test_create_automation_item_curve_removed_summary () =
   let item = build_automation_item_from_event_patch event_patch in
   let summary = get_single_event_summary item in
   check string "combined summary with curve remove"
-    "Time: 1.00->2.00, Curve Removed: Curve1=(0.50,0.60) Curve2=(0.70,0.80)"
+    "Event[0]: Time: 1.00->2.00, Curve Removed: Curve1=(0.50,0.60) Curve2=(0.70,0.80)"
     summary
 
 let test_create_automation_item_curve_modified_summary () =
@@ -352,7 +351,7 @@ let test_create_automation_item_curve_modified_summary () =
   let item = build_automation_item_from_event_patch event_patch in
   let summary = get_single_event_summary item in
   check string "combined summary with curve modify"
-    "Time: 1.00->2.00, Value: 10.00->11.00, Curve: C1X: 0.10->0.20, C1Y: 0.20->0.30, C2X: 0.30->0.40, C2Y: 0.40->0.50"
+    "Event[0]: Time: 1.00->2.00, Value: 10.00->11.00, C1X: 0.10->0.20, C1Y: 0.20->0.30, C2X: 0.30->0.40, C2Y: 0.40->0.50"
     summary
 
 let test_create_liveset_item_with_main_only_change () =
