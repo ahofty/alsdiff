@@ -6,6 +6,7 @@
    config
    text_renderer
    stats_renderer
+  json_renderer
    flowchart
    mermaid_renderer
    dot_renderer)

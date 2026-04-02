@@ -18,7 +18,7 @@ let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.st
   let item = View_model.create_liveset_item ~note_name_style change in
   [View_model.Item item]
 
-type output_mode = Tree | Stats
+type output_mode = Tree | Stats | Json
 
 type config = {
   positional_args: string list;
@@ -100,9 +100,14 @@ let render_tree ~config ~reference_path views =
   } in
   Text_renderer.render renderer_config views
 
+let render_json ~config ~reference_path views =
+  let base_renderer_config = build_base_renderer_config ~default_config:Text_renderer.quiet ~reference_path config in
+  Json_renderer.render base_renderer_config views
+
 let diff_cmd ~config ~domain_mgr : int =
-  if config.output_mode = Stats && stats_incompatible_flags_provided config then begin
-    Fmt.epr "Error: --mode stats is incompatible with --prefix-*, \
+  if (config.output_mode = Stats || config.output_mode = Json)
+  && stats_incompatible_flags_provided config then begin
+    Fmt.epr "Error: --mode stats/json is incompatible with --prefix-*, \
              --note-name-style, and --max-collection-items@.";
     if config.git_mode then 2 else 1
   end else begin
@@ -141,6 +146,7 @@ let diff_cmd ~config ~domain_mgr : int =
     let output = match config.output_mode with
       | Stats -> render_stats ~config ~reference_path views
       | Tree -> render_tree ~config ~reference_path views
+      | Json -> render_json ~config ~reference_path views
     in
 
     Fmt.pr "%s" output;
@@ -204,8 +210,8 @@ let stats_mode_doc =
    Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
 
 let output_mode =
-  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. " ^ stats_mode_doc in
-  Arg.(value & opt (enum ["tree", Tree; "stats", Stats]) Tree & info ["mode"] ~docv:"MODE" ~doc)
+  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type, $(b,json)=structured JSON output. " ^ stats_mode_doc in
+  Arg.(value & opt (enum ["tree", Tree; "stats", Stats; "json", Json]) Tree & info ["mode"] ~docv:"MODE" ~doc)
 
 let dump_schema =
   let doc = "Dump JSON schema for configuration to stdout and exit. Does not require FILE1.als or FILE2.als." in
@@ -230,6 +236,8 @@ let cmd =
     `Pre "$(cmd) v1.als v2.als";
     `P "Show change statistics summary:";
     `Pre "$(cmd) v1.als v2.als --mode stats";
+    `P "Output as JSON for programmatic consumption:";
+    `Pre "$(cmd) v1.als v2.als --mode json";
     `P "Compare with compact output:";
     `Pre "$(cmd) v1.als v2.als --preset compact";
     `P "Compare with full details:";
@@ -284,7 +292,8 @@ let cmd =
     `Pre "$(cmd) --config myconfig.json --git path old-file old-hex old-mode new-file new-hex new-mode";
     `S Manpage.s_options;
     `P ("$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. \
-         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). " ^ stats_mode_doc);
+         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). \
+         $(b,json) outputs structured JSON for programmatic consumption. " ^ stats_mode_doc);
     `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery. The --preset option is ignored when --config is specified. Individual CLI options override values from config file.";
     `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over auto-discovery but ignored when --config is specified.";
     `P "$(b,--prefix-added PREFIX) overrides prefix for added items from config file.";
