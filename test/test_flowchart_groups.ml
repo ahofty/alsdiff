@@ -114,7 +114,8 @@ let test_main_keyword_classifier () =
   check bool "main keyword exact" true (is_main_keyword "main");
   check bool "main keyword case-insensitive" true (is_main_keyword "Main");
   check bool "main keyword with spaces" true (is_main_keyword " main ");
-  check bool "main keyword not master" false (is_main_keyword "master")
+  check bool "main keyword master" true (is_main_keyword "master");
+  check bool "main keyword Master case" true (is_main_keyword "Master")
 
 let test_group_parent_target_resolution () =
   let open Flowchart in

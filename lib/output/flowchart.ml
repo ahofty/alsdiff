@@ -184,7 +184,8 @@ let is_group_routing_target (r : Track.Routing.t) : bool =
   is_group_keyword r.target || is_group_keyword (routing_label_target r)
 
 let is_main_keyword (s : string) : bool =
-  String.lowercase_ascii (String.trim s) = "main"
+  let normalized = String.lowercase_ascii (String.trim s) in
+  normalized = "main" || normalized = "master"
 
 let group_subgraph_id (group_id : int) : string =
   sanitize_id ("group_" ^ string_of_int group_id)
