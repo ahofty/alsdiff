@@ -77,3 +77,12 @@ open Alsdiff_live.Track.AudioTrack
 - Tests in `test/test_*.ml` mirror `lib/live/*.ml` structure
 - Use `Test_utils.Utils.resolve_test_data_path` for test data
 - Exception pattern: `try ... with Xml.Xml_error _ -> true`
+- Regression Testing: After any code changes, run `dune runtest` to verify existing tests still pass before committing.
+
+## Debugging
+
+- Investigation: Verify the root cause affects all cases before implementing fixes. Test with multiple examples, not just the reported scenario.
+
+## Code Migration:
+
+- PPX Deriver Migration: 1) Analyze reference implementations (device.ml, track.ml), 2) Identify types to migrate, 3) Create detailed plan, 4) Implement with tests.
