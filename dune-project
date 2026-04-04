@@ -37,7 +37,8 @@
     ppx_deriving_jsonschema
     jsonschema
     fmt
-    ptime)
+    ptime
+    mosaic)
  (tags
   ("ableton live" "git" "version control")))
 

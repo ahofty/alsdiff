@@ -1,0 +1,4 @@
+(library
+ (name alsdiff_tui_lib)
+ (libraries alsdiff_base alsdiff_live alsdiff_output mosaic eio_main)
+ (modules model msg update view app keymap))

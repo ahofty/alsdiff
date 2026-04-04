@@ -30,6 +30,7 @@ depends: [
   "jsonschema"
   "fmt"
   "ptime"
+  "mosaic"
   "odoc" {with-doc}
 ]
 build: [
