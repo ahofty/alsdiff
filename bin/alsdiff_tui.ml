@@ -48,7 +48,7 @@ let tui_cmd ~config ~domain_mgr : int =
     let views = create_views ~note_name_style liveset_change in
 
     (* Run the TUI *)
-    Alsdiff_tui_lib.App.run ~views;
+    Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full ();
 
     0
   | _ ->

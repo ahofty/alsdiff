@@ -1,5 +1,6 @@
-let init ~(views : Alsdiff_output.View_model.view list) : unit -> Model.t * Msg.t Mosaic.Cmd.t =
-  fun () -> (Model.init ~detail_config:Alsdiff_output.Config.compact views, Mosaic.Cmd.none)
+let init ~(views : Alsdiff_output.View_model.view list)
+    ?(detail_config = Alsdiff_output.Config.full) () : Model.t * Msg.t Mosaic.Cmd.t =
+  (Model.init ~detail_config views, Mosaic.Cmd.none)
 
 let update (msg : Msg.t) (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
   let model, cmd = Update.update model msg in
@@ -18,9 +19,10 @@ let subscriptions (model : Model.t) : Msg.t Mosaic.Sub.t =
   in
   Mosaic.Sub.batch [key_sub; resize_sub]
 
-let run ~(views : Alsdiff_output.View_model.view list) : unit =
+let run ~(views : Alsdiff_output.View_model.view list)
+    ?(detail_config = Alsdiff_output.Config.full) () : unit =
   let app = {
-    Mosaic.init = init ~views;
+    Mosaic.init = init ~views ~detail_config;
     update;
     view;
     subscriptions;
