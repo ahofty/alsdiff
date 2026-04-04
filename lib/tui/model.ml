@@ -3,7 +3,16 @@ open View_model
 
 module StringSet = Set.Make (String)
 
+type mode = Browser | Diff
+
+type file_entry = {
+  name : string;
+  path : string;
+  is_dir : bool;
+}
+
 type t = {
+  mode : mode;
   views : view list;
   config : Config.detail_config;
   cursor_path : string list;
@@ -17,6 +26,12 @@ type t = {
   flat_nodes : tree_node list;
   cursor_index : int;
   viewport_height : int;
+  (* Browser state *)
+  browser_root : string;
+  browser_cwd : string;
+  browser_entries : file_entry list;
+  browser_cursor : int;
+  browser_selected : string list;
 }
 
 and tree_node = {
@@ -113,6 +128,64 @@ let rec build_nodes_with_config
         end else []
     ) views)
 
+let read_dir_entries ~root:_ ~cwd : file_entry list =
+  let entries =
+    try
+      let ds = Unix.opendir cwd in
+      let rec loop acc =
+        match Unix.readdir ds with
+        | exception End_of_file -> Unix.closedir ds; acc
+        | name ->
+          if name = "." then loop acc
+          else if name = ".." then loop acc
+          else begin
+            let full_path = Filename.concat cwd name in
+            let is_dir =
+              try Unix.(stat full_path).st_kind = S_DIR
+              with Unix.Unix_error _ -> false
+            in
+            let is_als = Filename.check_suffix name ".als" in
+            if is_dir || is_als then
+              loop ({ name; path = full_path; is_dir } :: acc)
+            else loop acc
+          end
+      in
+      loop []
+    with Unix.Unix_error _ -> []
+  in
+  let sort_key (e : file_entry) = (not e.is_dir, String.lowercase_ascii e.name) in
+  List.sort (fun a b -> compare (sort_key a) (sort_key b)) entries
+
+let init_browser ~root () : t =
+  let cwd = root in
+  let entries = read_dir_entries ~root ~cwd in
+  let detail_modes = make_detail_modes () in
+  let detail_mode_index =
+    match List.find_index (fun cfg -> cfg = Config.full) detail_modes with
+    | Some idx -> idx
+    | None -> 1
+  in
+  {
+    mode = Browser;
+    views = [];
+    config = Config.full;
+    cursor_path = [];
+    expanded_paths = StringSet.empty;
+    search_query = None;
+    search_mode = false;
+    filter_change = None;
+    detail_modes;
+    detail_mode_index;
+    flat_nodes = [];
+    cursor_index = 0;
+    viewport_height = 24;
+    browser_root = root;
+    browser_cwd = cwd;
+    browser_entries = entries;
+    browser_cursor = 0;
+    browser_selected = [];
+  }
+
 let init ?(detail_config = Config.compact) (views : view list) : t =
   let detail_modes = make_detail_modes () in
   let detail_mode_index =
@@ -122,6 +195,7 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
   in
   let flat_nodes = build_nodes_with_config ~cfg:detail_config views in
   {
+    mode = Diff;
     views;
     config = detail_config;
     cursor_path = [];
@@ -134,4 +208,9 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
     flat_nodes;
     cursor_index = 0;
     viewport_height = 24;
+    browser_root = "";
+    browser_cwd = "";
+    browser_entries = [];
+    browser_cursor = 0;
+    browser_selected = [];
   }

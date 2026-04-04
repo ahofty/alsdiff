@@ -1,11 +1,20 @@
 open Msg
 
-let char_to_msg c =
+let char_to_msg_browser c =
   match c with
   | 'q' -> Some Quit
+  | 'j' -> Some MoveDown
+  | 'k' -> Some MoveUp
+  | 'n' -> Some MoveDown
+  | 'p' -> Some MoveUp
+  | _ -> None
+
+let char_to_msg_diff c =
+  match c with
+  | 'q' -> Some BackToBrowser
   | 'd' -> Some CycleDetailMode
   | '/' -> Some StartSearch
-  | 'f' -> Some (ToggleChangeFilter None)  (* update.ml cycles the filter *)
+  | 'f' -> Some (ToggleChangeFilter None)
   | 'n' -> Some MoveDown
   | 'p' -> Some MoveUp
   | 'h' -> Some MoveLeft
@@ -13,24 +22,35 @@ let char_to_msg c =
   | 'k' -> Some MoveUp
   | 'l' -> Some MoveRight
   | ' ' -> Some ToggleExpand
-  | '\027' -> Some ClearSearch (* Escape *)
   | _ -> None
 
-let handle_key ~(search_mode:bool) (ev : Mosaic.Event.key) : t option =
+let handle_key ~(mode : Model.mode) ~(search_mode : bool) (ev : Mosaic.Event.key) : t option
+  =
   let key_data = Mosaic.Event.Key.data ev in
   match key_data.Matrix.Input.Key.key with
   | Matrix.Input.Key.Char c ->
     if search_mode then
       Some (UpdateSearch (Uchar.to_char c |> String.make 1))
     else
-      char_to_msg (Uchar.to_char c)
+      (match mode with
+       | Model.Browser -> char_to_msg_browser (Uchar.to_char c)
+       | Model.Diff -> char_to_msg_diff (Uchar.to_char c))
   | Matrix.Input.Key.Up -> if search_mode then None else Some MoveUp
   | Matrix.Input.Key.Down -> if search_mode then None else Some MoveDown
   | Matrix.Input.Key.Left -> if search_mode then None else Some MoveLeft
   | Matrix.Input.Key.Right -> if search_mode then None else Some MoveRight
   | Matrix.Input.Key.Enter ->
-    if search_mode then Some EndSearch else Some ToggleExpand
-  | Matrix.Input.Key.Escape -> Some ClearSearch
+    if search_mode then Some EndSearch
+    else
+      (match mode with
+       | Model.Browser -> Some BrowserActivate
+       | Model.Diff -> Some ToggleExpand)
+  | Matrix.Input.Key.Escape ->
+    if search_mode then Some ClearSearch
+    else
+      (match mode with
+       | Model.Browser -> Some BrowserGoUp
+       | Model.Diff -> Some BackToBrowser)
   | Matrix.Input.Key.Backspace ->
     if search_mode then Some (UpdateSearch "\127") else None
   | _ -> None

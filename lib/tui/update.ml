@@ -182,20 +182,143 @@ let jump_to_path (model : Model.t) (path : string list) : Model.t =
     in
     { model with expanded_paths = expanded; cursor_index = new_index }
 
+let rec get_nth lst n = match n, lst with
+  | 0, x :: _ -> Some x
+  | _, [] -> None
+  | n, _ :: xs -> get_nth xs (n - 1)
+
+let browser_move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
+  let max_idx = max 0 (List.length model.browser_entries - 1) in
+  let new_idx = match direction with
+    | Msg.MoveUp -> max 0 (model.browser_cursor - 1)
+    | Msg.MoveDown -> min max_idx (model.browser_cursor + 1)
+    | _ -> model.browser_cursor
+  in
+  { model with browser_cursor = new_idx }
+
+let browser_go_up (model : Model.t) : Model.t =
+  if model.browser_cwd = model.browser_root then model
+  else begin
+    let parent = Filename.dirname model.browser_cwd in
+    let entries = Model.read_dir_entries ~root:model.browser_root ~cwd:parent in
+    { model with
+      browser_cwd = parent;
+      browser_entries = entries;
+      browser_cursor = 0;
+    }
+  end
+
+let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
+  match get_nth model.browser_entries model.browser_cursor with
+  | None -> (model, Mosaic.Cmd.none)
+  | Some entry ->
+    if entry.is_dir then
+      let entries = Model.read_dir_entries ~root:model.browser_root ~cwd:entry.path in
+      ({ model with
+         browser_cwd = entry.path;
+         browser_entries = entries;
+         browser_cursor = 0;
+       }, Mosaic.Cmd.none)
+    else begin
+      (* .als file selected *)
+      let new_selected =
+        if List.mem entry.path model.browser_selected then
+          List.filter (fun p -> p <> entry.path) model.browser_selected
+        else if List.length model.browser_selected < 2 then
+          model.browser_selected @ [entry.path]
+        else
+          [List.nth model.browser_selected 1; entry.path]
+      in
+      if List.length new_selected = 2 then begin
+        (* Load both files and compute diff *)
+        let f1 = List.nth new_selected 0 in
+        let f2 = List.nth new_selected 1 in
+        (try
+           let xml1 = Alsdiff_base.File.open_als f1 in
+           let ls1 = Alsdiff_live.Liveset.create xml1 f1 in
+           let xml2 = Alsdiff_base.File.open_als f2 in
+           let ls2 = Alsdiff_live.Liveset.create xml2 f2 in
+           let patch = Alsdiff_live.Liveset.diff ls1 ls2 in
+           let has_changes = not (Alsdiff_live.Liveset.Patch.is_empty patch) in
+           let change =
+             if has_changes then `Modified patch else `Unchanged
+           in
+           let views = [
+             Alsdiff_output.View_model.Item
+               (Alsdiff_output.View_model.create_liveset_item
+                  ~note_name_style:Alsdiff_output.View_model.Sharp change)
+           ] in
+           let detail_config = Alsdiff_output.Config.full in
+           let flat_nodes = Model.build_nodes_with_config ~cfg:detail_config views in
+           ({ model with
+              mode = Model.Diff;
+              views;
+              config = detail_config;
+              flat_nodes;
+              cursor_index = 0;
+              expanded_paths = Model.StringSet.empty;
+              search_query = None;
+              search_mode = false;
+              filter_change = None;
+              browser_selected = [];
+            }, Mosaic.Cmd.none)
+         with
+         | Alsdiff_base.File.File_error _
+         | Alsdiff_base.Xml.Xml_error _ -> (model, Mosaic.Cmd.none))
+      end else
+        ({ model with browser_selected = new_selected }, Mosaic.Cmd.none)
+    end
+
 let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
-  match msg with
-  | Msg.MoveUp | Msg.MoveDown -> (move_cursor model msg, Mosaic.Cmd.none)
-  | Msg.MoveLeft | Msg.MoveRight -> (model, Mosaic.Cmd.none) (* TODO: implement horizontal scroll *)
-  | Msg.ToggleExpand -> (toggle_expand model, Mosaic.Cmd.none)
-  | Msg.CycleDetailMode ->
-    let new_model = cycle_detail_mode model in
-    (* Rebuild views with new config *)
-    (new_model, Mosaic.Cmd.none)
-  | Msg.StartSearch -> (start_search model, Mosaic.Cmd.none)
-  | Msg.UpdateSearch query -> (update_search model query, Mosaic.Cmd.none)
-  | Msg.ClearSearch -> (clear_search model, Mosaic.Cmd.none)
-  | Msg.EndSearch -> (end_search model, Mosaic.Cmd.none)
-  | Msg.ToggleChangeFilter filter -> (toggle_change_filter model filter, Mosaic.Cmd.none)
-  | Msg.JumpToPath path -> (jump_to_path model path, Mosaic.Cmd.none)
-  | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
-  | Msg.Quit -> (model, Mosaic.Cmd.Quit)
+  match model.mode with
+  | Model.Browser ->
+    (match msg with
+     | Msg.MoveUp | Msg.MoveDown -> (browser_move_cursor model msg, Mosaic.Cmd.none)
+     | Msg.BrowserActivate -> browser_activate model
+     | Msg.BrowserGoUp -> (browser_go_up model, Mosaic.Cmd.none)
+     | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
+     | Msg.Quit -> (model, Mosaic.Cmd.Quit)
+     | _ -> (model, Mosaic.Cmd.none))
+  | Model.Diff ->
+    (match msg with
+     | Msg.MoveUp | Msg.MoveDown -> (move_cursor model msg, Mosaic.Cmd.none)
+     | Msg.MoveLeft | Msg.MoveRight -> (model, Mosaic.Cmd.none)
+     | Msg.ToggleExpand -> (toggle_expand model, Mosaic.Cmd.none)
+     | Msg.CycleDetailMode ->
+       let new_model = cycle_detail_mode model in
+       (new_model, Mosaic.Cmd.none)
+     | Msg.StartSearch -> (start_search model, Mosaic.Cmd.none)
+     | Msg.UpdateSearch query -> (update_search model query, Mosaic.Cmd.none)
+     | Msg.ClearSearch -> (clear_search model, Mosaic.Cmd.none)
+     | Msg.EndSearch -> (end_search model, Mosaic.Cmd.none)
+     | Msg.ToggleChangeFilter filter -> (toggle_change_filter model filter, Mosaic.Cmd.none)
+     | Msg.JumpToPath path -> (jump_to_path model path, Mosaic.Cmd.none)
+     | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
+     | Msg.Quit ->
+       if model.browser_root <> "" then
+         (* Return to browser mode *)
+         let entries =
+           Model.read_dir_entries ~root:model.browser_root ~cwd:model.browser_cwd
+         in
+         ({ model with
+            mode = Model.Browser;
+            browser_entries = entries;
+            browser_cursor = 0;
+            browser_selected = [];
+          }, Mosaic.Cmd.none)
+       else
+         (model, Mosaic.Cmd.Quit)
+     | Msg.BackToBrowser ->
+       if model.browser_root <> "" then
+         let entries =
+           Model.read_dir_entries ~root:model.browser_root ~cwd:model.browser_cwd
+         in
+         ({ model with
+            mode = Model.Browser;
+            browser_entries = entries;
+            browser_cursor = 0;
+            browser_selected = [];
+          }, Mosaic.Cmd.none)
+       else
+         (model, Mosaic.Cmd.Quit)
+     | Msg.BrowserActivate | Msg.BrowserGoUp -> (model, Mosaic.Cmd.none))

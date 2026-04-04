@@ -25,6 +25,9 @@ let config_ref : config option ref = ref None
 
 let tui_cmd ~config ~domain_mgr : int =
   match config.positional_args with
+  | [] ->
+    Alsdiff_tui_lib.App.run_browser ~root:(Sys.getcwd ()) ();
+    0
   | [f1; f2] ->
     let liveset1, liveset2 = Fiber.pair
         (fun () -> load_liveset ~domain_mgr f1)
@@ -52,7 +55,7 @@ let tui_cmd ~config ~domain_mgr : int =
 
     0
   | _ ->
-    Fmt.epr "Error: FILE1.als and FILE2.als are required for diff@.";
+    Fmt.epr "Error: Usage: alsdiff-tui [FILE1.als FILE2.als]@.";
     1
 
 let positional_args =
@@ -103,9 +106,9 @@ let main () =
     else match !config_ref with
       | None -> 0
       | Some cfg ->
-        if List.length cfg.positional_args <> 2 then begin
-          Fmt.epr "Error: FILE1.als and FILE2.als are required for diff@.";
-          Fmt.epr "Usage: alsdiff-tui FILE1.als FILE2.als@.";
+        let n = List.length cfg.positional_args in
+        if n <> 0 && n <> 2 then begin
+          Fmt.epr "Error: Usage: alsdiff-tui [FILE1.als FILE2.als]@.";
           1
         end else begin
           Eio_main.run @@ fun env ->

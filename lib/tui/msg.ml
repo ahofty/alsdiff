@@ -13,3 +13,6 @@ type t =
   | JumpToPath of string list
   | Resize of int * int
   | Quit
+  | BrowserActivate
+  | BrowserGoUp
+  | BackToBrowser
