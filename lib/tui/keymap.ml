@@ -53,4 +53,8 @@ let handle_key ~(mode : Model.mode) ~(search_mode : bool) (ev : Mosaic.Event.key
        | Model.Diff -> Some BackToBrowser)
   | Matrix.Input.Key.Backspace ->
     if search_mode then Some (UpdateSearch "\127") else None
+  | Matrix.Input.Key.Page_up -> if search_mode then None else Some PageUp
+  | Matrix.Input.Key.Page_down -> if search_mode then None else Some PageDown
+  | Matrix.Input.Key.Home -> if search_mode then None else Some MoveToStart
+  | Matrix.Input.Key.End -> if search_mode then None else Some MoveToEnd
   | _ -> None

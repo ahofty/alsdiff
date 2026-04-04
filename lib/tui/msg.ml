@@ -16,3 +16,7 @@ type t =
   | BrowserActivate
   | BrowserGoUp
   | BackToBrowser
+  | PageUp
+  | PageDown
+  | MoveToStart
+  | MoveToEnd

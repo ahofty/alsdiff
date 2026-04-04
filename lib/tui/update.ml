@@ -75,9 +75,15 @@ let get_visible_nodes (model : Model.t) : Model.tree_node list =
 
 let move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
   let visible = get_visible_nodes model in
+  let max_idx = max 0 (List.length visible - 1) in
+  let page_size = model.viewport_height - 1 in
   let new_index = match direction with
     | Msg.MoveUp -> max 0 (model.cursor_index - 1)
-    | Msg.MoveDown -> min (max 0 (List.length visible - 1)) (model.cursor_index + 1)
+    | Msg.MoveDown -> min max_idx (model.cursor_index + 1)
+    | Msg.PageUp -> max 0 (model.cursor_index - page_size)
+    | Msg.PageDown -> min max_idx (model.cursor_index + page_size)
+    | Msg.MoveToStart -> 0
+    | Msg.MoveToEnd -> max_idx
     | _ -> model.cursor_index
   in
   { model with cursor_index = new_index }
@@ -189,9 +195,14 @@ let rec get_nth lst n = match n, lst with
 
 let browser_move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
   let max_idx = max 0 (List.length model.browser_entries - 1) in
+  let page_size = model.viewport_height - 2 in
   let new_idx = match direction with
     | Msg.MoveUp -> max 0 (model.browser_cursor - 1)
     | Msg.MoveDown -> min max_idx (model.browser_cursor + 1)
+    | Msg.PageUp -> max 0 (model.browser_cursor - page_size)
+    | Msg.PageDown -> min max_idx (model.browser_cursor + page_size)
+    | Msg.MoveToStart -> 0
+    | Msg.MoveToEnd -> max_idx
     | _ -> model.browser_cursor
   in
   { model with browser_cursor = new_idx }
@@ -273,7 +284,7 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
   match model.mode with
   | Model.Browser ->
     (match msg with
-     | Msg.MoveUp | Msg.MoveDown -> (browser_move_cursor model msg, Mosaic.Cmd.none)
+     | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd -> (browser_move_cursor model msg, Mosaic.Cmd.none)
      | Msg.BrowserActivate -> browser_activate model
      | Msg.BrowserGoUp -> (browser_go_up model, Mosaic.Cmd.none)
      | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
@@ -281,7 +292,7 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
      | _ -> (model, Mosaic.Cmd.none))
   | Model.Diff ->
     (match msg with
-     | Msg.MoveUp | Msg.MoveDown -> (move_cursor model msg, Mosaic.Cmd.none)
+     | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd -> (move_cursor model msg, Mosaic.Cmd.none)
      | Msg.MoveLeft | Msg.MoveRight -> (model, Mosaic.Cmd.none)
      | Msg.ToggleExpand -> (toggle_expand model, Mosaic.Cmd.none)
      | Msg.CycleDetailMode ->
