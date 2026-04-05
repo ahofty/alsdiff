@@ -3,7 +3,12 @@ open View_model
 
 module StringSet = Set.Make (String)
 
-type mode = Browser | Diff
+type mode = Browser | Diff | Help | Stats
+
+type export_format_option = Text | Json | Statistics
+
+(* Centralized list of export format options *)
+let export_formats = [Text; Json; Statistics]
 
 type file_entry = {
   name : string;
@@ -13,6 +18,7 @@ type file_entry = {
 
 type t = {
   mode : mode;
+  previous_mode : mode option;
   views : view list;
   config : Config.detail_config;
   cursor_path : string list;
@@ -32,6 +38,14 @@ type t = {
   browser_entries : file_entry list;
   browser_cursor : int;
   browser_selected : string list;
+  (* Navigation history *)
+  nav_back : string list list;
+  nav_forward : string list list;
+  (* Export selector state *)
+  export_selector_active : bool;
+  export_selected_format : export_format_option;
+  (* Focus mode - show only descendants of focused node *)
+  focused_path : string list option;
 }
 
 and tree_node = {
@@ -42,6 +56,52 @@ and tree_node = {
   is_expandable : bool;
   children : tree_node list;
 }
+
+type change_stats = {
+  added : int;
+  removed : int;
+  modified : int;
+  unchanged : int;
+  total : int;
+}
+
+type domain_stats = {
+  name : string;
+  changes : change_stats;
+}
+
+let compute_stats (nodes : tree_node list) : change_stats * domain_stats list =
+  let rec count_nodes acc = function
+    | [] -> acc
+    | node :: rest ->
+      let new_acc = match node.change with
+        | View_model.Added -> { acc with added = acc.added + 1; total = acc.total + 1 }
+        | View_model.Removed -> { acc with removed = acc.removed + 1; total = acc.total + 1 }
+        | View_model.Modified -> { acc with modified = acc.modified + 1; total = acc.total + 1 }
+        | View_model.Unchanged -> { acc with unchanged = acc.unchanged + 1; total = acc.total + 1 }
+      in
+      count_nodes (count_nodes new_acc node.children) rest
+  in
+  let total_stats = count_nodes { added = 0; removed = 0; modified = 0; unchanged = 0; total = 0 } nodes in
+  (* Group by top-level domain (first path element) *)
+  let group_by_domain nodes =
+    let group_helper acc nodes =
+      List.fold_left (fun acc' node ->
+          let domain = match node.path with | [] -> "Root" | d :: _ -> d in
+          let stats = try List.assoc domain acc' with Not_found -> { added = 0; removed = 0; modified = 0; unchanged = 0; total = 0 } in
+          let node_stats = match node.change with
+            | View_model.Added -> { stats with added = stats.added + 1; total = stats.total + 1 }
+            | View_model.Removed -> { stats with removed = stats.removed + 1; total = stats.total + 1 }
+            | View_model.Modified -> { stats with modified = stats.modified + 1; total = stats.total + 1 }
+            | View_model.Unchanged -> { stats with unchanged = stats.unchanged + 1; total = stats.total + 1 }
+          in
+          List.remove_assoc domain acc' @ [(domain, node_stats)]
+        ) acc nodes
+    in
+    group_helper [] nodes
+  in
+  let domain_list = List.map (fun (name, changes) -> { name; changes }) (group_by_domain nodes) in
+  (total_stats, domain_list)
 
 (* Format field value for display *)
 let format_field_value = function
@@ -167,6 +227,7 @@ let init_browser ~root () : t =
   in
   {
     mode = Browser;
+    previous_mode = None;
     views = [];
     config = Config.full;
     cursor_path = [];
@@ -184,6 +245,11 @@ let init_browser ~root () : t =
     browser_entries = entries;
     browser_cursor = 0;
     browser_selected = [];
+    nav_back = [];
+    nav_forward = [];
+    export_selector_active = false;
+    export_selected_format = Text;  (* Default to Text *)
+    focused_path = None;
   }
 
 let init ?(detail_config = Config.compact) (views : view list) : t =
@@ -196,6 +262,7 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
   let flat_nodes = build_nodes_with_config ~cfg:detail_config views in
   {
     mode = Diff;
+    previous_mode = None;
     views;
     config = detail_config;
     cursor_path = [];
@@ -213,4 +280,9 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
     browser_entries = [];
     browser_cursor = 0;
     browser_selected = [];
+    nav_back = [];
+    nav_forward = [];
+    export_selector_active = false;
+    export_selected_format = Text;  (* Default to Text *)
+    focused_path = None;
   }

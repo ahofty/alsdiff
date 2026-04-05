@@ -14,7 +14,11 @@ let view (model : Model.t) : Msg.t Mosaic.t =
 
 let subscriptions (model : Model.t) : Msg.t Mosaic.Sub.t =
   let key_sub = Mosaic.Sub.on_key (fun key_event ->
-      Keymap.handle_key ~mode:model.mode ~search_mode:model.search_mode key_event
+      Keymap.handle_key
+        ~mode:model.mode
+        ~search_mode:model.search_mode
+        ~export_selector_active:model.export_selector_active
+        key_event
     )
   in
   let resize_sub = Mosaic.Sub.on_resize (fun ~width ~height ->

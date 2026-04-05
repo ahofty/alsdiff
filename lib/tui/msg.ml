@@ -20,3 +20,17 @@ type t =
   | PageDown
   | MoveToStart
   | MoveToEnd
+  | ShowHelp
+  | HideHelp
+  | ToggleHelp
+  | ShowStats
+  | HideStats
+  | ToggleStats
+  | NavBack
+  | NavForward
+  | ShowExportSelector
+  | HideExportSelector
+  | MoveExportSelection of int
+  | ExecuteExport
+  | EnterFocus
+  | ExitFocus

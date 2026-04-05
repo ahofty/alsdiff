@@ -50,6 +50,12 @@ let rec filter_nodes_by_change_type
       else None
     ) nodes
 
+(* Filter tree nodes to show only descendants of focused path *)
+let filter_nodes_by_focus ~(focus_path:string list) (nodes : Model.tree_node list) : Model.tree_node list =
+  match List.find_opt (fun node -> node.path = focus_path) nodes with
+  | None -> []
+  | Some focus_node -> [focus_node]
+
 let get_visible_nodes (model : Model.t) : Model.tree_node list =
   let nodes_after_search = match model.search_query with
     | Some q when q <> "" -> filter_nodes_by_query ~query:q model.flat_nodes
@@ -59,6 +65,10 @@ let get_visible_nodes (model : Model.t) : Model.tree_node list =
     | Some change_type ->
       filter_nodes_by_change_type ~change_type nodes_after_search
     | None -> nodes_after_search
+  in
+  let nodes_after_focus = match model.focused_path with
+    | Some focus_path -> filter_nodes_by_focus ~focus_path nodes_to_filter
+    | None -> nodes_to_filter
   in
   let rec visible_helper (nodes : Model.tree_node list) : Model.tree_node list =
     List.filter_map (fun node ->
@@ -71,7 +81,7 @@ let get_visible_nodes (model : Model.t) : Model.tree_node list =
       ) nodes
     |> List.concat
   in
-  visible_helper nodes_to_filter
+  visible_helper nodes_after_focus
 
 let move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
   let visible = get_visible_nodes model in
@@ -86,7 +96,28 @@ let move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
     | Msg.MoveToEnd -> max_idx
     | _ -> model.cursor_index
   in
-  { model with cursor_index = new_index }
+  (* Push current position to back history before moving *)
+  let get_current_path model =
+    let visible = get_visible_nodes model in
+    let rec get_nth lst n = match n, lst with
+      | 0, x :: _ -> Some x
+      | _, [] -> None
+      | n, _ :: xs -> get_nth xs (n - 1)
+    in
+    match get_nth visible model.cursor_index with
+    | None -> None
+    | Some node -> Some node.path
+  in
+  let new_model = { model with cursor_index = new_index } in
+  match direction with
+  | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd ->
+    (match get_current_path model with
+     | None -> new_model
+     | Some path ->
+       if model.nav_forward = [] then
+         { new_model with nav_back = path :: model.nav_back; nav_forward = [] }
+       else new_model)
+  | _ -> new_model
 
 let toggle_expand (model : Model.t) : Model.t =
   let visible = get_visible_nodes model in
@@ -188,6 +219,48 @@ let jump_to_path (model : Model.t) (path : string list) : Model.t =
     in
     { model with expanded_paths = expanded; cursor_index = new_index }
 
+let nav_back (model : Model.t) : Model.t =
+  match model.nav_back with
+  | [] -> model
+  | prev_path :: rest ->
+    let current_path =
+      let visible = get_visible_nodes model in
+      let rec get_nth lst n = match n, lst with
+        | 0, x :: _ -> Some x
+        | _, [] -> None
+        | n, _ :: xs -> get_nth xs (n - 1)
+      in
+      match get_nth visible model.cursor_index with
+      | None -> None
+      | Some node -> Some node.path
+    in
+    let new_forward = match current_path with
+      | None -> model.nav_forward
+      | Some p -> p :: model.nav_forward
+    in
+    jump_to_path { model with nav_back = rest; nav_forward = new_forward } prev_path
+
+let nav_forward (model : Model.t) : Model.t =
+  match model.nav_forward with
+  | [] -> model
+  | next_path :: rest ->
+    let current_path =
+      let visible = get_visible_nodes model in
+      let rec get_nth lst n = match n, lst with
+        | 0, x :: _ -> Some x
+        | _, [] -> None
+        | n, _ :: xs -> get_nth xs (n - 1)
+      in
+      match get_nth visible model.cursor_index with
+      | None -> None
+      | Some node -> Some node.path
+    in
+    let new_back = match current_path with
+      | None -> model.nav_back
+      | Some p -> p :: model.nav_back
+    in
+    jump_to_path { model with nav_back = new_back; nav_forward = rest } next_path
+
 let rec get_nth lst n = match n, lst with
   | 0, x :: _ -> Some x
   | _, [] -> None
@@ -280,18 +353,118 @@ let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
         ({ model with browser_selected = new_selected }, Mosaic.Cmd.none)
     end
 
+let show_export_selector (model : Model.t) : Model.t =
+  { model with export_selector_active = true }
+
+let hide_export_selector (model : Model.t) : Model.t =
+  { model with export_selector_active = false }
+
+let move_export_selection (model : Model.t) (direction : int) : Model.t =
+  let formats = export_formats in
+  let current_idx = match List.find_index
+                            (fun f -> f = model.export_selected_format) formats with
+  | Some idx -> idx
+  | None -> 0
+  in
+  let max_idx = List.length formats - 1 in
+  let new_idx = max 0 (min max_idx (current_idx + direction)) in
+  { model with export_selected_format = List.nth formats new_idx }
+
+let execute_export (model : Model.t) : Model.t =
+  let output = try
+      match model.export_selected_format with
+      | Model.Text ->
+        Alsdiff_output.Text_renderer.render model.config model.views
+      | Model.Json ->
+        Alsdiff_output.Json_renderer.render model.config model.views
+      | Model.Statistics ->
+        Alsdiff_output.Stats_renderer.render model.config model.views
+    with
+    | e ->
+      Format.eprintf "Export failed: %s\n" (Printexc.to_string e);
+      "Export error - see terminal output"
+  in
+  (* Output to stdout *)
+  Printf.printf "%s\n" output;
+  flush stdout;
+  { model with export_selector_active = false }
+
+let enter_focus (model : Model.t) : Model.t =
+  let visible = get_visible_nodes model in
+  let rec get_nth lst n = match n, lst with
+    | 0, x :: _ -> Some x
+    | _, [] -> None
+    | n, _ :: xs -> get_nth xs (n - 1)
+  in
+  match get_nth visible model.cursor_index with
+  | None -> model
+  | Some node ->
+    if node.is_expandable then
+      { model with focused_path = Some node.path; cursor_index = 0 }
+    else model
+
+let exit_focus (model : Model.t) : Model.t =
+  { model with focused_path = None; cursor_index = 0 }
+
 let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
   match model.mode with
+  | Model.Help ->
+    (* Any key closes help and returns to previous mode *)
+    (match msg with
+     | Msg.HideHelp | Msg.ToggleHelp ->
+       let return_mode = match model.previous_mode with
+         | Some m -> m
+         | None -> Model.Diff
+       in
+       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none)
+     | _ ->
+       let return_mode = match model.previous_mode with
+         | Some m -> m
+         | None -> Model.Diff
+       in
+       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none))
+  | Model.Stats ->
+    (* Any key closes stats and returns to previous mode *)
+    (match msg with
+     | Msg.HideStats | Msg.ToggleStats ->
+       let return_mode = match model.previous_mode with
+         | Some m -> m
+         | None -> Model.Diff
+       in
+       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none)
+     | _ ->
+       let return_mode = match model.previous_mode with
+         | Some m -> m
+         | None -> Model.Diff
+       in
+       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none))
   | Model.Browser ->
     (match msg with
+     | Msg.ShowHelp | Msg.ToggleHelp -> ({ model with mode = Model.Help; previous_mode = Some model.mode }, Mosaic.Cmd.none)
+     | Msg.ShowStats | Msg.ToggleStats -> ({ model with mode = Model.Stats; previous_mode = Some model.mode }, Mosaic.Cmd.none)
      | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd -> (browser_move_cursor model msg, Mosaic.Cmd.none)
      | Msg.BrowserActivate -> browser_activate model
      | Msg.BrowserGoUp -> (browser_go_up model, Mosaic.Cmd.none)
      | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
      | Msg.Quit -> (model, Mosaic.Cmd.Quit)
+     | Msg.HideHelp | Msg.HideStats -> (model, Mosaic.Cmd.none)
      | _ -> (model, Mosaic.Cmd.none))
   | Model.Diff ->
     (match msg with
+     | Msg.ShowExportSelector -> (show_export_selector model, Mosaic.Cmd.none)
+     | Msg.HideExportSelector -> (hide_export_selector model, Mosaic.Cmd.none)
+     | Msg.MoveExportSelection dir ->
+       if model.export_selector_active
+       then (move_export_selection model dir, Mosaic.Cmd.none)
+       else (model, Mosaic.Cmd.none)
+     | Msg.ExecuteExport ->
+       (execute_export model, Mosaic.Cmd.none)
+     | Msg.ShowHelp | Msg.ToggleHelp -> ({ model with mode = Model.Help; previous_mode = Some model.mode }, Mosaic.Cmd.none)
+     | Msg.ShowStats | Msg.ToggleStats -> ({ model with mode = Model.Stats; previous_mode = Some model.mode }, Mosaic.Cmd.none)
+     | Msg.NavBack -> (nav_back model, Mosaic.Cmd.none)
+     | Msg.NavForward -> (nav_forward model, Mosaic.Cmd.none)
+     | Msg.EnterFocus -> (enter_focus model, Mosaic.Cmd.none)
+     | Msg.ExitFocus -> (exit_focus model, Mosaic.Cmd.none)
      | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd -> (move_cursor model msg, Mosaic.Cmd.none)
      | Msg.MoveLeft | Msg.MoveRight -> (model, Mosaic.Cmd.none)
      | Msg.ToggleExpand -> (toggle_expand model, Mosaic.Cmd.none)
@@ -320,16 +493,21 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
        else
          (model, Mosaic.Cmd.Quit)
      | Msg.BackToBrowser ->
-       if model.browser_root <> "" then
-         let entries =
-           Model.read_dir_entries ~root:model.browser_root ~cwd:model.browser_cwd
-         in
-         ({ model with
-            mode = Model.Browser;
-            browser_entries = entries;
-            browser_cursor = 0;
-            browser_selected = [];
-          }, Mosaic.Cmd.none)
-       else
-         (model, Mosaic.Cmd.Quit)
-     | Msg.BrowserActivate | Msg.BrowserGoUp -> (model, Mosaic.Cmd.none))
+       (match model.focused_path with
+        | Some _ ->
+          (* Exit focus mode first *)
+          ({ model with focused_path = None; cursor_index = 0 }, Mosaic.Cmd.none)
+        | None ->
+          if model.browser_root <> "" then
+            let entries =
+              Model.read_dir_entries ~root:model.browser_root ~cwd:model.browser_cwd
+            in
+            ({ model with
+               mode = Model.Browser;
+               browser_entries = entries;
+               browser_cursor = 0;
+               browser_selected = [];
+             }, Mosaic.Cmd.none)
+          else
+            (model, Mosaic.Cmd.Quit))
+     | Msg.BrowserActivate | Msg.BrowserGoUp | Msg.HideHelp | Msg.HideStats -> (model, Mosaic.Cmd.none))
