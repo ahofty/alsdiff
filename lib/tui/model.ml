@@ -31,6 +31,7 @@ type t = {
   (* Track flat list of all nodes for navigation *)
   flat_nodes : tree_node list;
   cursor_index : int;
+  viewport_width : int;
   viewport_height : int;
   (* Browser state *)
   browser_root : string;
@@ -238,6 +239,7 @@ let init_browser ~root () : t =
     detail_mode_index;
     flat_nodes = [];
     cursor_index = 0;
+    viewport_width = 80;
     viewport_height = 24;
     last_error = None;
     browser_root = root;
@@ -273,6 +275,7 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
     detail_mode_index;
     flat_nodes;
     cursor_index = 0;
+    viewport_width = 80;
     viewport_height = 24;
     last_error = None;
     browser_root = "";

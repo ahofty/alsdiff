@@ -1,6 +1,17 @@
 open Model
 open Mosaic.Ansi.Style
 
+let pad_to_width ~width text =
+  (* Compute display width (column count), not byte length.
+     UTF-8 continuation bytes (0x80–0xBF) don't advance the cursor. *)
+  let display_len =
+    let n = ref 0 in
+    String.iter (fun c -> if Char.code c land 0xC0 <> 0x80 then incr n) text;
+    !n
+  in
+  if display_len >= width then text
+  else text ^ String.make (width - display_len) ' '
+
 let render_browser_entry
     ~(is_cursor : bool) (is_selected : bool) (entry : Model.file_entry) : Msg.t Mosaic.t =
   let icon = if entry.is_dir then " " else "  " in
@@ -40,7 +51,7 @@ let render_browser_status_bar (model : Model.t) : Msg.t Mosaic.t =
     | Some _ -> bg Mosaic.Ansi.Color.red default
     | None -> bg Mosaic.Ansi.Color.blue default
   in
-  Mosaic.text ~style:bar_style status
+  Mosaic.text ~style:bar_style (pad_to_width ~width:model.viewport_width status)
 
 let view_browser (model : Model.t) : Msg.t Mosaic.t =
   let total = List.length model.browser_entries in
@@ -136,7 +147,7 @@ let render_status_bar (model : Model.t) : Msg.t Mosaic.t =
   let non_empty_parts = List.filter (fun s -> s <> "") parts in
   let status = String.concat " | " non_empty_parts in
   let bar_style = bg Mosaic.Ansi.Color.blue default in
-  Mosaic.text ~style:bar_style status
+  Mosaic.text ~style:bar_style (pad_to_width ~width:model.viewport_width status)
 
 let render_help (model : Model.t) : Msg.t Mosaic.t =
   let title_style = fg Mosaic.Ansi.Color.yellow default in

@@ -431,8 +431,8 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
   match model.mode with
   | Model.Help | Model.Stats ->
     (match msg with
-     | Msg.Resize (_, h) ->
-       ({ model with viewport_height = h }, Mosaic.Cmd.none)
+     | Msg.Resize (w, h) ->
+       ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
      | _ ->
        let return_mode = match model.previous_mode with
          | Some m -> m
@@ -446,7 +446,7 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
      | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd -> (browser_move_cursor model msg, Mosaic.Cmd.none)
      | Msg.BrowserActivate -> browser_activate model
      | Msg.BrowserGoUp -> (browser_go_up model, Mosaic.Cmd.none)
-     | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
+     | Msg.Resize (w, h) -> ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
      | Msg.Quit -> (model, Mosaic.Cmd.Quit)
      | Msg.HideHelp | Msg.HideStats -> (model, Mosaic.Cmd.none)
      | _ -> (model, Mosaic.Cmd.none))
@@ -479,7 +479,7 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
      | Msg.EndSearch -> (end_search model, Mosaic.Cmd.none)
      | Msg.ToggleChangeFilter filter -> (toggle_change_filter model filter, Mosaic.Cmd.none)
      | Msg.JumpToPath path -> (jump_to_path model path, Mosaic.Cmd.none)
-     | Msg.Resize (_, h) -> ({ model with viewport_height = h }, Mosaic.Cmd.none)
+     | Msg.Resize (w, h) -> ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
      | Msg.Quit ->
        if model.browser_root <> "" then
          (* Return to browser mode *)
