@@ -53,6 +53,11 @@ let tui_cmd ~config ~domain_mgr : int =
     (* Run the TUI *)
     Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full ();
 
+    (* Print export output if any *)
+    (match !Alsdiff_tui_lib.Update.export_output_ref with
+     | Some output -> print_endline output; flush stdout
+     | None -> ());
+
     0
   | _ ->
     Fmt.epr "Error: Usage: alsdiff-tui [FILE1.als FILE2.als]@.";

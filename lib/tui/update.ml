@@ -2,24 +2,18 @@ open Model
 
 (* Check if a string contains a substring (case-insensitive) *)
 let contains_substring ~needle (haystack : string) : bool =
-  let needle_lower = String.lowercase_ascii needle in
   let haystack_lower = String.lowercase_ascii haystack in
-  let needle_len = String.length needle_lower in
-  let haystack_len = String.length haystack_lower in
-  if needle_len = 0 then true else
-  if needle_len > haystack_len then false else
-    let rec check pos =
-      if pos > haystack_len - needle_len then false
-      else
-        let rec match_at offset =
-          if offset = needle_len then true
-          else if String.get haystack_lower (pos + offset) = String.get needle_lower offset
-          then match_at (offset + 1)
-          else false
-        in
-        if match_at 0 then true else check (pos + 1)
+  let needle_lower = String.lowercase_ascii needle in
+  let nlen = String.length needle_lower in
+  let hlen = String.length haystack_lower in
+  if nlen = 0 then true
+  else if nlen > hlen then false
+  else
+    let rec loop i =
+      i <= hlen - nlen &&
+      (String.sub haystack_lower i nlen = needle_lower || loop (i + 1))
     in
-    check 0
+    loop 0
 
 (* Filter tree nodes based on search query *)
 let rec filter_nodes_by_query ~(query:string) (nodes : Model.tree_node list) : Model.tree_node list =
@@ -99,12 +93,7 @@ let move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
   (* Push current position to back history before moving *)
   let get_current_path model =
     let visible = get_visible_nodes model in
-    let rec get_nth lst n = match n, lst with
-      | 0, x :: _ -> Some x
-      | _, [] -> None
-      | n, _ :: xs -> get_nth xs (n - 1)
-    in
-    match get_nth visible model.cursor_index with
+    match List.nth_opt visible model.cursor_index with
     | None -> None
     | Some node -> Some node.path
   in
@@ -115,18 +104,20 @@ let move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
      | None -> new_model
      | Some path ->
        if model.nav_forward = [] then
-         { new_model with nav_back = path :: model.nav_back; nav_forward = [] }
+         let max_nav_history = 100 in
+         let new_back = path :: model.nav_back in
+         let trimmed_back =
+           if List.length new_back > max_nav_history
+           then List.(rev (tl (rev new_back)))
+           else new_back
+         in
+         { new_model with nav_back = trimmed_back; nav_forward = [] }
        else new_model)
   | _ -> new_model
 
 let toggle_expand (model : Model.t) : Model.t =
   let visible = get_visible_nodes model in
-  let rec get_nth lst n = match n, lst with
-    | 0, x :: _ -> Some x
-    | _, [] -> None
-    | n, _ :: xs -> get_nth xs (n - 1)
-  in
-  match get_nth visible model.cursor_index with
+  match List.nth_opt visible model.cursor_index with
   | None -> model
   | Some node ->
     if node.is_expandable then
@@ -146,7 +137,7 @@ let cycle_detail_mode (model : Model.t) : Model.t =
     detail_mode_index = new_idx;
     config = new_config;
     flat_nodes = new_flat_nodes;
-    cursor_index = 0;  (* Reset cursor to avoid out-of-bounds *)
+    cursor_index = min model.cursor_index (max 0 (List.length new_flat_nodes - 1));
   }
 
 let start_search (model : Model.t) : Model.t =
@@ -225,12 +216,7 @@ let nav_back (model : Model.t) : Model.t =
   | prev_path :: rest ->
     let current_path =
       let visible = get_visible_nodes model in
-      let rec get_nth lst n = match n, lst with
-        | 0, x :: _ -> Some x
-        | _, [] -> None
-        | n, _ :: xs -> get_nth xs (n - 1)
-      in
-      match get_nth visible model.cursor_index with
+      match List.nth_opt visible model.cursor_index with
       | None -> None
       | Some node -> Some node.path
     in
@@ -246,12 +232,7 @@ let nav_forward (model : Model.t) : Model.t =
   | next_path :: rest ->
     let current_path =
       let visible = get_visible_nodes model in
-      let rec get_nth lst n = match n, lst with
-        | 0, x :: _ -> Some x
-        | _, [] -> None
-        | n, _ :: xs -> get_nth xs (n - 1)
-      in
-      match get_nth visible model.cursor_index with
+      match List.nth_opt visible model.cursor_index with
       | None -> None
       | Some node -> Some node.path
     in
@@ -260,11 +241,6 @@ let nav_forward (model : Model.t) : Model.t =
       | Some p -> p :: model.nav_back
     in
     jump_to_path { model with nav_back = new_back; nav_forward = rest } next_path
-
-let rec get_nth lst n = match n, lst with
-  | 0, x :: _ -> Some x
-  | _, [] -> None
-  | n, _ :: xs -> get_nth xs (n - 1)
 
 let browser_move_cursor (model : Model.t) (direction : Msg.t) : Model.t =
   let max_idx = max 0 (List.length model.browser_entries - 1) in
@@ -293,7 +269,7 @@ let browser_go_up (model : Model.t) : Model.t =
   end
 
 let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
-  match get_nth model.browser_entries model.browser_cursor with
+  match List.nth_opt model.browser_entries model.browser_cursor with
   | None -> (model, Mosaic.Cmd.none)
   | Some entry ->
     if entry.is_dir then
@@ -302,6 +278,7 @@ let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
          browser_cwd = entry.path;
          browser_entries = entries;
          browser_cursor = 0;
+         last_error = None;
        }, Mosaic.Cmd.none)
     else begin
       (* .als file selected *)
@@ -345,12 +322,14 @@ let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
               search_mode = false;
               filter_change = None;
               browser_selected = [];
+              last_error = None;
             }, Mosaic.Cmd.none)
          with
-         | Alsdiff_base.File.File_error _
-         | Alsdiff_base.Xml.Xml_error _ -> (model, Mosaic.Cmd.none))
+         | (Alsdiff_base.File.File_error (_, msg)
+           | Alsdiff_base.Xml.Xml_error (_, msg)) ->
+           ({ model with last_error = Some msg }, Mosaic.Cmd.none))
       end else
-        ({ model with browser_selected = new_selected }, Mosaic.Cmd.none)
+        ({ model with browser_selected = new_selected; last_error = None }, Mosaic.Cmd.none)
     end
 
 let show_export_selector (model : Model.t) : Model.t =
@@ -370,7 +349,9 @@ let move_export_selection (model : Model.t) (direction : int) : Model.t =
   let new_idx = max 0 (min max_idx (current_idx + direction)) in
   { model with export_selected_format = List.nth formats new_idx }
 
-let execute_export (model : Model.t) : Model.t =
+let export_output_ref : string option ref = ref None
+
+let execute_export (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
   let output = try
       match model.export_selected_format with
       | Model.Text ->
@@ -384,19 +365,12 @@ let execute_export (model : Model.t) : Model.t =
       Format.eprintf "Export failed: %s\n" (Printexc.to_string e);
       "Export error - see terminal output"
   in
-  (* Output to stdout *)
-  Printf.printf "%s\n" output;
-  flush stdout;
-  { model with export_selector_active = false }
+  export_output_ref := Some output;
+  ({ model with export_selector_active = false }, Mosaic.Cmd.Quit)
 
 let enter_focus (model : Model.t) : Model.t =
   let visible = get_visible_nodes model in
-  let rec get_nth lst n = match n, lst with
-    | 0, x :: _ -> Some x
-    | _, [] -> None
-    | n, _ :: xs -> get_nth xs (n - 1)
-  in
-  match get_nth visible model.cursor_index with
+  match List.nth_opt visible model.cursor_index with
   | None -> model
   | Some node ->
     if node.is_expandable then
@@ -406,32 +380,59 @@ let enter_focus (model : Model.t) : Model.t =
 let exit_focus (model : Model.t) : Model.t =
   { model with focused_path = None; cursor_index = 0 }
 
+let get_parent_path (path : string list) : string list option =
+  match List.rev path with
+  | [] | [_] -> None
+  | _ :: rest -> Some (List.rev rest)
+
+let move_left (model : Model.t) : Model.t =
+  let visible = get_visible_nodes model in
+  match List.nth_opt visible model.cursor_index with
+  | None -> model
+  | Some node ->
+    let path_key = String.concat "/" node.path in
+    if node.is_expandable && StringSet.mem path_key model.expanded_paths then
+      (* Collapse expanded node *)
+      { model with expanded_paths = StringSet.remove path_key model.expanded_paths }
+    else
+      (* Jump to parent node *)
+      match get_parent_path node.path with
+      | None -> model
+      | Some parent_path ->
+        match List.find_index (fun n -> n.path = parent_path) visible with
+        | None -> model
+        | Some idx -> { model with cursor_index = idx }
+
+let move_right (model : Model.t) : Model.t =
+  let visible = get_visible_nodes model in
+  match List.nth_opt visible model.cursor_index with
+  | None -> model
+  | Some node ->
+    let path_key = String.concat "/" node.path in
+    if node.is_expandable && not (StringSet.mem path_key model.expanded_paths) then
+      (* Expand collapsed expandable node *)
+      { model with expanded_paths = StringSet.add path_key model.expanded_paths }
+    else if node.is_expandable then
+      (* Move cursor to first child *)
+      let child_path = node.path in
+      match List.find_index (fun n ->
+          let rec is_prefix prefix lst = match prefix, lst with
+            | [], _ -> true
+            | _, [] -> false
+            | p :: ps, x :: xs when p = x -> is_prefix ps xs
+            | _ -> false
+          in is_prefix child_path n.path && n.path <> child_path
+        ) visible with
+      | Some idx -> { model with cursor_index = idx }
+      | None -> model
+    else model
+
 let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
   match model.mode with
-  | Model.Help ->
-    (* Any key closes help and returns to previous mode *)
+  | Model.Help | Model.Stats ->
     (match msg with
-     | Msg.HideHelp | Msg.ToggleHelp ->
-       let return_mode = match model.previous_mode with
-         | Some m -> m
-         | None -> Model.Diff
-       in
-       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none)
-     | _ ->
-       let return_mode = match model.previous_mode with
-         | Some m -> m
-         | None -> Model.Diff
-       in
-       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none))
-  | Model.Stats ->
-    (* Any key closes stats and returns to previous mode *)
-    (match msg with
-     | Msg.HideStats | Msg.ToggleStats ->
-       let return_mode = match model.previous_mode with
-         | Some m -> m
-         | None -> Model.Diff
-       in
-       ({ model with mode = return_mode; previous_mode = None }, Mosaic.Cmd.none)
+     | Msg.Resize (_, h) ->
+       ({ model with viewport_height = h }, Mosaic.Cmd.none)
      | _ ->
        let return_mode = match model.previous_mode with
          | Some m -> m
@@ -458,7 +459,7 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
        then (move_export_selection model dir, Mosaic.Cmd.none)
        else (model, Mosaic.Cmd.none)
      | Msg.ExecuteExport ->
-       (execute_export model, Mosaic.Cmd.none)
+       execute_export model
      | Msg.ShowHelp | Msg.ToggleHelp -> ({ model with mode = Model.Help; previous_mode = Some model.mode }, Mosaic.Cmd.none)
      | Msg.ShowStats | Msg.ToggleStats -> ({ model with mode = Model.Stats; previous_mode = Some model.mode }, Mosaic.Cmd.none)
      | Msg.NavBack -> (nav_back model, Mosaic.Cmd.none)
@@ -466,7 +467,8 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
      | Msg.EnterFocus -> (enter_focus model, Mosaic.Cmd.none)
      | Msg.ExitFocus -> (exit_focus model, Mosaic.Cmd.none)
      | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown | Msg.MoveToStart | Msg.MoveToEnd -> (move_cursor model msg, Mosaic.Cmd.none)
-     | Msg.MoveLeft | Msg.MoveRight -> (model, Mosaic.Cmd.none)
+     | Msg.MoveLeft -> (move_left model, Mosaic.Cmd.none)
+     | Msg.MoveRight -> (move_right model, Mosaic.Cmd.none)
      | Msg.ToggleExpand -> (toggle_expand model, Mosaic.Cmd.none)
      | Msg.CycleDetailMode ->
        let new_model = cycle_detail_mode model in

@@ -6,8 +6,6 @@ let char_to_msg_browser c =
   | '?' -> Some ToggleHelp
   | 'j' -> Some MoveDown
   | 'k' -> Some MoveUp
-  | 'n' -> Some MoveDown
-  | 'p' -> Some MoveUp
   | _ -> None
 
 let char_to_msg_diff c =
@@ -22,8 +20,6 @@ let char_to_msg_diff c =
   | ']' -> Some NavForward
   | 'E' -> Some ShowExportSelector
   | 'z' -> Some EnterFocus
-  | 'n' -> Some MoveDown
-  | 'p' -> Some MoveUp
   | 'h' -> Some MoveLeft
   | 'j' -> Some MoveDown
   | 'k' -> Some MoveUp

@@ -30,9 +30,16 @@ let render_browser_status_bar (model : Model.t) : Msg.t Mosaic.t =
       Fmt.str " [1] %s [2] %s" n1 n2
     | _ -> ""
   in
+  let error_text = match model.last_error with
+    | Some e -> Fmt.str " ERROR: %s " e
+    | None -> ""
+  in
   let help = "Enter:select Esc:back q:quit" in
-  let status = Fmt.str " %s | %s " selected_text help in
-  let bar_style = bg Mosaic.Ansi.Color.blue default in
+  let status = Fmt.str " %s | %s%s " selected_text help error_text in
+  let bar_style = match model.last_error with
+    | Some _ -> bg Mosaic.Ansi.Color.red default
+    | None -> bg Mosaic.Ansi.Color.blue default
+  in
   Mosaic.text ~style:bar_style status
 
 let view_browser (model : Model.t) : Msg.t Mosaic.t =
@@ -45,11 +52,8 @@ let view_browser (model : Model.t) : Msg.t Mosaic.t =
       max 0 (min (model.browser_cursor - half) (total - max_rows))
   in
   let visible_slice =
-    let rec skip n = function [] -> [] | l when n <= 0 -> l | _ :: t -> skip (n - 1) t in
-    skip scroll_offset model.browser_entries
-    |> fun l ->
-    let rec take n = function [] -> [] | _ when n <= 0 -> [] | x :: t -> x :: take (n - 1) t in
-    take max_rows l
+    List.drop scroll_offset model.browser_entries
+    |> List.take max_rows
   in
   let header_style = fg Mosaic.Ansi.Color.yellow default in
   let header = Mosaic.text ~style:header_style (Fmt.str " %s" model.browser_cwd) in
@@ -245,8 +249,8 @@ let render_export_selector (model : Model.t) : Msg.t Mosaic.t =
       "↑↓: Navigate | Enter: Export | Esc: Cancel" in
 
   (* Add padding above and below for visual centering *)
-  let padding_top = List.map (fun _ -> Mosaic.text "") (Array.to_list (Array.make 6 ())) in
-  let padding_bottom = List.map (fun _ -> Mosaic.text "") (Array.to_list (Array.make 6 ())) in
+  let padding_top = List.init 6 (fun _ -> Mosaic.text "") in
+  let padding_bottom = List.init 6 (fun _ -> Mosaic.text "") in
   Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column
     (padding_top @ title :: option_list @ [footer] @ padding_bottom)
 
@@ -306,11 +310,8 @@ let view (model : Model.t) : Msg.t Mosaic.t =
           max 0 (min (model.cursor_index - half) (total - max_rows))
       in
       let visible_slice =
-        let rec skip n = function [] -> [] | l when n <= 0 -> l | _ :: t -> skip (n - 1) t in
-        skip scroll_offset visible_nodes
-        |> fun l ->
-        let rec take n = function [] -> [] | _ when n <= 0 -> [] | x :: t -> x :: take (n - 1) t in
-        take max_rows l
+        List.drop scroll_offset visible_nodes
+        |> List.take max_rows
       in
       let nodes_box = List.mapi (fun i node ->
           let global_i = scroll_offset + i in

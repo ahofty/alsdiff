@@ -21,8 +21,8 @@ type t = {
   previous_mode : mode option;
   views : view list;
   config : Config.detail_config;
-  cursor_path : string list;
   expanded_paths : StringSet.t;
+  last_error : string option;
   search_query : string option;
   search_mode : bool;
   filter_change : View_model.change_type option;
@@ -230,7 +230,6 @@ let init_browser ~root () : t =
     previous_mode = None;
     views = [];
     config = Config.full;
-    cursor_path = [];
     expanded_paths = StringSet.empty;
     search_query = None;
     search_mode = false;
@@ -240,6 +239,7 @@ let init_browser ~root () : t =
     flat_nodes = [];
     cursor_index = 0;
     viewport_height = 24;
+    last_error = None;
     browser_root = root;
     browser_cwd = cwd;
     browser_entries = entries;
@@ -265,7 +265,6 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
     previous_mode = None;
     views;
     config = detail_config;
-    cursor_path = [];
     expanded_paths = StringSet.empty;
     search_query = None;
     search_mode = false;
@@ -275,6 +274,7 @@ let init ?(detail_config = Config.compact) (views : view list) : t =
     flat_nodes;
     cursor_index = 0;
     viewport_height = 24;
+    last_error = None;
     browser_root = "";
     browser_cwd = "";
     browser_entries = [];
