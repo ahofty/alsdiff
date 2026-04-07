@@ -130,6 +130,8 @@ let make_detail_modes () = [
   Config.inline;
   Config.full;
   Config.verbose;
+  Config.composer;
+  Config.mixing;
 ]
 
 let rec build_nodes_with_config

@@ -117,6 +117,8 @@ let render_status_bar (model : Model.t) : Msg.t Mosaic.t =
     | 2 -> "inline"
     | 3 -> "full"
     | 4 -> "verbose"
+    | 5 -> "composer"
+    | 6 -> "mixing"
     | _ -> "unknown"
   in
   let filter_text = match model.filter_change with
