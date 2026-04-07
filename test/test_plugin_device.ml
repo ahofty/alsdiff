@@ -135,6 +135,71 @@ let test_plugin_parameter_invalid_type_raises_exception () =
       | _ -> false)
   |> Alcotest.(check bool) "invalid parameter type raises exception" true
 
+let test_vst3_plugin_info_xml_path = Utils.resolve_test_data_path "vst3_plugin_info.xml"
+let test_vst2_plugin_info_xml_path = Utils.resolve_test_data_path "vst2_plugin_info.xml"
+let test_au_plugin_info_xml_path = Utils.resolve_test_data_path "au_plugin_info.xml"
+
+let test_plugin_desc_vst3_parsing () =
+  let plugin_info_xml = read_file test_vst3_plugin_info_xml_path in
+  let desc_xml = Element {
+      name = "PluginDesc";
+      attrs = [];
+      childs = [plugin_info_xml];
+    } in
+  let desc = PluginDesc.create desc_xml in
+  Alcotest.(check string) "plugin name" "Sumu" desc.name;
+  let expected_uid = "-1631540408-953305820--2065415456-1396708716" in
+  Alcotest.(check string) "plugin uid" expected_uid desc.uid;
+  (match desc.plugin_type with
+   | PluginDesc.Vst3 -> ()
+   | _ -> Alcotest.fail "Expected Vst3 plugin type");
+  Alcotest.(check bool) "processor state not empty" true (String.length desc.processor_state > 0)
+
+let test_plugin_desc_vst2_parsing () =
+  let plugin_info_xml = read_file test_vst2_plugin_info_xml_path in
+  let desc_xml = Element {
+      name = "PluginDesc";
+      attrs = [];
+      childs = [plugin_info_xml];
+    } in
+  let desc = PluginDesc.create desc_xml in
+  Alcotest.(check string) "plugin name" "Aalto" desc.name;
+  Alcotest.(check string) "plugin uid" "1096903796" desc.uid;
+  (match desc.plugin_type with
+   | PluginDesc.Vst2 -> ()
+   | _ -> Alcotest.fail "Expected Vst2 plugin type")
+
+let test_plugin_desc_au_parsing () =
+  let plugin_info_xml = read_file test_au_plugin_info_xml_path in
+  let desc_xml = Element {
+      name = "PluginDesc";
+      attrs = [];
+      childs = [plugin_info_xml];
+    } in
+  let desc = PluginDesc.create desc_xml in
+  Alcotest.(check string) "plugin name" "Tela" desc.name;
+  let expected_uid = "1635085685-1952803937-1179603539" in
+  Alcotest.(check string) "plugin uid" expected_uid desc.uid;
+  (match desc.plugin_type with
+   | PluginDesc.Auv2 -> ()
+   | _ -> Alcotest.fail "Expected Auv2 plugin type")
+
+let test_plugin_desc_diff () =
+  let desc1 = PluginDesc.{
+      name = "TestPlugin";
+      uid = "test-uid-123";
+      plugin_type = PluginDesc.Vst3;
+      processor_state = "old-state";
+    } in
+  let desc2 = PluginDesc.{
+      name = "TestPlugin";
+      uid = "test-uid-123";
+      plugin_type = PluginDesc.Vst3;
+      processor_state = "new-state";
+    } in
+  let patch = PluginDesc.diff desc1 desc2 in
+  Alcotest.(check bool) "plugin desc patch is not empty" false (PluginDesc.Patch.is_empty patch)
+
 let () =
   Alcotest.run "PluginDevice" [
     "plugin_device_creation", [
@@ -150,5 +215,13 @@ let () =
     ];
     "error_handling", [
       Alcotest.test_case "invalid parameter type raises exception" `Quick test_plugin_parameter_invalid_type_raises_exception;
+    ];
+    "plugin_desc_parsing", [
+      Alcotest.test_case "PluginDesc VST3 parsing" `Quick test_plugin_desc_vst3_parsing;
+      Alcotest.test_case "PluginDesc VST2 parsing" `Quick test_plugin_desc_vst2_parsing;
+      Alcotest.test_case "PluginDesc AU parsing" `Quick test_plugin_desc_au_parsing;
+    ];
+    "plugin_desc_diff", [
+      Alcotest.test_case "PluginDesc.diff with state change" `Quick test_plugin_desc_diff;
     ];
   ]

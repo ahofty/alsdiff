@@ -1,11 +1,12 @@
 open Alcotest
 open Alsdiff_base
 open Alsdiff_live
+open Utils
 
 (** Test parsing FloatEvents with and without curve parameters *)
 let test_envelope_event_parsing () =
   (* Load automation XML that has events with curve parameters *)
-  let xml = Xml.read_file "automation.xml" in
+  let xml = Xml.read_file (resolve_test_data_path "automation.xml") in
   let envelope_element = Upath.find "/Envelopes/AutomationEnvelope@Id=3" xml |> snd in
   let automation = Automation.create envelope_element in
 
@@ -116,28 +117,6 @@ let test_envelope_event_diff_add_remove_curve () =
 (* ========================================================================= *)
 (* CurveControls Module Tests                                                *)
 (* ========================================================================= *)
-
-(** Test CurveControls.has_same_id with structural equality *)
-let test_curve_controls_has_same_id () =
-  let c1 = { Automation.CurveControls.curve1_x = 0.5; curve1_y = 0.5;
-             curve2_x = 0.5; curve2_y = 0.5; } in
-  let c2 = { Automation.CurveControls.curve1_x = 0.5; curve1_y = 0.5;
-             curve2_x = 0.5; curve2_y = 0.5; } in
-  let c3 = { Automation.CurveControls.curve1_x = 0.6; curve1_y = 0.5;
-             curve2_x = 0.5; curve2_y = 0.5; } in
-  check bool "identical curves have same id" true
-    (Automation.CurveControls.has_same_id c1 c2);
-  check bool "different curves don't have same id" false
-    (Automation.CurveControls.has_same_id c1 c3)
-
-(** Test CurveControls.id_hash consistency *)
-let test_curve_controls_id_hash () =
-  let c1 = { Automation.CurveControls.curve1_x = 0.5; curve1_y = 0.5;
-             curve2_x = 0.5; curve2_y = 0.5; } in
-  let c2 = { Automation.CurveControls.curve1_x = 0.5; curve1_y = 0.5;
-             curve2_x = 0.5; curve2_y = 0.5; } in
-  check bool "identical curves have same hash" true
-    (Automation.CurveControls.id_hash c1 = Automation.CurveControls.id_hash c2)
 
 (** Test CurveControls.Patch.is_empty *)
 let test_curve_controls_patch_is_empty () =
@@ -305,9 +284,6 @@ let () =
     "envelope-event-parsing", [ test_case "Test EnvelopeEvent parsing with curve parameters" `Quick test_envelope_event_parsing ];
     "envelope-event-diff-curve", [ test_case "Test EnvelopeEvent diffing with curve changes" `Quick test_envelope_event_diff_with_curve ];
     "envelope-event-diff-add-remove", [ test_case "Test EnvelopeEvent diffing with add/remove curve" `Quick test_envelope_event_diff_add_remove_curve ];
-    (* New test cases *)
-    "curve-controls-has-same-id", [ test_case "Test CurveControls.has_same_id" `Quick test_curve_controls_has_same_id ];
-    "curve-controls-id-hash", [ test_case "Test CurveControls.id_hash" `Quick test_curve_controls_id_hash ];
     "curve-controls-patch-is-empty", [ test_case "Test CurveControls.Patch.is_empty" `Quick test_curve_controls_patch_is_empty ];
     "envelope-event-create-int-event", [ test_case "Test EnvelopeEvent.create with IntEvent" `Quick test_envelope_event_create_with_int_event ];
     "envelope-event-create-enum-event", [ test_case "Test EnvelopeEvent.create with EnumEvent" `Quick test_envelope_event_create_with_enum_event ];

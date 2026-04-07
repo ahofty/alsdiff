@@ -4,10 +4,10 @@ open Alsdiff_base.Diff
 
 module Locator = struct
   type t = {
-    id : int;
+    id : int; [@id.id] [@patch.skip]
     name : string;
     time : float;
-  } [@@deriving eq]
+  } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) (_file_path : string) : t =
     match xml with
@@ -17,32 +17,6 @@ module Locator = struct
       let time = Upath.get_float_attr "/Time" "Value" xml in
       { id; name; time }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Locator"))
-
-  let has_same_id a b = a.id = b.id
-  let id_hash t = Hashtbl.hash t.id
-
-  module Patch = struct
-    type t = {
-      name : string atomic_update;
-      time : float atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.name &&
-      is_unchanged_atomic_update p.time
-  end
-
-  let diff (old_locator : t) (new_locator : t) : Patch.t =
-    let { id = old_id; name = old_name; time = old_time } = old_locator in
-    let { id = new_id; name = new_name; time = new_time } = new_locator in
-
-    (* Only compare locators with the same id *)
-    if old_id <> new_id then
-      failwith "cannot diff two locators with different Id"
-    else
-      let name_change = diff_atomic_value (module String) old_name new_name in
-      let time_change = diff_atomic_value (module Float) old_time new_time in
-      { name = name_change; time = time_change }
 end
 
 module Version = struct
@@ -50,36 +24,7 @@ module Version = struct
     major : string;
     minor : string;
     revision : string;
-  }
-
-  let equal v1 v2 =
-    v1.major = v2.major && v1.minor = v2.minor && v1.revision = v2.revision
-
-  module Patch = struct
-    type t = {
-      major : string atomic_update;
-      minor : string atomic_update;
-      revision : string atomic_update;
-    }
-
-    let is_empty p =
-      is_unchanged_atomic_update p.major &&
-      is_unchanged_atomic_update p.minor &&
-      is_unchanged_atomic_update p.revision
-  end
-
-  let diff (old_version : t) (new_version : t) : Patch.t =
-    let { major = old_major; minor = old_minor; revision = old_rev } = old_version in
-    let { major = new_major; minor = new_minor; revision = new_rev } = new_version in
-
-    let major_change = diff_atomic_value (module String) old_major new_major in
-    let minor_change = diff_atomic_value (module String) old_minor new_minor in
-    let rev_change = diff_atomic_value (module String) old_rev new_rev in
-    {
-      Patch.major = major_change;
-      minor = minor_change;
-      revision = rev_change;
-    }
+  } [@@deriving eq, patch] [@@patch.generate_diff]
 end
 
 
@@ -172,14 +117,14 @@ and process_group_branches (pointees : pointee IntHashtbl.t) (branches : Device.
 and process_mixer_automation (pointees : pointee IntHashtbl.t)
     (mixer : Track.Mixer.t) (track_name : string) : unit =
   let mixer_params = [
-    (mixer.Track.Mixer.volume.automation, track_name ^ ": Volume");
-    (mixer.Track.Mixer.pan.automation, track_name ^ ": Pan");
-    (mixer.Track.Mixer.mute.automation, track_name ^ ": Mute");
-    (mixer.Track.Mixer.solo.automation, track_name ^ ": Solo");
-    (mixer.Track.Mixer.volume.modulation, track_name ^ ": Volume Modulation");
-    (mixer.Track.Mixer.pan.modulation, track_name ^ ": Pan Modulation");
-    (mixer.Track.Mixer.mute.modulation, track_name ^ ": Mute Modulation");
-    (mixer.Track.Mixer.solo.modulation, track_name ^ ": Solo Modulation");
+    (mixer.Track.Mixer.volume.automation, "Volume");
+    (mixer.Track.Mixer.pan.automation, "Pan");
+    (mixer.Track.Mixer.mute.automation, "Mute");
+    (mixer.Track.Mixer.solo.automation, "Solo");
+    (mixer.Track.Mixer.volume.modulation, "Volume Modulation");
+    (mixer.Track.Mixer.pan.modulation, "Pan Modulation");
+    (mixer.Track.Mixer.mute.modulation, "Mute Modulation");
+    (mixer.Track.Mixer.solo.modulation, "Solo Modulation");
   ] in
   List.iter (fun (param_id, param_name) ->
       IntHashtbl.add pointees param_id (TrackParamPointee (track_name, param_name))
@@ -227,14 +172,14 @@ let build_pointees_table (liveset : t) : unit =
          process_mixer_automation liveset.pointees mixer_base track_name;
          (* Process MainMixer-specific parameters *)
          let main_mixer_params = [
-           (mixer.Track.MainMixer.tempo.automation, track_name ^ ": Tempo");
-           (mixer.Track.MainMixer.time_signature.automation, track_name ^ ": Time Signature");
-           (mixer.Track.MainMixer.crossfade.automation, track_name ^ ": Crossfade");
-           (mixer.Track.MainMixer.global_groove.automation, track_name ^ ": Global Groove");
-           (mixer.Track.MainMixer.tempo.modulation, track_name ^ ": Tempo Modulation");
-           (mixer.Track.MainMixer.time_signature.modulation, track_name ^ ": Time Signature Modulation");
-           (mixer.Track.MainMixer.crossfade.modulation, track_name ^ ": Crossfade Modulation");
-           (mixer.Track.MainMixer.global_groove.modulation, track_name ^ ": Global Groove Modulation");
+           (mixer.Track.MainMixer.tempo.automation, "Tempo");
+           (mixer.Track.MainMixer.time_signature.automation, "Time Signature");
+           (mixer.Track.MainMixer.crossfade.automation, "Crossfade");
+           (mixer.Track.MainMixer.global_groove.automation, "Global Groove");
+           (mixer.Track.MainMixer.tempo.modulation, "Tempo Modulation");
+           (mixer.Track.MainMixer.time_signature.modulation, "Time Signature Modulation");
+           (mixer.Track.MainMixer.crossfade.modulation, "Crossfade Modulation");
+           (mixer.Track.MainMixer.global_groove.modulation, "Global Groove Modulation");
          ] in
          List.iter (fun (param_id, param_name) ->
              IntHashtbl.add liveset.pointees param_id (TrackParamPointee (track_name, param_name))
@@ -343,6 +288,7 @@ module Patch = struct
     name : string atomic_update;
     version : Version.Patch.t structured_update;
     creator : string atomic_update;
+    main : Track.MainTrack.Patch.t structured_update;
     tracks : (Track.t, Track.Patch.t) structured_change list;
     returns : (Track.t, Track.Patch.t) structured_change list;
     locators : (Locator.t, Locator.Patch.t) structured_change list;
@@ -355,6 +301,7 @@ module Patch = struct
     is_unchanged_atomic_update p.name &&
     is_unchanged_update (module Version.Patch) p.version &&
     is_unchanged_atomic_update p.creator &&
+    is_unchanged_update (module Track.MainTrack.Patch) p.main &&
     List.for_all (is_unchanged_change (module Track.Patch)) p.tracks &&
     List.for_all (is_unchanged_change (module Track.Patch)) p.returns &&
     List.for_all (is_unchanged_change (module Locator.Patch)) p.locators
@@ -365,6 +312,12 @@ let diff (old_liveset : t) (new_liveset : t) : Patch.t =
   let name_change = diff_atomic_value (module String) old_liveset.name new_liveset.name in
   let version_change = diff_complex_value (module Version) old_liveset.version new_liveset.version in
   let creator_change = diff_atomic_value (module String) old_liveset.creator new_liveset.creator in
+  let main_change =
+    match old_liveset.main, new_liveset.main with
+    | Track.Main old_main, Track.Main new_main ->
+      diff_complex_value_id (module Track.MainTrack) old_main new_main
+    | _ -> failwith "Liveset.main must always contain Track.Main"
+  in
   let tracks_changes =
     diff_list_id (module Track) old_liveset.tracks new_liveset.tracks
     |> filter_changes (module Track.Patch)
@@ -382,6 +335,7 @@ let diff (old_liveset : t) (new_liveset : t) : Patch.t =
     Patch.name = name_change;
     version = version_change;
     creator = creator_change;
+    main = main_change;
     tracks = tracks_changes;
     returns = returns_changes;
     locators = locators_changes;

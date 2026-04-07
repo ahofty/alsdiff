@@ -13,12 +13,12 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item change in
+  let item = View_model.create_liveset_item ~note_name_style change in
   [View_model.Item item]
 
-type output_mode = Tree | Stats
+type output_mode = Tree | Stats | Json
 
 type config = {
   positional_args: string list;
@@ -59,79 +59,19 @@ let parse_preset_args = function
   | `Quiet -> Text_renderer.quiet
   | `Verbose -> Text_renderer.verbose
 
-let load_config_from_json file_path =
-  match Text_renderer.load_and_validate_config file_path with
+let build_base_renderer_config ~default_config ~reference_path config =
+  let preset_config = Option.map parse_preset_args config.preset in
+  match Config.resolve_detail_config
+          ~default_config
+          ~reference_path
+          ~config_file:config.config_file
+          ~preset_config
+          ()
+  with
   | Ok cfg -> cfg
   | Error msg ->
     Fmt.epr "%s@." msg;
     exit 1
-
-let find_git_root () =
-  let rec search path =
-    if Sys.file_exists (Filename.concat path ".git") then
-      Some path
-    else
-      let parent = Filename.dirname path in
-      if parent = path then None
-      else search parent
-  in
-  search (Sys.getcwd ())
-
-let get_home_dir () =
-  match Sys.getenv_opt "HOME" with
-  | Some home -> Some home
-  | None ->
-    (* Fallback for Windows systems *)
-    match Sys.getenv_opt "USERPROFILE" with
-    | Some userprofile -> Some userprofile
-    | None -> None
-
-let discover_config_file ~reference_path =
-  (* Try reference_path directory config first - highest priority *)
-  let check_path_dir_config () =
-    let path_dir = Filename.dirname reference_path in
-    let path_config = Filename.concat path_dir ".alsdiff.json" in
-    if Sys.file_exists path_config then Some path_config else None
-  in
-  (* Try git root config *)
-  let check_git_config () =
-    match find_git_root () with
-    | Some git_root ->
-      let git_config = Filename.concat git_root ".alsdiff.json" in
-      if Sys.file_exists git_config then Some git_config else None
-    | None -> None
-  in
-  (* Try home directory config *)
-  let check_home_config () =
-    match get_home_dir () with
-    | Some home ->
-      let home_config = Filename.concat home ".alsdiff.json" in
-      if Sys.file_exists home_config then Some home_config else None
-    | None -> None
-  in
-  (* Priority: path dir > git config > home config *)
-  match check_path_dir_config () with
-  | Some _ as result -> result
-  | None ->
-    match check_git_config () with
-    | Some _ as result -> result
-    | None -> check_home_config ()
-
-let load_and_report_config config_path =
-  Fmt.pr "Loading configuration from %s@." config_path;
-  load_config_from_json config_path
-
-let build_base_renderer_config ~default_config ~reference_path config =
-  match config.config_file with
-  | Some config_path ->
-    load_config_from_json config_path
-  | None ->
-    match config.preset with
-    | Some preset -> parse_preset_args preset
-    | None ->
-      match discover_config_file ~reference_path with
-      | Some auto_config -> load_and_report_config auto_config
-      | None -> default_config
 
 let stats_incompatible_flags_provided config =
   config.prefix_added <> None
@@ -160,9 +100,14 @@ let render_tree ~config ~reference_path views =
   } in
   Text_renderer.render renderer_config views
 
+let render_json ~config ~reference_path views =
+  let base_renderer_config = build_base_renderer_config ~default_config:Text_renderer.quiet ~reference_path config in
+  Json_renderer.render base_renderer_config views
+
 let diff_cmd ~config ~domain_mgr : int =
-  if config.output_mode = Stats && stats_incompatible_flags_provided config then begin
-    Fmt.epr "Error: --mode stats is incompatible with --prefix-*, \
+  if (config.output_mode = Stats || config.output_mode = Json)
+  && stats_incompatible_flags_provided config then begin
+    Fmt.epr "Error: --mode stats/json is incompatible with --prefix-*, \
              --note-name-style, and --max-collection-items@.";
     if config.git_mode then 2 else 1
   end else begin
@@ -192,14 +137,19 @@ let diff_cmd ~config ~domain_mgr : int =
         `Unchanged
     in
 
-    let views = create_views liveset_change in
+    let note_name_style = match config.note_name_style with
+      | Some style -> style
+      | None -> View_model.Sharp
+    in
+    let views = create_views ~note_name_style liveset_change in
 
     let output = match config.output_mode with
       | Stats -> render_stats ~config ~reference_path views
       | Tree -> render_tree ~config ~reference_path views
+      | Json -> render_json ~config ~reference_path views
     in
 
-    Fmt.pr "%s@." output;
+    Fmt.pr "%s" output;
 
     if config.git_mode then
       if has_changes then 1 else 0
@@ -260,8 +210,8 @@ let stats_mode_doc =
    Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
 
 let output_mode =
-  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. " ^ stats_mode_doc in
-  Arg.(value & opt (enum ["tree", Tree; "stats", Stats]) Tree & info ["mode"] ~docv:"MODE" ~doc)
+  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type, $(b,json)=structured JSON output. " ^ stats_mode_doc in
+  Arg.(value & opt (enum ["tree", Tree; "stats", Stats; "json", Json]) Tree & info ["mode"] ~docv:"MODE" ~doc)
 
 let dump_schema =
   let doc = "Dump JSON schema for configuration to stdout and exit. Does not require FILE1.als or FILE2.als." in
@@ -286,6 +236,8 @@ let cmd =
     `Pre "$(cmd) v1.als v2.als";
     `P "Show change statistics summary:";
     `Pre "$(cmd) v1.als v2.als --mode stats";
+    `P "Output as JSON for programmatic consumption:";
+    `Pre "$(cmd) v1.als v2.als --mode json";
     `P "Compare with compact output:";
     `Pre "$(cmd) v1.als v2.als --preset compact";
     `P "Compare with full details:";
@@ -340,7 +292,8 @@ let cmd =
     `Pre "$(cmd) --config myconfig.json --git path old-file old-hex old-mode new-file new-hex new-mode";
     `S Manpage.s_options;
     `P ("$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. \
-         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). " ^ stats_mode_doc);
+         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). \
+         $(b,json) outputs structured JSON for programmatic consumption. " ^ stats_mode_doc);
     `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery. The --preset option is ignored when --config is specified. Individual CLI options override values from config file.";
     `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over auto-discovery but ignored when --config is specified.";
     `P "$(b,--prefix-added PREFIX) overrides prefix for added items from config file.";

@@ -5,6 +5,8 @@
 .DS_Store
 
 _build
+build
+install
 
 .vscode
 .claude

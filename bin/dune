@@ -2,8 +2,19 @@
  (public_name alsdiff)
  (name alsdiff)
  (modes byte exe)
- (libraries alsdiff_base alsdiff_live alsdiff_output base_io_native eio_main cmdliner dune-build-info)
- (promote (until-clean)))
+ (libraries alsdiff_base alsdiff_live alsdiff_output base_io_native eio_main cmdliner dune-build-info))
+
+(executable
+ (public_name alsflow)
+ (name alsflow)
+ (modes byte exe)
+ (libraries alsdiff_base alsdiff_live alsdiff_output eio_main cmdliner))
+
+(executable
+ (public_name alsdiff-tui)
+ (name alsdiff_tui)
+ (modes byte exe)
+ (libraries alsdiff_base alsdiff_live alsdiff_output alsdiff_tui_lib eio_main cmdliner dune-build-info))
 
 ;; Auto indent files with `dune build @fmt`
 (subdir

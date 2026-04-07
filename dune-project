@@ -28,6 +28,7 @@
     dune-build-info
    (ocp-indent :build)
     alcotest
+    ppxlib
     ppx_deriving
     ppx_deriving_yojson
     ppx_deriving_jsonschema
@@ -35,7 +36,7 @@
     fmt
     ptime
 
-   ; Native-specific dependencies (default profile)
+   ; Native-specific dependencies
    camlzip
    eio
    eio_main
@@ -44,7 +45,10 @@
    (lwt :with_js)
    (lwt_ppx :with_js)
    (js_of_ocaml :with_js)
-   (js_of_ocaml-ppx :with_js))
+   (js_of_ocaml-ppx :with_js)
+
+   ; TUI dependency
+   mosaic)
  (tags
   ("ableton live" "git" "version control")))
 

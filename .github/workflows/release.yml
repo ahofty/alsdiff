@@ -165,17 +165,17 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          zip -j alsdiff-${{ matrix.os_name }}-${{ matrix.arch }}-${{ steps.get_version.outputs.version }}.zip install/bin/alsdiff
+          zip -j alsdiff-${{ matrix.os_name }}-${{ matrix.arch }}-${{ steps.get_version.outputs.version }}.zip install/bin/alsdiff install/bin/alsflow install/bin/alsdiff-tui
 
       - name: Create zip (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
           cd install/bin
-          7z a ../../alsdiff-${{ matrix.os_name }}-${{ matrix.arch }}-${{ steps.get_version.outputs.version }}.zip alsdiff.exe
+          7z a ../../alsdiff-${{ matrix.os_name }}-${{ matrix.arch }}-${{ steps.get_version.outputs.version }}.zip alsdiff.exe alsflow.exe alsdiff-tui.exe
 
       - name: Upload release assets
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             alsdiff-${{ matrix.os_name }}-${{ matrix.arch }}-${{ steps.get_version.outputs.version }}.zip

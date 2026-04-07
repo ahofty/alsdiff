@@ -20,6 +20,7 @@ depends: [
   "dune-build-info"
   "ocp-indent" {build}
   "alcotest"
+  "ppxlib"
   "ppx_deriving"
   "ppx_deriving_yojson"
   "ppx_deriving_jsonschema"
@@ -33,6 +34,7 @@ depends: [
   "lwt_ppx" {with_js}
   "js_of_ocaml" {with_js}
   "js_of_ocaml-ppx" {with_js}
+  "mosaic"
   "odoc" {with-doc}
 ]
 build: [

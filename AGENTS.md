@@ -1,202 +1,88 @@
 # ALSDiff Agent Instructions
 
-## Build, Lint, and Test Commands
+## Critical Patterns (Non-Obvious)
 
-### Core Commands
-- `dune build` - Build the entire project
-- `dune runtest` - Run all tests
-- `dune runtest --force` - Force rerun all tests
-- `dune build @fmt` - Format code with OCamlFormat
-- `dune exec alsdiff -- <file1.als> <file2.als>` - Run main CLI
+### MainTrack Singleton
+MainTrack is a singleton (master output track) with special behavior:
+- No `id` field
+- `has_same_id _ _ = true` - always returns true
+- `id_hash _ = Hashtbl.hash 0` - constant hash
+- Never apply regular track ID logic to MainTrack
 
-### CLI Options
-- `alsdiff FILE1.als FILE2.als` - Compare two ALS files
-- `--mode tree|stats` - Output mode: hierarchical tree (default) or stats summary
-- `--preset PRESET` - Use output preset (compact, composer, full, inline, mixing, quiet, verbose)
-- `--config FILE` - Load configuration from JSON file
-- `--dump-preset PRESET` - Dump preset configuration as JSON to stdout
-- `--dump-schema` - Dump JSON schema for configuration to stdout
-- `--validate-config FILE` - Validate a config file against schema
-- `--git` - Git external diff driver mode (exit code 0 = no changes, 1 = changes)
-- `--prefix-added/removed/modified/unchanged` - Custom change prefixes
-- `--note-name-style Sharp|Flat` - Note naming convention
-- `--max-collection-items N` - Limit collection output size
+### PPX Derive System
+Core types require specific PPX derives for the diff system:
+```ocaml
+[@@deriving eq, id, patch]       (* Standard derive for diffable types *)
+[@@deriving eq, patch]            (* For types without identity fields *)
+[@@patch.generate_diff]           (* Triggers automatic diff generation *)
 
-### Running Single Tests
-- `dune exec test/test_upath.exe` - Run specific test (upath)
-- `dune exec test/test_xml.exe` - Run specific test (xml)
-- `dune exec test/test_device.exe` - Run specific test (device)
-- `dune exec test/test_view_model.exe` - Run view model tests
-- `dune exec test/test_text_renderer.exe` - Run text renderer tests
-- `dune exec test/test_stats_renderer.exe` - Run stats renderer tests
-- `dune exec test/test_liveset.exe` - Run liveset tests
-- `dune exec test/test_detail_config_json.exe` - Run config JSON tests
-- General pattern: `dune exec test/test_<module>.exe`
+[@id.id]                          (* Marks identity field for matching *)
+[@id.ref]                         (* Marks reference to type with identity *)
+[@patch.skip]                     (* Excludes field from patch generation *)
+[@patch.identity]                 (* Include in patch but skip validation *)
+```
 
-### Development Utilities
-- `dune clean` - Clean build artifacts
-- `dune promote` - Promote generated files
-- `dune utop` - Load library into Utop REPL
-- `dune describe pp lib/<path>.ml` - Inspect PPX-generated code
+**Never remove `[@@deriving ...]` annotations** - they generate essential code.
 
-## Code Style Guidelines
+### Structured Diff System
+Three kinds of changes from `lib/base/diff.ml`:
+- `structured_update` - value changes (`Foo.Patch.t structured_update`)
+- `structured_change` - option/conditional changes (`(Foo.t, Foo.Patch.t) structured_change`)
+- `atomic_patch` - for atomic types (`{ oldval : 'a; newval : 'a }`)
 
-### Imports and Module Opens
-**Library code** (`lib/`): Use opens at top of files for cleaner code
+### Module Access Patterns
+**Always open base modules in library code:**
 ```ocaml
 open Alsdiff_base
 open Alsdiff_base.Diff
-open Alsdiff_live
-open Alsdiff_output
 ```
 
-**Test code** (`test/`): Use specific opens
+**Submodule access pattern:**
 ```ocaml
-open Alsdiff_base.Xml
-open Alsdiff_base.Upath
-open Test_utils.Utils
-```
-
-For submodules (e.g., from `lib/live/track.ml`):
-```ocaml
-open Alsdiff_live.Track.Routing
+open Alsdiff_live.Track.Routing      (* Not Alsdiff_live.Routing *)
 open Alsdiff_live.Track.Mixer
 open Alsdiff_live.Track.MidiTrack
+open Alsdiff_live.Track.AudioTrack
 ```
 
-### Formatting
+## Common Mistakes to Avoid
+
+1. **MainTrack is not a regular track** - don't apply ID-based logic to it
+2. **Don't skip PPX derives** - record types need `[@@deriving eq, id, patch]`
+3. **Don't modify `[@id.id]` fields** without understanding identity matching
+4. **Handle `Xml.Xml_error` exceptions** - XML parsing can fail
+5. **Don't break singleton pattern** - MainTrack's `has_same_id` always returns true
+
+## Code Style
+
 - Line length: 100 characters
-- Format command: `dune build @fmt`
-- Configured in `.ocamlformat` - do not modify without understanding impact
+- Format: `dune build @fmt`
+- Functions: `snake_case`
+- Types: `PascalCase`
 - Use functional style, avoid mutable state
+- Error pattern: `raise (Xml_error (xml, "descriptive message"))`
 
-### Type Definitions and PPX
-- Always include PPX derives: `[@@deriving eq|yojson|jsonschema]`
-- Use `[@@deriving eq]` for equality checking
-- Use phantom types for type safety (e.g., `type atomic`, `type structured`)
-- Keep type definitions concise with inline comments
+## Development Commands
 
-### Naming Conventions
-- Modules: `module Foo` in `foo.ml` (standard OCaml convention)
-- Functions: snake_case for multi-word names (e.g., `get_attr`, `parse_route_type`)
-- Types: PascalCase, module-specific suffixes for variants (e.g., `route_type`, `atomic_patch`)
-- Record fields: snake_case
-- Exception types: CamelCase with `exception` keyword (e.g., `exception Xml_error of t * string`)
+- `dune build` - Build
+- `dune runtest` - Run tests
+- `dune exec alsdiff` - Run main executable
+- `dune build @fmt` - Format code
+- `dune describe pp lib/live/foo.ml` - Inspect PPX-expanded code
 
-### Error Handling
-- Define custom exceptions: `exception Xml_error of t * string`
-- Use `raise (Exception_name (context, "message"))` pattern
-- Provide descriptive error messages with context
-- Use `failwith` for programmer errors (e.g., type mismatches)
-- Use Option types (`get_attr_opt`) for optional values
+**Important**: Dune commands are exclusive (they use a global lock file). Never issue multiple `dune build` or `dune runtest` commands concurrently - serialize them to avoid lock conflicts.
 
-### Record Pattern Matching
-```ocaml
-match xml with
-| Element { name; childs; _ } -> (* use name and childs *)
-| Data _ as xml -> raise (Xml_error (xml, "Cannot get children from Data node"))
-```
+## Testing
 
-### List Operations
-- Use `List.map`, `List.filter`, `List.iter` for transformations
-- Use `List.sort` with `String.compare` for consistent ordering
-- Prefer `Option.bind` over manual `match` for option chaining
-- Use `Fiber.pair` for parallel operations (Eio concurrency)
+- Tests in `test/test_*.ml` mirror `lib/live/*.ml` structure
+- Use `Test_utils.Utils.resolve_test_data_path` for test data
+- Exception pattern: `try ... with Xml.Xml_error _ -> true`
+- Regression Testing: After any code changes, run `dune runtest` to verify existing tests still pass before committing.
 
-### Test Structure
-- Tests in `test/` directory with pattern `test_<module>.ml`
-- Use Alcotest framework: `Alcotest.check`, `let test_cases = [...]`
-- Define testable types: `let foo_testable = Alcotest.(pair string int)`
-- Test helpers in `test_utils` module
-- Keep tests focused and independent
+## Debugging
 
-### MainTrack Singleton Pattern
-`MainTrack` is a singleton (master output track):
-- No `id` field
-- `has_same_id _ _ = true`
-- `id_hash _ = Hashtbl.hash 0`
-- Skip ID validation in diff functions
+- Investigation: Verify the root cause affects all cases before implementing fixes. Test with multiple examples, not just the reported scenario.
 
-### Concurrency (Eio)
-- Use `Eio_main.run` in entry points
-- Domain manager: `Eio.Stdenv.domain_mgr env`
-- Parallel work: `Eio.Domain_manager.run domain_mgr (fun () -> ...)`
-- Preserve `Eio_main.run` structure when modifying parallel workloads
+## Code Migration:
 
-## Architecture
-
-### Library Structure
-- `lib/base/` (alsdiff_base) - Core utilities
-  - `file.ml` - ALS file decompression and loading
-  - `xml.ml` - XML parsing and manipulation
-  - `upath.ml` - μpath query language (XPath-like syntax for XML)
-  - `equality.ml` - Equality and identity traits (EQUALABLE, IDENTIFIABLE)
-  - `diff.ml` - Diff infrastructure with phantom types (atomic/structured changes)
-  - `error.ml` - Core error handling (Path_error, Diff_error, Parse_error modules)
-- `lib/live/` (alsdiff_live) - Ableton Live types
-  - `automation.ml` - Automation envelopes and events
-  - `clip.ml` - MIDI and Audio clips (MidiClip, AudioClip, Loop, MidiNote, SampleRef)
-  - `device.ml` - All device types (Regular, Plugin, Max4Live, Group)
-  - `track.ml` - Track types (MidiTrack, AudioTrack, MainTrack, Routing, Mixer, Send)
-  - `liveset.ml` - Top-level LiveSet structure (Version, Locator, pointees)
-- `lib/output/` (alsdiff_output) - Output formatting
-  - `output.ml` - Output interface definition
-  - `config.ml` - JSON configuration with schema support and presets
-  - `view_model.ml` - View model types and builders (Field, Item, Collection, ViewBuilder)
-  - `text_renderer.ml` - Text rendering with detail configs and JSON schema support
-  - `stats_renderer.ml` - Stats mode rendering (change counts by type)
-- `bin/` - CLI entry point (alsdiff.ml with cmdliner)
-
-### Device Hierarchy
-All device types in `lib/live/device.ml`:
-- `RegularDevice` - Built-in Ableton effects (Compressor, EQ8, etc.)
-- `PluginDevice` - External plugins (VST2, VST3, AUv2)
-- `GroupDevice` - Nested device chains with branches
-- `Max4LiveDevice` - Max for Live devices
-- Supporting types: `PluginDesc`, `PluginParam`, `GenericParam`, `MIDIMapping`, `PresetRef`, `PatchRef`, `Macro`, `Snapshot`, `Branch`, `MixerDevice`
-
-### Track Types (in `lib/live/track.ml`)
-- `Routing` / `RoutingSet` - I/O routing (singleton pattern)
-- `Send` - Track-to-track sends
-- `Mixer` - Volume/pan/mute/solo
-- `MidiTrack` / `AudioTrack` / `GroupTrack` / `ReturnTrack` - Standard tracks
-- `MainMixer` / `MainTrack` - Master output (singleton pattern)
-
-### View Model Pattern (in `lib/output/view_model.ml`)
-Unified view type system for output rendering:
-```ocaml
-type view = Field of field | Item of item | Collection of collection
-```
-- `ViewBuilder` module with combinators for building views
-- `unified_field_spec` for declarative field definitions
-- Domain types enumeration (DTLiveset, DTTrack, DTDevice, etc.)
-
-### JSON Configuration Support
-Config auto-discovery order:
-1. CLI `--config FILE`
-2. CLI `--preset PRESET`
-3. `.alsdiff.json` in directory of FILE2.als
-4. `.alsdiff.json` in git repository root
-5. `.alsdiff.json` in `$HOME`
-6. `quiet` preset (default)
-
-Detail levels: `Ignore`, `Summary`, `Compact`, `Inline`, `Full`
-Presets: `compact`, `composer`, `full`, `inline`, `mixing`, `quiet`, `verbose`
-
-## Do / Don't
-
-### Do
-- Run `dune build` and `dune runtest` after behavioral changes
-- Add focused tests in `test/` for new functionality
-- Follow existing patterns for similar constructs
-- Use `[@@deriving ...]` annotations
-- Format code with `dune build @fmt` before committing
-- Use `dune describe pp` to inspect PPX output if needed
-
-### Don't
-- Modify code in `plugins/` without explicit instruction
-- Remove `[@@deriving ...]` annotations without understanding PPX impact
-- Use mutable state or imperative patterns
-- Add code comments unless explicitly requested
-- Change `.ocamlformat` configuration
-- Break singleton pattern for `MainTrack`
+- PPX Deriver Migration: 1) Analyze reference implementations (device.ml, track.ml), 2) Identify types to migrate, 3) Create detailed plan, 4) Implement with tests.

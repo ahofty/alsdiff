@@ -154,6 +154,31 @@ let test_liveset_main_track_parsing () =
 
   | _ -> Alcotest.fail "Expected Track.Main type for main track"
 
+let test_liveset_main_track_diff () =
+  let xml = read_file test_liveset_xml_path in
+  let liveset1 = Liveset.create xml test_liveset_xml_path in
+  let liveset2 = Liveset.create xml test_liveset_xml_path in
+  let updated_main =
+    match liveset2.main with
+    | Track.Main main_track ->
+      let updated_tempo =
+        { main_track.Track.MainTrack.mixer.tempo with value = Device.Float 128.0 }
+      in
+      Track.Main {
+        main_track with
+        mixer = { main_track.Track.MainTrack.mixer with tempo = updated_tempo };
+      }
+    | _ -> Alcotest.fail "Expected Track.Main type for main track"
+  in
+  let patch = Liveset.diff liveset1 { liveset2 with main = updated_main } in
+
+  Alcotest.(check bool) "main-only diff is not empty" false (Liveset.Patch.is_empty patch);
+  match patch.Liveset.Patch.main with
+  | `Modified main_patch ->
+    Alcotest.(check bool) "main patch is not empty" false
+      (Track.MainTrack.Patch.is_empty main_patch)
+  | _ -> Alcotest.fail "Expected main patch to be modified"
+
 let test_pointee_name_fallback_in_patch () =
   let xml = read_file test_liveset_xml_path in
   let liveset1 = Liveset.create xml test_liveset_xml_path in
@@ -184,6 +209,27 @@ let test_pointee_name_fallback_in_patch () =
   let after_clear_count = Liveset.IntHashtbl.length patch.Liveset.Patch.old_pointees in
   Alcotest.(check int) "patch tables are independent copies" original_count after_clear_count
 
+let test_track_param_pointee_name_formatting () =
+  let pointees = Liveset.IntHashtbl.create 1 in
+  Liveset.IntHashtbl.add pointees 42 (Liveset.TrackParamPointee ("Bass", "Volume"));
+  Alcotest.(check (option string)) "track param formatting"
+    (Some "Bass: Volume")
+    (Liveset.get_pointee_name_from_table_opt pointees 42)
+
+let test_fixture_pointee_names_do_not_duplicate_track_prefix () =
+  let xml = read_file test_liveset_xml_path in
+  let liveset = Liveset.create xml test_liveset_xml_path in
+  Liveset.IntHashtbl.to_seq_keys liveset.Liveset.pointees
+  |> Seq.iter (fun id ->
+      match Liveset.get_pointee_name_from_table_opt liveset.Liveset.pointees id with
+      | Some name -> begin
+          match String.split_on_char ':' name |> List.map String.trim with
+          | first :: second :: _ when first = second ->
+            Alcotest.fail ("Duplicated track prefix in pointee name: " ^ name)
+          | _ -> ()
+        end
+      | None -> ())
+
 let () =
   Alcotest.run "Liveset" [
     "create", [
@@ -194,6 +240,9 @@ let () =
       Alcotest.test_case "pointees table initialization" `Quick test_liveset_pointees_table;
       Alcotest.test_case "locators parsing" `Quick test_liveset_locators_parsing;
       Alcotest.test_case "main track parsing" `Quick test_liveset_main_track_parsing;
+      Alcotest.test_case "main track diff" `Quick test_liveset_main_track_diff;
       Alcotest.test_case "pointee name fallback in patch" `Quick test_pointee_name_fallback_in_patch;
+      Alcotest.test_case "track param pointee formatting" `Quick test_track_param_pointee_name_formatting;
+      Alcotest.test_case "fixture pointee names do not duplicate track prefix" `Quick test_fixture_pointee_names_do_not_duplicate_track_prefix;
     ];
   ]
