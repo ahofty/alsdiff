@@ -257,15 +257,16 @@ let render_export_selector (model : Model.t) : Msg.t Mosaic.t =
   in
 
   let option_list = List.map render_option options in
-  let footer_style = fg Mosaic.Ansi.Color.blue default in
-  let footer = Mosaic.text ~style:footer_style
-      "↑↓: Navigate | Enter: Export | Esc: Cancel" in
 
   (* Add padding above and below for visual centering *)
   let padding_top = List.init 6 (fun _ -> Mosaic.text "") in
   let padding_bottom = List.init 6 (fun _ -> Mosaic.text "") in
-  Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column
-    (padding_top @ title :: option_list @ [footer] @ padding_bottom)
+  Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column [
+    Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column
+      ~flex_grow:1.
+      (padding_top @ title :: option_list @ padding_bottom);
+    render_status_bar model;
+  ]
 
 let render_stats (model : Model.t) : Msg.t Mosaic.t =
   let title_style = fg Mosaic.Ansi.Color.yellow default in
