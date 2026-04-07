@@ -4,6 +4,9 @@ open Alsdiff_output
 open Config
 open Lwt.Syntax
 open View_model
+open Cmdliner
+open Cmdliner.Term.Syntax
+open Build_info.V1
 
 let load_liveset file =
   let xml = File.open_als file in
@@ -16,15 +19,13 @@ let create_views (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
 
 type output_mode = Tree | Stats
 
-type preset = [ `Compact | `Composer | `Full | `Inline | `Mixing | `Quiet | `Verbose ]
-
 type config = {
   positional_args: string list;
   git_mode: bool;
   output_mode: output_mode;
   config_file: string option;
-  preset: preset option;
-  dump_preset: preset option;
+  preset: [ `Compact | `Composer | `Full | `Inline | `Mixing | `Quiet | `Verbose ] option;
+  dump_preset: [ `Compact | `Composer | `Full | `Inline | `Mixing | `Quiet | `Verbose ] option;
   prefix_added: string option;
   prefix_removed: string option;
   prefix_modified: string option;
@@ -208,250 +209,171 @@ let diff_cmd ~config =
     Lwt.return exit_code
   end
 
-type parse_result = [ `Run of config | `Show_help | `Show_version ]
+let positional_args =
+  let doc = "Positional arguments. Normal mode: FILE1.als FILE2.als. \
+             Git mode (--git): path old-file old-hex old-mode new-file new-hex new-mode" in
+  Arg.(value & pos_all string [] & info [] ~docv:"ARGS" ~doc)
 
-type parse_error = {
-  message: string;
-  exit_code: int;
-}
+let git_mode =
+  let doc = "Enable git external diff driver mode. Expects exactly 7 positional arguments: \
+             path old-file old-hex old-mode new-file new-hex new-mode. \
+             Exit code 0 = no changes, 1 = changes found (for trustExitCode). \
+             All other flags (--preset, --config, etc.) work in git mode." in
+  Arg.(value & flag & info ["git"] ~doc)
 
-let js_version = "dev-js"
+let config_file =
+  let doc = "Load configuration from JSON file. Overrides --preset, individual CLI options override config values." in
+  Arg.(value & opt (some string) None & info ["config"] ~docv:"CONFIG.json" ~doc)
 
-let default_config = {
-  positional_args = [];
-  git_mode = false;
-  output_mode = Tree;
-  config_file = None;
-  preset = None;
-  dump_preset = None;
-  prefix_added = None;
-  prefix_removed = None;
-  prefix_modified = None;
-  prefix_unchanged = None;
-  note_name_style = None;
-  max_collection_items = None;
-  dump_schema = false;
-  validate_config = None;
-}
+let preset =
+  let doc = "Output detail preset. Ignored when --config is specified. $(b,compact)=show structure only, $(b,full)=show all details (multiline), $(b,inline)=show all details (single line), $(b,mixing)=optimized for stem track mixing, $(b,composer)=MIDI composition only, $(b,quiet)=minimal output, $(b,verbose)=show everything including unchanged" in
+  Arg.(value & opt (some (enum ["compact", `Compact; "composer", `Composer; "full", `Full; "inline", `Inline; "mixing", `Mixing; "quiet", `Quiet; "verbose", `Verbose])) None & info ["preset"] ~docv:"PRESET" ~doc)
 
-let usage =
-  "Usage: alsdiff [OPTIONS] FILE1.als FILE2.als\n\
-   \n\
-   Compare two Ableton Live Set (.als) files and show differences.\n\
-   \n\
-   Git mode:\n\
-   \  alsdiff --git path old-file old-hex old-mode new-file new-hex new-mode\n\
-   \n\
-   Options:\n\
-   \  --mode tree|stats\n\
-   \  --preset compact|composer|full|inline|mixing|quiet|verbose\n\
-   \  --config FILE\n\
-   \  --dump-preset PRESET\n\
-   \  --dump-schema\n\
-   \  --validate-config FILE\n\
-   \  --git\n\
-   \  --prefix-added PREFIX\n\
-   \  --prefix-removed PREFIX\n\
-   \  --prefix-modified PREFIX\n\
-   \  --prefix-unchanged PREFIX\n\
-   \  --note-name-style Sharp|Flat\n\
-   \  --max-collection-items N\n\
-   \  --version\n\
-   \  --help"
+let dump_preset =
+  let doc = "Dump preset configuration as JSON to stdout and exit. Same format as --config file." in
+  Arg.(value & opt (some (enum ["compact", `Compact; "composer", `Composer; "full", `Full; "inline", `Inline; "mixing", `Mixing; "quiet", `Quiet; "verbose", `Verbose])) None & info ["dump-preset"] ~docv:"PRESET" ~doc)
 
-let starts_with ~prefix s =
-  let prefix_len = String.length prefix in
-  String.length s >= prefix_len && String.sub s 0 prefix_len = prefix
+let prefix_added =
+  let doc = "Prefix for added items (default from preset: '+')" in
+  Arg.(value & opt (some string) None & info ["prefix-added"] ~docv:"PREFIX" ~doc)
 
-let split_long_option arg =
-  match String.index_opt arg '=' with
-  | None -> (arg, None)
-  | Some idx ->
-    let name = String.sub arg 0 idx in
-    let value = String.sub arg (idx + 1) (String.length arg - idx - 1) in
-    (name, Some value)
+let prefix_removed =
+  let doc = "Prefix for removed items (default from preset: '-')" in
+  Arg.(value & opt (some string) None & info ["prefix-removed"] ~docv:"PREFIX" ~doc)
 
-let option_requires_value name inline_value rest =
-  match inline_value with
-  | Some value -> Ok (value, rest)
-  | None ->
-    match rest with
-    | value :: rest' -> Ok (value, rest')
-    | [] ->
-      Error {
-        message = Fmt.str "Error: option %s requires a value." name;
-        exit_code = 1;
-      }
+let prefix_modified =
+  let doc = "Prefix for modified items (default from preset: '*')" in
+  Arg.(value & opt (some string) None & info ["prefix-modified"] ~docv:"PREFIX" ~doc)
 
-let parse_output_mode value =
-  match value with
-  | "tree" -> Ok Tree
-  | "stats" -> Ok Stats
-  | _ ->
-    Error {
-      message = Fmt.str "Error: invalid value '%s' for --mode (expected tree|stats)." value;
-      exit_code = 1;
-    }
+let prefix_unchanged =
+  let doc = "Prefix for unchanged items (default from preset: '')" in
+  Arg.(value & opt (some string) None & info ["prefix-unchanged"] ~docv:"PREFIX" ~doc)
 
-let parse_preset value =
-  match value with
-  | "compact" -> Ok `Compact
-  | "composer" -> Ok `Composer
-  | "full" -> Ok `Full
-  | "inline" -> Ok `Inline
-  | "mixing" -> Ok `Mixing
-  | "quiet" -> Ok `Quiet
-  | "verbose" -> Ok `Verbose
-  | _ ->
-    Error {
-      message =
-        Fmt.str
-          "Error: invalid value '%s' for preset (expected compact|composer|full|inline|mixing|quiet|verbose)."
-          value;
-      exit_code = 1;
-    }
+let note_name_style =
+  let doc = "Note name display style. $(b,Sharp)=C# D# etc., $(b,Flat)=Db Eb etc. (default from preset: Sharp)" in
+  Arg.(value & opt (some (enum ["Sharp", Sharp; "Flat", Flat])) None & info ["note-name-style"] ~docv:"STYLE" ~doc)
 
-let parse_note_name_style value =
-  match value with
-  | "Sharp" -> Ok Sharp
-  | "Flat" -> Ok Flat
-  | _ ->
-    Error {
-      message = Fmt.str "Error: invalid value '%s' for --note-name-style (expected Sharp|Flat)." value;
-      exit_code = 1;
-    }
+let max_collection_items =
+  let doc = "Maximum number of items to show in collections (default from preset: None/10/50 depending on preset)" in
+  Arg.(value & opt (some int) None & info ["max-collection-items"] ~docv:"N" ~doc)
 
-let parse_max_collection_items value =
-  match int_of_string_opt value with
-  | Some n -> Ok n
-  | None ->
-    Error {
-      message = Fmt.str "Error: invalid integer '%s' for --max-collection-items." value;
-      exit_code = 1;
-    }
+let stats_mode_doc =
+  "Stats mode supports --config and --preset for customizing which types appear in statistics. \
+   Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
 
-let option_without_value name inline_value =
-  match inline_value with
-  | None -> Ok ()
-  | Some _ ->
-    Error {
-      message = Fmt.str "Error: option %s does not take a value." name;
-      exit_code = 1;
-    }
+let output_mode =
+  let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type. " ^ stats_mode_doc in
+  Arg.(value & opt (enum ["tree", Tree; "stats", Stats]) Tree & info ["mode"] ~docv:"MODE" ~doc)
 
-let parse_args (argv : string list) : (parse_result, parse_error) result =
-  let rec loop cfg positional = function
-    | [] ->
-      Ok (`Run { cfg with positional_args = List.rev positional })
-    | "--" :: rest ->
-      Ok (`Run { cfg with positional_args = List.rev_append positional rest })
-    | ("--help" | "-h") :: _ ->
-      Ok `Show_help
-    | "--version" :: _ ->
-      Ok `Show_version
-    | arg :: rest when starts_with ~prefix:"--" arg ->
-      let name, inline_value = split_long_option arg in
-      begin
-        match name with
-        | "--git" ->
-          (match option_without_value name inline_value with
-           | Error _ as error -> error
-           | Ok () -> loop { cfg with git_mode = true } positional rest)
-        | "--dump-schema" ->
-          (match option_without_value name inline_value with
-           | Error _ as error -> error
-           | Ok () -> loop { cfg with dump_schema = true } positional rest)
-        | "--config" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') -> loop { cfg with config_file = Some value } positional rest')
-        | "--validate-config" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             loop { cfg with validate_config = Some value } positional rest')
-        | "--mode" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             match parse_output_mode value with
-             | Error _ as error -> error
-             | Ok output_mode -> loop { cfg with output_mode } positional rest')
-        | "--preset" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             match parse_preset value with
-             | Error _ as error -> error
-             | Ok preset -> loop { cfg with preset = Some preset } positional rest')
-        | "--dump-preset" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             match parse_preset value with
-             | Error _ as error -> error
-             | Ok preset -> loop { cfg with dump_preset = Some preset } positional rest')
-        | "--prefix-added" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') -> loop { cfg with prefix_added = Some value } positional rest')
-        | "--prefix-removed" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             loop { cfg with prefix_removed = Some value } positional rest')
-        | "--prefix-modified" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             loop { cfg with prefix_modified = Some value } positional rest')
-        | "--prefix-unchanged" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             loop { cfg with prefix_unchanged = Some value } positional rest')
-        | "--note-name-style" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             match parse_note_name_style value with
-             | Error _ as error -> error
-             | Ok note_name_style ->
-               loop { cfg with note_name_style = Some note_name_style } positional rest')
-        | "--max-collection-items" ->
-          (match option_requires_value name inline_value rest with
-           | Error _ as error -> error
-           | Ok (value, rest') ->
-             match parse_max_collection_items value with
-             | Error _ as error -> error
-             | Ok max_collection_items ->
-               loop { cfg with max_collection_items = Some max_collection_items } positional
-                 rest')
-        | "--help" ->
-          (match option_without_value name inline_value with
-           | Error _ as error -> error
-           | Ok () -> Ok `Show_help)
-        | "--version" ->
-          (match option_without_value name inline_value with
-           | Error _ as error -> error
-           | Ok () -> Ok `Show_version)
-        | _ ->
-          Error {
-            message = Fmt.str "Error: unknown option '%s'." name;
-            exit_code = 1;
-          }
-      end
-    | arg :: _ when starts_with ~prefix:"-" arg ->
-      Error {
-        message = Fmt.str "Error: unknown option '%s'." arg;
-        exit_code = 1;
-      }
-    | arg :: rest ->
-      loop cfg (arg :: positional) rest
-  in
-  loop default_config [] argv
+let dump_schema =
+  let doc = "Dump JSON schema for configuration to stdout and exit. Does not require FILE1.als or FILE2.als." in
+  Arg.(value & flag & info ["dump-schema"] ~doc)
+
+let validate_config =
+  let doc = "Validate a configuration file against the JSON schema and exit. Reports validation errors without running diff." in
+  Arg.(value & opt (some string) None & info ["validate-config"] ~docv:"FILE" ~doc)
+
 
 let config_ref = ref None
+
+let cmd =
+  let doc = "Compare two Ableton Live Set (.als) files and show differences" in
+  let man = [
+    `S Manpage.s_description;
+    `P "$(cmd) compares two Ableton Live Set files and displays the differences between them using various output formats.";
+    `P "The tool supports multiple output presets and allows fine-grained customization of display through command-line options.";
+    `P "Configuration can be loaded from a JSON file, with CLI options able to override individual values.";
+    `S Manpage.s_examples;
+    `P "Compare two files with default quiet preset:";
+    `Pre "$(cmd) v1.als v2.als";
+    `P "Show change statistics summary:";
+    `Pre "$(cmd) v1.als v2.als --mode stats";
+    `P "Compare with compact output:";
+    `Pre "$(cmd) v1.als v2.als --preset compact";
+    `P "Compare with full details:";
+    `Pre "$(cmd) v1.als v2.als --preset full";
+    `P "Verbose comparison (show everything including unchanged):";
+    `Pre "$(cmd) v1.als v2.als --preset verbose";
+    `P "Customize prefixes:";
+    `Pre "$(cmd) v1.als v2.als --prefix-added \"[+]\" --prefix-removed \"[-]\" --prefix-modified \"[*]\"";
+    `P "Use flat note names for MIDI:";
+    `Pre "$(cmd) v1.als v2.als --note-name-style Flat";
+    `P "Limit collection items to 100:";
+    `Pre "$(cmd) v1.als v2.als --max-collection-items 100";
+    `P "Combine multiple options:";
+    `Pre "$(cmd) v1.als v2.als --preset compact --prefix-added \"ADD \" --max-collection-items 50";
+    `P "Load configuration from JSON file:";
+    `Pre "$(cmd) v1.als v2.als --config myconfig.json";
+    `P "Use config file with CLI override:";
+    `Pre "$(cmd) v1.als v2.als --config myconfig.json --max-collection-items 100";
+    `P "Config file with prefix override:";
+    `Pre "$(cmd) v1.als v2.als --config myconfig.json --prefix-added \"ADD \"";
+    `P "Auto-discover configuration from .alsdiff.json:";
+    `Pre "$(cmd) v1.als v2.als";
+    `P "Dump configuration JSON schema to stdout:";
+    `Pre "$(cmd) --dump-schema";
+    `P "Validate a configuration file:";
+    `Pre "$(cmd) --validate-config myconfig.json";
+    `P "Dump preset configuration as JSON to stdout:";
+    `Pre "$(cmd) --dump-preset full";
+    `P "Dump preset configuration to file:";
+    `Pre "$(cmd) --dump-preset compact > mypreset.json";
+    `P "Configuration search order (when --config not specified):";
+    `P "1. --preset PRESET (if specified)";
+    `P "2. .alsdiff.json in directory of FILE2.als";
+    `P "3. .alsdiff.json in git repository root";
+    `P "4. .alsdiff.json in user's home directory (~)";
+    `P "5. quiet preset (default)";
+    `S "GIT DIFF DRIVER MODE";
+    `P "$(cmd) can be used as a git external diff driver. When invoked with $(b,--git), \
+        it expects exactly 7 positional arguments as passed by git:";
+    `P "$(b,path old-file old-hex old-mode new-file new-hex new-mode)";
+    `P "In git mode, exit code 0 means no differences found, and exit code 1 means \
+        differences were found. This is compatible with git's $(b,trustExitCode) setting.";
+    `P "Configure git to use alsdiff (.gitconfig):";
+    `Pre "[diff \"als\"]";
+    `Pre "    command = alsdiff --preset quiet --git";
+    `Pre "    trustExitCode = true";
+    `P "Configure .gitattributes:";
+    `Pre "*.als diff=als";
+    `P "Git mode with custom preset:";
+    `Pre "$(cmd) --preset inline --git path old-file old-hex old-mode new-file new-hex new-mode";
+    `P "Git mode with config file:";
+    `Pre "$(cmd) --config myconfig.json --git path old-file old-hex old-mode new-file new-hex new-mode";
+    `S Manpage.s_options;
+    `P ("$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. \
+         $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). " ^ stats_mode_doc);
+    `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery. The --preset option is ignored when --config is specified. Individual CLI options override values from config file.";
+    `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,inline), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over auto-discovery but ignored when --config is specified.";
+    `P "$(b,--prefix-added PREFIX) overrides prefix for added items from config file.";
+    `P "$(b,--prefix-removed PREFIX) overrides prefix for removed items from config file.";
+    `P "$(b,--prefix-modified PREFIX) overrides prefix for modified items from config file.";
+    `P "$(b,--prefix-unchanged PREFIX) overrides prefix for unchanged items from config file.";
+    `P "$(b,--note-name-style STYLE) overrides note name style from config file.";
+    `P "$(b,--max-collection-items N) overrides max collection items from config file.";
+    `P "$(b,--dump-preset PRESET) dumps preset configuration as JSON to stdout and exits. Same format as --config file. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,inline), $(b,mixing), $(b,quiet), $(b,verbose).";
+    `P "$(b,--dump-schema) dumps JSON schema for configuration to stdout and exits.";
+    `P "$(b,--validate-config FILE) validates a configuration file against the JSON schema and exits. Useful for checking config files before use.";
+    `P "$(b,--git) enables git external diff driver mode. Expects exactly 7 positional arguments from git. Exit code 0 = no differences, 1 = differences found. All other options work in git mode.";
+    `S Manpage.s_bugs;
+    `P "Report bugs at https://github.com/krfantasy/alsdiff/issues";
+  ] in
+  let exits =
+    Cmd.Exit.info 0 ~doc:"success (normal mode), or no differences found (git mode with trustExitCode)." ::
+    Cmd.Exit.info 1 ~doc:"differences found (git mode with trustExitCode), or known errors in normal mode." ::
+    Cmd.Exit.info 2 ~doc:"invalid arguments (e.g., wrong number of positional args in git mode)." ::
+    List.filter (fun e -> Cmd.Exit.info_code e <> 123 && Cmd.Exit.info_code e <> 0) Cmd.Exit.defaults
+  in
+  Cmd.make
+    (Cmd.info "alsdiff"
+       ~version:(match version () with
+           | None -> "dev"
+           | Some v -> Version.to_string v)
+       ~doc ~man ~exits) @@
+  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ max_collection_items and+ output_mode and+ dump_schema and+ validate_config in
+  let cfg = { positional_args; git_mode; output_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; max_collection_items; dump_schema; validate_config } in
+  config_ref := Some cfg;
+  ()
 
 let main () =
   Printexc.record_backtrace true;
@@ -464,71 +386,60 @@ let main () =
   in
 
   let run_cmd () =
-    let args =
-      match Array.to_list Sys.argv with
-      | [] -> []
-      | _prog :: rest -> rest
-    in
-    match parse_args args with
-    | Ok `Show_help ->
-      print_endline usage;
-      Lwt.return 0
-    | Ok `Show_version ->
-      print_endline js_version;
-      Lwt.return 0
-    | Error { message; exit_code } ->
-      Fmt.epr "%s@." message;
-      Fmt.epr "Use --help for usage.@.";
+    let exit_code = Cmd.eval cmd in
+    if exit_code <> 0 then
       Lwt.return exit_code
-    | Ok (`Run cfg) ->
-      config_ref := Some cfg;
-      (* Handle --dump-preset first *)
-      (match cfg.dump_preset with
-       | Some preset ->
-         let preset_config = parse_preset_args preset in
-         let json = Text_renderer.detail_config_to_yojson_with_schema preset_config in
-         print_endline (Yojson.Safe.pretty_to_string json);
-         Lwt.return 0
-       | None ->
-         (* Handle --validate-config *)
-         (match cfg.validate_config with
-          | Some config_path ->
-            (match Text_renderer.validate_config_file config_path with
-             | Ok () ->
-               Fmt.pr "Configuration file %s is valid@." config_path;
-               Lwt.return 0
-             | Error msg ->
-               Fmt.epr "%s@." msg;
-               Lwt.return 1)
-          | None ->
-            (* Handle --dump-schema *)
-            if cfg.dump_schema then begin
-              print_endline (Text_renderer.detail_config_schema_to_string ());
-              Lwt.return 0
-            end else begin
-              (* Normal diff operation - validate args based on mode *)
-              let has_valid_args =
-                if cfg.git_mode then
-                  (* Git mode needs exactly 7 positional args *)
-                  List.length cfg.positional_args = 7
-                else
-                  (* Normal mode needs exactly 2 positional args *)
-                  List.length cfg.positional_args = 2
-              in
-              if has_valid_args then
-                diff_cmd ~config:cfg
-              else if cfg.git_mode then begin
-                Fmt.epr "Error: --git mode requires exactly 7 positional arguments@.";
-                Fmt.epr "Usage: alsdiff --git path old-file old-hex old-mode new-file new-hex new-mode@.";
-                Lwt.return 2
+    else
+      match !config_ref with
+      | None -> Lwt.return 0
+      | Some cfg ->
+        (* Handle --dump-preset first *)
+        (match cfg.dump_preset with
+         | Some preset ->
+           let preset_config = parse_preset_args preset in
+           let json = Text_renderer.detail_config_to_yojson_with_schema preset_config in
+           print_endline (Yojson.Safe.pretty_to_string json);
+           Lwt.return 0
+         | None ->
+           (* Handle --validate-config *)
+           (match cfg.validate_config with
+            | Some config_path ->
+              (match Text_renderer.validate_config_file config_path with
+               | Ok () ->
+                 Fmt.pr "Configuration file %s is valid@." config_path;
+                 Lwt.return 0
+               | Error msg ->
+                 Fmt.epr "%s@." msg;
+                 Lwt.return 1)
+            | None ->
+              (* Handle --dump-schema *)
+              if cfg.dump_schema then begin
+                print_endline (Text_renderer.detail_config_schema_to_string ());
+                Lwt.return 0
               end else begin
-                Fmt.epr "Error: FILE1.als and FILE2.als are required for diff@.";
-                Fmt.epr "Use --dump-schema to generate configuration schema without files.@.";
-                Fmt.epr "Use --dump-preset PRESET to dump a preset configuration as JSON.@.";
-                Fmt.epr "Use --validate-config FILE to validate a configuration file.@.";
-                Lwt.return 1
-              end
-            end))
+                (* Normal diff operation - validate args based on mode *)
+                let has_valid_args =
+                  if cfg.git_mode then
+                    (* Git mode needs exactly 7 positional args *)
+                    List.length cfg.positional_args = 7
+                  else
+                    (* Normal mode needs exactly 2 positional args *)
+                    List.length cfg.positional_args = 2
+                in
+                if has_valid_args then
+                  diff_cmd ~config:cfg
+                else if cfg.git_mode then begin
+                  Fmt.epr "Error: --git mode requires exactly 7 positional arguments@.";
+                  Fmt.epr "Usage: alsdiff --git path old-file old-hex old-mode new-file new-hex new-mode@.";
+                  Lwt.return 2
+                end else begin
+                  Fmt.epr "Error: FILE1.als and FILE2.als are required for diff@.";
+                  Fmt.epr "Use --dump-schema to generate configuration schema without files.@.";
+                  Fmt.epr "Use --dump-preset PRESET to dump a preset configuration as JSON.@.";
+                  Fmt.epr "Use --validate-config FILE to validate a configuration file.@.";
+                  Lwt.return 1
+                end
+              end))
   in
 
   Lwt.catch
