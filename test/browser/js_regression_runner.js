@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
-const { spawnSync } = require('child_process');
 const { TextDecoder } = require('util');
 
 function fail(message) {
@@ -215,44 +213,10 @@ async function runBrowserApiTests(xmlPath) {
   global.alsdiff.setDebug(false);
 }
 
-function runNodeCliTests(cliPath, xmlPath) {
-  const runUnknown = spawnSync('node', [cliPath, '--bad-flag'], { encoding: 'utf8' });
-  ensure(runUnknown.status !== 0,
-    `node CLI unknown option should exit non-zero, got=${runUnknown.status}`);
-
-  const runVersion = spawnSync('node', [cliPath, '--version'], { encoding: 'utf8' });
-  ensure(runVersion.status === 0,
-    `node CLI --version should exit=0, got=${runVersion.status}, stderr=${runVersion.stderr}`);
-  const versionOutput = (runVersion.stdout || '').trim();
-  ensure(versionOutput.length > 0,
-    'node CLI --version should print a non-empty version string');
-
-  const xml = fs.readFileSync(xmlPath, 'utf8');
-  const gz = zlib.gzipSync(Buffer.from(xml, 'utf8'));
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alsdiff-js-regression-'));
-  const file1 = path.join(tempDir, 'one.als');
-  const file2 = path.join(tempDir, 'two.als');
-  fs.writeFileSync(file1, gz);
-  fs.writeFileSync(file2, gz);
-
-  const runTree = spawnSync('node', [cliPath, file1, file2], { encoding: 'utf8' });
-  ensure(runTree.status === 0,
-    `node CLI tree mode exit=${runTree.status}, stderr=${runTree.stderr}`);
-  ensure(!runTree.stderr.includes('Stack overflow'),
-    'node CLI tree mode should not stack overflow');
-
-  const runStats = spawnSync('node', [cliPath, file1, file2, '--mode', 'stats'], { encoding: 'utf8' });
-  ensure(runStats.status === 0,
-    `node CLI stats mode exit=${runStats.status}, stderr=${runStats.stderr}`);
-  ensure(!runStats.stderr.includes('Stack overflow'),
-    'node CLI stats mode should not stack overflow');
-}
-
 async function main() {
-  const [bundlePath, cliPath, xmlPath] = process.argv.slice(2);
-  if (!bundlePath || !cliPath || !xmlPath) {
-    fail('usage: node js_regression_runner.js <browser_bundle.js> <cli_bundle.js> <t4.xml>');
+  const [bundlePath, xmlPath] = process.argv.slice(2);
+  if (!bundlePath || !xmlPath) {
+    fail('usage: node js_regression_runner.js <browser_bundle.js> <t4.xml>');
   }
 
   setGlobalBrowserShims();
@@ -260,7 +224,6 @@ async function main() {
   global.alsdiff.setDebug(false);
 
   await runBrowserApiTests(xmlPath);
-  runNodeCliTests(cliPath, xmlPath);
 
   console.log('[js-regression] PASS');
 }

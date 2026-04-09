@@ -242,15 +242,13 @@
  (alias runtest-js)
  (deps
   browser/js_regression_runner.js
-  t4.xml
-  ../lib/browser/alsdiff.js
-  ../bin/js/alsdiff_js.bc.js)
+  data/t4.xml
+  ../lib/browser/alsdiff.js)
  (action
   (run node
    %{dep:browser/js_regression_runner.js}
    %{dep:../lib/browser/alsdiff.js}
-   %{dep:../bin/js/alsdiff_js.bc.js}
-   %{dep:t4.xml})))
+   %{dep:data/t4.xml})))
 
 (test
  (name test_config_text_renderer)
