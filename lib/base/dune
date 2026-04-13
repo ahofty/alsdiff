@@ -4,7 +4,9 @@
  (modules
    file
    xml
+   xml2
    upath
+   upath2
    equality
    diff)
  (libraries

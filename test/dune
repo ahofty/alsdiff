@@ -168,6 +168,29 @@
  (libraries alsdiff_base alcotest unix))
 
 (test
+ (name test_streaming)
+ (modules test_streaming)
+ (libraries alsdiff_base alcotest)
+ (deps data/t4.xml))
+
+(test
+ (name test_streaming_advanced)
+ (modules test_streaming_advanced)
+ (libraries alsdiff_base alcotest)
+ (deps data/t4.xml))
+
+(test
+ (name test_upath2)
+ (modules test_upath2)
+ (libraries alsdiff_base alcotest))
+
+(test
+ (name test_upath2_regex)
+ (modules test_upath2_regex)
+ (libraries alsdiff_base alcotest)
+ (deps data/regex_match.xml))
+
+(test
  (name test_main_track)
  (modules test_main_track utils)
  (libraries alsdiff_base alsdiff_live alcotest)
