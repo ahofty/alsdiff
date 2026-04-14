@@ -61,11 +61,30 @@ type nfa = {
   start : state_id;
 }
 
+(* --- Bitmask active set --- *)
+type active_set = int
+
+let empty_active = 0
+
+let add_active sid bits = bits lor (1 lsl sid)
+
+let mem_active sid bits = (bits land (1 lsl sid)) <> 0
+
+let single_active sid = 1 lsl sid
+
+let iter_active f bits =
+  let b = ref bits in
+  while !b <> 0 do
+    let lowest = !b land (- !b) in
+    f (Ocaml_intrinsics_kernel.Int.count_trailing_zeros lowest);
+    b := !b - lowest
+  done
+
 (* Evaluator stack frame — needed for ParentNode name/attr resolution *)
 type stack_frame = {
   element_name : string;
   element_attrs : (string * string) list;
-  active : state_id list;
+  active : active_set;
 }
 
 (* --- Name / attribute matching --- *)
@@ -225,6 +244,7 @@ let compile (queries : query list) =
     ) queries;
   (* Build array from hashtable *)
   let state_count = !next_id in
+  assert (state_count <= Sys.int_size - 1);
   let state_arr = Array.make state_count (Obj.magic () : nfa_state) in
   Hashtbl.iter (fun id s -> state_arr.(id) <- s) states;
   { states = state_arr; start = start_state.id }
@@ -237,19 +257,18 @@ let evaluate nfa stream =
   let stack = ref [{
       element_name = "";
       element_attrs = [];
-      active = [ nfa.start ];
+      active = single_active nfa.start;
     }] in
   Xml2.iter_signals (fun sigv ->
       match sigv with
       | Xml2.El_start (name, attrs) ->
         let frame = List.hd !stack in
         let active = frame.active in
-        let new_active = ref [] in
+        let new_active = ref empty_active in
         let add_state sid =
-          if not (List.mem sid !new_active) then
-            new_active := sid :: !new_active
+          new_active := !new_active lor (1 lsl sid)
         in
-        List.iter (fun sid ->
+        iter_active (fun sid ->
             let state = nfa.states.(sid) in
             (* Wildcard loop: self-propagate *)
             if state.is_wildcard_loop then
@@ -296,18 +315,16 @@ let evaluate nfa stream =
         (match !stack with
          | popped :: parent :: rest ->
            (* End transitions: ParentNode handling *)
-           let end_targets = ref [] in
-           List.iter (fun sid ->
+           let end_targets = ref empty_active in
+           iter_active (fun sid ->
                let state = nfa.states.(sid) in
                List.iter (fun target_id ->
-                   end_targets := target_id :: !end_targets
+                   end_targets := !end_targets lor (1 lsl target_id)
                  ) state.end_transitions
              ) popped.active;
-           (* Merge end targets into parent active list *)
-           let merged_active = ref parent.active in
-           List.iter (fun target_id ->
-               if not (List.mem target_id !merged_active) then
-                 merged_active := target_id :: !merged_active;
+           (* Merge end targets into parent active set *)
+           let merged_active = parent.active lor !end_targets in
+           iter_active (fun target_id ->
                (* Check accepting at end-transition target *)
                let target_state = nfa.states.(target_id) in
                List.iter (fun (qid, acc_attrs) ->
@@ -317,7 +334,7 @@ let evaluate nfa stream =
                                   depth = Xml2.depth stream } :: !results
                  ) target_state.accepting
              ) !end_targets;
-           stack := { parent with active = !merged_active } :: rest
+           stack := { parent with active = merged_active } :: rest
          | popped :: rest ->
            (* Top-level: just pop *)
            ignore popped;

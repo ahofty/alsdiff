@@ -14,7 +14,8 @@
    angstrom
    camlzip
    xmlm
-   fmt))
+   fmt
+   ocaml_intrinsics_kernel))
 
 ;; Auto indent files with `dune build @fmt`
 (subdir

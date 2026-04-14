@@ -16,6 +16,12 @@
  (modes byte exe)
  (libraries alsdiff_base alsdiff_live alsdiff_output alsdiff_tui_lib eio_main cmdliner dune-build-info))
 
+(executable
+ (public_name bench-xml)
+ (name bench_xml)
+ (modes byte exe)
+ (libraries alsdiff_base cmdliner))
+
 ;; Auto indent files with `dune build @fmt`
 (subdir
  run

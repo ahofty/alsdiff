@@ -31,6 +31,7 @@ depends: [
   "fmt"
   "ptime"
   "mosaic"
+  "ocaml_intrinsics_kernel"
   "odoc" {with-doc}
 ]
 build: [

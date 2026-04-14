@@ -38,7 +38,8 @@
     jsonschema
     fmt
     ptime
-    mosaic)
+    mosaic
+    ocaml_intrinsics_kernel)
  (tags
   ("ableton live" "git" "version control")))
 
