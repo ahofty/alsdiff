@@ -59,6 +59,7 @@ type nfa_state = {
 type nfa = {
   states : nfa_state array;
   start : state_id;
+  reachable : bool array;  (* true = state can reach an accepting state *)
 }
 
 (* --- Bitmask active set --- *)
@@ -247,7 +248,40 @@ let compile (queries : query list) =
   assert (state_count <= Sys.int_size - 1);
   let state_arr = Array.make state_count (Obj.magic () : nfa_state) in
   Hashtbl.iter (fun id s -> state_arr.(id) <- s) states;
-  { states = state_arr; start = start_state.id }
+  (* Backward reachability: only states that can reach an accepting state *)
+  let compute_reachable (states : nfa_state array) count =
+    (* Build reverse-edge map: predecessors via transitions and end_transitions *)
+    let rev = Array.init count (fun _ -> []) in
+    for i = 0 to count - 1 do
+      let s = states.(i) in
+      List.iter (fun t -> rev.(t.target) <- i :: rev.(t.target)) s.transitions;
+      List.iter (fun target -> rev.(target) <- i :: rev.(target)) s.end_transitions;
+      (* Wildcard loops self-propagate, so a wildcard state is its own predecessor *)
+      if s.is_wildcard_loop then rev.(i) <- i :: rev.(i)
+    done;
+    let reachable = Array.make count false in
+    let queue = Queue.create () in
+    (* Seed with all accepting states *)
+    for i = 0 to count - 1 do
+      if states.(i).accepting <> [] then begin
+        reachable.(i) <- true;
+        Queue.push i queue
+      end
+    done;
+    (* BFS backward through predecessors *)
+    while not (Queue.is_empty queue) do
+      let cur = Queue.pop queue in
+      List.iter (fun pred ->
+          if not reachable.(pred) then begin
+            reachable.(pred) <- true;
+            Queue.push pred queue
+          end
+        ) rev.(cur)
+    done;
+    reachable
+  in
+  let reachable = compute_reachable state_arr state_count in
+  { states = state_arr; start = start_state.id; reachable }
 
 (* --- Evaluation --- *)
 
@@ -266,7 +300,8 @@ let evaluate nfa stream =
         let active = frame.active in
         let new_active = ref empty_active in
         let add_state sid =
-          new_active := !new_active lor (1 lsl sid)
+          if nfa.reachable.(sid) then
+            new_active := !new_active lor (1 lsl sid)
         in
         iter_active (fun sid ->
             let state = nfa.states.(sid) in
@@ -319,7 +354,8 @@ let evaluate nfa stream =
            iter_active (fun sid ->
                let state = nfa.states.(sid) in
                List.iter (fun target_id ->
-                   end_targets := !end_targets lor (1 lsl target_id)
+                   if nfa.reachable.(target_id) then
+                     end_targets := !end_targets lor (1 lsl target_id)
                  ) state.end_transitions
              ) popped.active;
            (* Merge end targets into parent active set *)
