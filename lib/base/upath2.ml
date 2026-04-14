@@ -293,15 +293,17 @@ let evaluate nfa stream =
       element_attrs = [];
       active = single_active nfa.start;
     }] in
+  let next_buf = ref empty_active in
+  let end_buf = ref empty_active in
   Xml2.iter_signals (fun sigv ->
       match sigv with
       | Xml2.El_start (name, attrs) ->
         let frame = List.hd !stack in
         let active = frame.active in
-        let new_active = ref empty_active in
+        next_buf := empty_active;
         let add_state sid =
           if nfa.reachable.(sid) then
-            new_active := !new_active lor (1 lsl sid)
+            next_buf := !next_buf lor (1 lsl sid)
         in
         iter_active (fun sid ->
             let state = nfa.states.(sid) in
@@ -345,21 +347,21 @@ let evaluate nfa stream =
                                  attrs; depth = Xml2.depth stream } :: !results
                 ) state.accepting
           ) active;
-        stack := { element_name = name; element_attrs = attrs; active = !new_active } :: !stack
+        stack := { element_name = name; element_attrs = attrs; active = !next_buf } :: !stack
       | Xml2.El_end ->
         (match !stack with
          | popped :: parent :: rest ->
            (* End transitions: ParentNode handling *)
-           let end_targets = ref empty_active in
+           end_buf := empty_active;
            iter_active (fun sid ->
                let state = nfa.states.(sid) in
                List.iter (fun target_id ->
                    if nfa.reachable.(target_id) then
-                     end_targets := !end_targets lor (1 lsl target_id)
+                     end_buf := !end_buf lor (1 lsl target_id)
                  ) state.end_transitions
              ) popped.active;
            (* Merge end targets into parent active set *)
-           let merged_active = parent.active lor !end_targets in
+           let merged_active = parent.active lor !end_buf in
            iter_active (fun target_id ->
                (* Check accepting at end-transition target *)
                let target_state = nfa.states.(target_id) in
@@ -369,7 +371,7 @@ let evaluate nfa stream =
                                   attrs = popped.element_attrs;
                                   depth = Xml2.depth stream } :: !results
                  ) target_state.accepting
-             ) !end_targets;
+             ) !end_buf;
            stack := { parent with active = merged_active } :: rest
          | popped :: rest ->
            (* Top-level: just pop *)
