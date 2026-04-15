@@ -60,6 +60,7 @@ type nfa = {
   states : nfa_state array;
   start : state_id;
   reachable : bool array;  (* true = state can reach an accepting state *)
+  min_depth : int array;   (* min steps from each state to any accepting state *)
 }
 
 (* --- Bitmask active set --- *)
@@ -127,6 +128,124 @@ let equal_attr_constraints (a : attr_constraint list) (b : attr_constraint list)
 let equal_transition_key t matcher constraints index depth_limit =
   equal_name_matcher t.matcher matcher && equal_attr_constraints t.constraints constraints &&
   t.index = index && t.depth_limit = depth_limit
+
+(* --- NFA minimization via bisimulation --- *)
+(* Iterative signature refinement: group states with identical outgoing
+   behavior (transitions, accepting, wildcard, end_transitions) into blocks.
+   Iterate until the partition stabilizes. *)
+
+let matcher_key = function
+  | Exact s -> "E" ^ s
+  | Regex (p, _) -> "R" ^ p
+  | Any -> "A"
+
+let constraints_key cs =
+  String.concat "~" (List.map (fun (c : attr_constraint) ->
+      match c.value with
+      | None -> c.name ^ "=*"
+      | Some v -> c.name ^ "=" ^ v) cs)
+
+let accepting_key acc =
+  let sorted = List.sort (fun (a, _) (b, _) -> compare a b) acc in
+  String.concat "|" (List.map (fun (qid, attrs) ->
+      Printf.sprintf "%d:%s" qid (constraints_key attrs)) sorted)
+
+let trans_dedup_key matcher constraints index depth_limit target_block =
+  Printf.sprintf "%s|%s|%s|%s->%d"
+    (matcher_key matcher)
+    (constraints_key constraints)
+    (match index with None -> "" | Some n -> string_of_int n)
+    (match depth_limit with None -> "" | Some d -> string_of_int d)
+    target_block
+
+let transition_sig partition t =
+  trans_dedup_key t.matcher t.constraints t.index t.depth_limit partition.(t.target)
+
+let full_signature states partition i =
+  let s = states.(i) in
+  let trans_keys =
+    List.sort String.compare
+      (List.map (transition_sig partition) s.transitions)
+  in
+  let end_keys =
+    List.sort_uniq Int.compare
+      (List.map (fun target -> partition.(target)) s.end_transitions)
+  in
+  String.concat "|"
+    [ string_of_bool s.is_wildcard_loop
+    ; accepting_key s.accepting
+    ; String.concat "," trans_keys
+    ; String.concat "," (List.map string_of_int end_keys) ]
+
+let minimize_nfa states start_id =
+  let count = Array.length states in
+  if count <= 1 then states, start_id
+  else begin
+    let partition = Array.init count (fun i -> i) in
+    let prev_sigs = ref None in
+    let stable = ref false in
+    while not !stable do
+      let sigs = Array.init count (full_signature states partition) in
+      (match !prev_sigs with
+       | None -> ()
+       | Some ps ->
+         if Array.for_all2 String.equal sigs ps then stable := true);
+      if not !stable then begin
+        let tbl : (string, int) Hashtbl.t = Hashtbl.create 16 in
+        let next_block = ref 0 in
+        for i = 0 to count - 1 do
+          match Hashtbl.find_opt tbl sigs.(i) with
+          | Some block -> partition.(i) <- block
+          | None ->
+            let block = !next_block in
+            incr next_block;
+            Hashtbl.add tbl sigs.(i) block;
+            partition.(i) <- block
+        done;
+        prev_sigs := Some sigs
+      end
+    done;
+    let block_count = 1 + Array.fold_left (fun mx b -> max mx b) 0 partition in
+    if block_count >= count then states, start_id
+    else begin
+      let new_states = Array.make block_count (Obj.magic () : nfa_state) in
+      let next_tid = ref 0 in
+      let repr = Hashtbl.create block_count in
+      for i = 0 to count - 1 do
+        let block = partition.(i) in
+        if not (Hashtbl.mem repr block) then begin
+          let rep = states.(i) in
+          let fresh_trans =
+            let seen = Hashtbl.create 8 in
+            List.filter_map (fun t ->
+                let target_block = partition.(t.target) in
+                let key = trans_dedup_key t.matcher t.constraints
+                    t.index t.depth_limit target_block in
+                if Hashtbl.mem seen key then None
+                else begin
+                  Hashtbl.add seen key ();
+                  let tid = !next_tid in incr next_tid;
+                  Some { t with tid; target = target_block }
+                end
+              ) rep.transitions
+          in
+          let fresh_end =
+            List.sort_uniq Int.compare
+              (List.map (fun target -> partition.(target)) rep.end_transitions)
+          in
+          Hashtbl.add repr block ();
+          new_states.(block) <- {
+            id = block;
+            transitions = fresh_trans;
+            accepting = rep.accepting;
+            is_wildcard_loop = rep.is_wildcard_loop;
+            end_transitions = fresh_end;
+          }
+        end
+      done;
+      new_states, partition.(start_id)
+    end
+  end
 
 (* --- Upath -> upath2 type conversion --- *)
 
@@ -244,10 +363,11 @@ let compile (queries : query list) =
       walk q.path start_state
     ) queries;
   (* Build array from hashtable *)
-  let state_count = !next_id in
-  assert (state_count <= Sys.int_size - 1);
-  let state_arr = Array.make state_count (Obj.magic () : nfa_state) in
+  let state_arr = Array.make !next_id (Obj.magic () : nfa_state) in
   Hashtbl.iter (fun id s -> state_arr.(id) <- s) states;
+  let state_arr, start_id = minimize_nfa state_arr start_state.id in
+  let state_count = Array.length state_arr in
+  assert (state_count <= Sys.int_size - 1);
   (* Backward reachability: only states that can reach an accepting state *)
   let compute_reachable (states : nfa_state array) count =
     (* Build reverse-edge map: predecessors via transitions and end_transitions *)
@@ -281,11 +401,41 @@ let compile (queries : query list) =
     reachable
   in
   let reachable = compute_reachable state_arr state_count in
-  { states = state_arr; start = start_state.id; reachable }
+  let compute_min_depth (states : nfa_state array) count =
+    let rev = Array.init count (fun _ -> []) in
+    for i = 0 to count - 1 do
+      let s = states.(i) in
+      List.iter (fun t -> rev.(t.target) <- i :: rev.(t.target)) s.transitions;
+      List.iter (fun target -> rev.(target) <- i :: rev.(target)) s.end_transitions;
+      if s.is_wildcard_loop then rev.(i) <- i :: rev.(i)
+    done;
+    let dist = Array.make count max_int in
+    let queue = Queue.create () in
+    for i = 0 to count - 1 do
+      if states.(i).accepting <> [] then begin
+        dist.(i) <- 0;
+        Queue.push i queue
+      end
+    done;
+    while not (Queue.is_empty queue) do
+      let cur = Queue.pop queue in
+      List.iter (fun pred ->
+          let d = dist.(cur) + 1 in
+          if d < dist.(pred) then begin
+            dist.(pred) <- d;
+            Queue.push pred queue
+          end
+        ) rev.(cur)
+    done;
+    dist
+  in
+  let min_depth = compute_min_depth state_arr state_count in
+  { states = state_arr; start = start_id; reachable; min_depth }
 
 (* --- Evaluation --- *)
 
-let evaluate nfa stream =
+let evaluate ?max_depth nfa stream =
+  let max_depth = match max_depth with None -> max_int | Some d -> d in
   let results = ref [] in
   let fire_counts : (int, int) Hashtbl.t = Hashtbl.create 16 in
   let stack = ref [{
@@ -300,6 +450,7 @@ let evaluate nfa stream =
       | Xml2.El_start (name, attrs) ->
         let frame = List.hd !stack in
         let active = frame.active in
+        let cur_depth = Xml2.depth stream in
         next_buf := empty_active;
         let add_state sid =
           if nfa.reachable.(sid) then
@@ -307,9 +458,10 @@ let evaluate nfa stream =
         in
         iter_active (fun sid ->
             let state = nfa.states.(sid) in
-            (* Wildcard loop: self-propagate *)
+            (* Wildcard loop: self-propagate with depth bounding *)
             if state.is_wildcard_loop then
-              add_state sid;
+              if cur_depth + nfa.min_depth.(sid) <= max_depth then
+                add_state sid;
             (* Normal transitions *)
             List.iter (fun t ->
                 if match_name name t.matcher && check_attrs attrs t.constraints then begin
