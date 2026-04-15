@@ -59,34 +59,13 @@ type nfa_state = {
 type nfa = {
   states : nfa_state array;
   start : state_id;
-  reachable : bool array;  (* true = state can reach an accepting state *)
-  min_depth : int array;   (* min steps from each state to any accepting state *)
 }
-
-(* --- Bitmask active set --- *)
-type active_set = int
-
-let empty_active = 0
-
-let add_active sid bits = bits lor (1 lsl sid)
-
-let mem_active sid bits = (bits land (1 lsl sid)) <> 0
-
-let single_active sid = 1 lsl sid
-
-let iter_active f bits =
-  let b = ref bits in
-  while !b <> 0 do
-    let lowest = !b land (- !b) in
-    f (Ocaml_intrinsics_kernel.Int.count_trailing_zeros lowest);
-    b := !b - lowest
-  done
 
 (* Evaluator stack frame — needed for ParentNode name/attr resolution *)
 type stack_frame = {
   element_name : string;
   element_attrs : (string * string) list;
-  active : active_set;
+  active : state_id list;
 }
 
 (* --- Name / attribute matching --- *)
@@ -366,102 +345,33 @@ let compile (queries : query list) =
   let state_arr = Array.make !next_id (Obj.magic () : nfa_state) in
   Hashtbl.iter (fun id s -> state_arr.(id) <- s) states;
   let state_arr, start_id = minimize_nfa state_arr start_state.id in
-  let state_count = Array.length state_arr in
-  assert (state_count <= Sys.int_size - 1);
-  (* Backward reachability: only states that can reach an accepting state *)
-  let compute_reachable (states : nfa_state array) count =
-    (* Build reverse-edge map: predecessors via transitions and end_transitions *)
-    let rev = Array.init count (fun _ -> []) in
-    for i = 0 to count - 1 do
-      let s = states.(i) in
-      List.iter (fun t -> rev.(t.target) <- i :: rev.(t.target)) s.transitions;
-      List.iter (fun target -> rev.(target) <- i :: rev.(target)) s.end_transitions;
-      (* Wildcard loops self-propagate, so a wildcard state is its own predecessor *)
-      if s.is_wildcard_loop then rev.(i) <- i :: rev.(i)
-    done;
-    let reachable = Array.make count false in
-    let queue = Queue.create () in
-    (* Seed with all accepting states *)
-    for i = 0 to count - 1 do
-      if states.(i).accepting <> [] then begin
-        reachable.(i) <- true;
-        Queue.push i queue
-      end
-    done;
-    (* BFS backward through predecessors *)
-    while not (Queue.is_empty queue) do
-      let cur = Queue.pop queue in
-      List.iter (fun pred ->
-          if not reachable.(pred) then begin
-            reachable.(pred) <- true;
-            Queue.push pred queue
-          end
-        ) rev.(cur)
-    done;
-    reachable
-  in
-  let reachable = compute_reachable state_arr state_count in
-  let compute_min_depth (states : nfa_state array) count =
-    let rev = Array.init count (fun _ -> []) in
-    for i = 0 to count - 1 do
-      let s = states.(i) in
-      List.iter (fun t -> rev.(t.target) <- i :: rev.(t.target)) s.transitions;
-      List.iter (fun target -> rev.(target) <- i :: rev.(target)) s.end_transitions;
-      if s.is_wildcard_loop then rev.(i) <- i :: rev.(i)
-    done;
-    let dist = Array.make count max_int in
-    let queue = Queue.create () in
-    for i = 0 to count - 1 do
-      if states.(i).accepting <> [] then begin
-        dist.(i) <- 0;
-        Queue.push i queue
-      end
-    done;
-    while not (Queue.is_empty queue) do
-      let cur = Queue.pop queue in
-      List.iter (fun pred ->
-          let d = dist.(cur) + 1 in
-          if d < dist.(pred) then begin
-            dist.(pred) <- d;
-            Queue.push pred queue
-          end
-        ) rev.(cur)
-    done;
-    dist
-  in
-  let min_depth = compute_min_depth state_arr state_count in
-  { states = state_arr; start = start_id; reachable; min_depth }
+  { states = state_arr; start = start_id }
 
 (* --- Evaluation --- *)
 
-let evaluate ?max_depth nfa stream =
-  let max_depth = match max_depth with None -> max_int | Some d -> d in
+let evaluate nfa stream =
   let results = ref [] in
   let fire_counts : (int, int) Hashtbl.t = Hashtbl.create 16 in
   let stack = ref [{
       element_name = "";
       element_attrs = [];
-      active = single_active nfa.start;
+      active = [ nfa.start ];
     }] in
-  let next_buf = ref empty_active in
-  let end_buf = ref empty_active in
+  let new_active = ref [] in
+  let end_targets = ref [] in
   Xml2.iter_signals (fun sigv ->
       match sigv with
       | Xml2.El_start (name, attrs) ->
         let frame = List.hd !stack in
         let active = frame.active in
-        let cur_depth = Xml2.depth stream in
-        next_buf := empty_active;
-        let add_state sid =
-          if nfa.reachable.(sid) then
-            next_buf := !next_buf lor (1 lsl sid)
-        in
-        iter_active (fun sid ->
+        new_active := [];
+        List.iter (fun sid ->
             let state = nfa.states.(sid) in
-            (* Wildcard loop: self-propagate with depth bounding *)
-            if state.is_wildcard_loop then
-              if cur_depth + nfa.min_depth.(sid) <= max_depth then
-                add_state sid;
+            (* Wildcard loop: self-propagate *)
+            if state.is_wildcard_loop then begin
+              if not (List.mem sid !new_active) then
+                new_active := sid :: !new_active
+            end;
             (* Normal transitions *)
             List.iter (fun t ->
                 if match_name name t.matcher && check_attrs attrs t.constraints then begin
@@ -479,7 +389,8 @@ let evaluate ?max_depth nfa stream =
                         count = n
                     in
                     if fire then begin
-                      add_state t.target;
+                      if not (List.mem t.target !new_active) then
+                        new_active := t.target :: !new_active;
                       (* Check accepting at target *)
                       let target_state = nfa.states.(t.target) in
                       List.iter (fun (qid, acc_attrs) ->
@@ -499,22 +410,26 @@ let evaluate ?max_depth nfa stream =
                                  attrs; depth = Xml2.depth stream } :: !results
                 ) state.accepting
           ) active;
-        stack := { element_name = name; element_attrs = attrs; active = !next_buf } :: !stack
+        stack := { element_name = name; element_attrs = attrs; active = !new_active } :: !stack
       | Xml2.El_end ->
         (match !stack with
          | popped :: parent :: rest ->
            (* End transitions: ParentNode handling *)
-           end_buf := empty_active;
-           iter_active (fun sid ->
+           end_targets := [];
+           List.iter (fun sid ->
                let state = nfa.states.(sid) in
                List.iter (fun target_id ->
-                   if nfa.reachable.(target_id) then
-                     end_buf := !end_buf lor (1 lsl target_id)
+                   if not (List.mem target_id !end_targets) then
+                     end_targets := target_id :: !end_targets
                  ) state.end_transitions
              ) popped.active;
            (* Merge end targets into parent active set *)
-           let merged_active = parent.active lor !end_buf in
-           iter_active (fun target_id ->
+           let merged_active =
+             List.fold_left (fun acc tid ->
+                 if List.mem tid acc then acc else tid :: acc
+               ) parent.active !end_targets
+           in
+           List.iter (fun target_id ->
                (* Check accepting at end-transition target *)
                let target_state = nfa.states.(target_id) in
                List.iter (fun (qid, acc_attrs) ->
@@ -523,7 +438,7 @@ let evaluate ?max_depth nfa stream =
                                   attrs = popped.element_attrs;
                                   depth = Xml2.depth stream } :: !results
                  ) target_state.accepting
-             ) !end_buf;
+             ) !end_targets;
            stack := { parent with active = merged_active } :: rest
          | popped :: rest ->
            (* Top-level: just pop *)
