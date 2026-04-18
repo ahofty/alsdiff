@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 (** Test parsing FloatEvents with and without curve parameters *)
 let test_envelope_event_parsing () =
   (* Load automation XML that has events with curve parameters *)
@@ -43,6 +45,7 @@ let test_envelope_event_diff_with_curve () =
     value = Automation.FloatEvent 100.0;
     curve = Some { Automation.CurveControls.curve1_x = 0.5; curve1_y = 0.5;
                    curve2_x = 0.5; curve2_y = 0.5; };
+    xml = dummy_xml;
   } in
   let event2 = {
     Automation.EnvelopeEvent.id = 1;
@@ -50,6 +53,7 @@ let test_envelope_event_diff_with_curve () =
     value = Automation.FloatEvent 100.0;
     curve = Some { Automation.CurveControls.curve1_x = 0.6; curve1_y = 0.6;
                    curve2_x = 0.6; curve2_y = 0.6; };
+    xml = dummy_xml;
   } in
 
   let patch = Automation.EnvelopeEvent.diff event1 event2 in
@@ -85,6 +89,7 @@ let test_envelope_event_diff_add_remove_curve () =
     time = 0.0;
     value = Automation.FloatEvent 100.0;
     curve = None;
+    xml = dummy_xml;
   } in
   let event_with_curve = {
     Automation.EnvelopeEvent.id = 1;
@@ -92,6 +97,7 @@ let test_envelope_event_diff_add_remove_curve () =
     value = Automation.FloatEvent 100.0;
     curve = Some { Automation.CurveControls.curve1_x = 0.5; curve1_y = 0.5;
                    curve2_x = 0.5; curve2_y = 0.5; };
+    xml = dummy_xml;
   } in
 
   (* Test adding curve *)
@@ -175,12 +181,14 @@ let test_envelope_event_diff_value_type_change () =
     time = 0.0;
     value = Automation.IntEvent 42;
     curve = None;
+    xml = dummy_xml;
   } in
   let event_enum = {
     Automation.EnvelopeEvent.id = 1;
     time = 0.0;
     value = Automation.EnumEvent 201;
     curve = None;
+    xml = dummy_xml;
   } in
   let patch = Automation.EnvelopeEvent.diff event_int event_enum in
   check bool "value type changed" true
@@ -195,18 +203,21 @@ let test_envelope_event_identity_functions () =
     time = 0.0;
     value = Automation.FloatEvent 100.0;
     curve = None;
+    xml = dummy_xml;
   } in
   let event2 = {
     Automation.EnvelopeEvent.id = 123;
     time = 1.0;
     value = Automation.FloatEvent 200.0;
     curve = None;
+    xml = dummy_xml;
   } in
   let event3 = {
     Automation.EnvelopeEvent.id = 456;
     time = 0.0;
     value = Automation.FloatEvent 100.0;
     curve = None;
+    xml = dummy_xml;
   } in
   check bool "same id events have same_id" true
     (Automation.EnvelopeEvent.has_same_id event1 event2);
@@ -242,16 +253,19 @@ let test_automation_identity_functions () =
     Automation.id = 1;
     target = 100;
     events = [];
+    xml = dummy_xml;
   } in
   let auto2 = {
     Automation.id = 1;
     target = 100;
     events = [];
+    xml = dummy_xml;
   } in
   let auto3 = {
     Automation.id = 2;
     target = 100;
     events = [];
+    xml = dummy_xml;
   } in
   check bool "same id/target have same_id" true
     (Automation.has_same_id auto1 auto2);
@@ -271,7 +285,8 @@ let test_automation_patch_is_empty () =
     Automation.Patch.id = 1;
     target = 100;
     events = [`Added { Automation.EnvelopeEvent.id = 1; time = 0.0;
-                       value = Automation.FloatEvent 100.0; curve = None; }];
+                       value = Automation.FloatEvent 100.0; curve = None;
+                       xml = dummy_xml; }];
   } in
   check bool "empty patch is empty" true
     (Automation.Patch.is_empty empty_patch);

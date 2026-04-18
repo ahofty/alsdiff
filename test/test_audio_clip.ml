@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live.Clip
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 let test_create_audio_clip () =
   (* Read the audio_clip.xml file *)
   let xml = Xml.read_file (resolve_test_data_path "audio_clip.xml") in
@@ -15,16 +17,18 @@ let test_create_audio_clip () =
   let expected_name = "Metal Sheet" in
   let expected_start_time = 79.5 in
   let expected_end_time = 100.0 in
-  let expected_signature = { TimeSignature.numer = 4; denom = 4 } in
+  let expected_signature = { TimeSignature.numer = 4; denom = 4; xml = dummy_xml } in
   let expected_sample_ref = {
     SampleRef.file_path = "/Users/krfantasy/Desktop/Prelude/Thick Air Project/Samples/Processed/Crop/Metal Sheet [2022-04-27 164454].wav";
     SampleRef.crc = "48320";
     SampleRef.last_modified_date = 1742403845;
+    xml = dummy_xml;
   } in
   let expected_loop = Some {
       Loop.start_time = 26.13179997086247;
       Loop.end_time = 46.631799970862474;
       Loop.on = false;
+      xml = dummy_xml;
     } in
 
   (* Test basic fields *)
@@ -113,10 +117,11 @@ let create_basic_clip () =
     name = "Test Clip";
     start_time = 0.0;
     end_time = 4.0;
-    loop = { Loop.start_time = 0.0; end_time = 4.0; on = false; };
-    signature = { TimeSignature.numer = 4; denom = 4; };
-    sample_ref = { SampleRef.file_path = "/test/sample.wav"; crc = "12345"; last_modified_date = 1000000; };
+    loop = { Loop.start_time = 0.0; end_time = 4.0; on = false; xml = dummy_xml; };
+    signature = { TimeSignature.numer = 4; denom = 4; xml = dummy_xml; };
+    sample_ref = { SampleRef.file_path = "/test/sample.wav"; crc = "12345"; last_modified_date = 1000000; xml = dummy_xml; };
     fade = None;
+    xml = dummy_xml;
   }
 
 (* Diff function tests *)
@@ -152,7 +157,7 @@ let test_diff_end_time_change () =
 
 let test_diff_loop_change () =
   let old_clip = create_basic_clip () in
-  let new_loop = { Loop.start_time = 1.0; end_time = 3.0; on = true; } in
+  let new_loop = { Loop.start_time = 1.0; end_time = 3.0; on = true; xml = dummy_xml; } in
   let new_clip = { old_clip with loop = new_loop } in
   let patch = AudioClip.diff old_clip new_clip in
   match patch.AudioClip.Patch.loop with
@@ -162,7 +167,7 @@ let test_diff_loop_change () =
 
 let test_diff_signature_change () =
   let old_clip = create_basic_clip () in
-  let new_sig = { TimeSignature.numer = 3; denom = 4; } in
+  let new_sig = { TimeSignature.numer = 3; denom = 4; xml = dummy_xml; } in
   let new_clip = { old_clip with signature = new_sig } in
   let patch = AudioClip.diff old_clip new_clip in
   match patch.AudioClip.Patch.signature with
@@ -172,7 +177,7 @@ let test_diff_signature_change () =
 
 let test_diff_sample_ref_change () =
   let old_clip = create_basic_clip () in
-  let new_ref = { SampleRef.file_path = "/test/other.wav"; crc = "67890"; last_modified_date = 2000000; } in
+  let new_ref = { SampleRef.file_path = "/test/other.wav"; crc = "67890"; last_modified_date = 2000000; xml = dummy_xml; } in
   let new_clip = { old_clip with sample_ref = new_ref } in
   let patch = AudioClip.diff old_clip new_clip in
   match patch.AudioClip.Patch.sample_ref with
@@ -183,7 +188,7 @@ let test_diff_sample_ref_change () =
 (* Fade option diff tests *)
 let test_diff_fade_none_to_some () =
   let old_clip = create_basic_clip () in
-  let new_fade = { Fade.fade_in_length = 0.5; fade_out_length = 1.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; } in
+  let new_fade = { Fade.fade_in_length = 0.5; fade_out_length = 1.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml; } in
   let new_clip = { old_clip with fade = Some new_fade } in
   let patch = AudioClip.diff old_clip new_clip in
   match patch.AudioClip.Patch.fade with
@@ -191,7 +196,7 @@ let test_diff_fade_none_to_some () =
   | _ -> fail "Expected fade to be `Added"
 
 let test_diff_fade_some_to_none () =
-  let old_fade = { Fade.fade_in_length = 0.5; fade_out_length = 1.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; } in
+  let old_fade = { Fade.fade_in_length = 0.5; fade_out_length = 1.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml; } in
   let old_clip = { (create_basic_clip ()) with fade = Some old_fade } in
   let new_clip = { old_clip with fade = None } in
   let patch = AudioClip.diff old_clip new_clip in
@@ -200,7 +205,7 @@ let test_diff_fade_some_to_none () =
   | _ -> fail "Expected fade to be `Removed"
 
 let test_diff_fade_some_to_some () =
-  let old_fade = { Fade.fade_in_length = 0.5; fade_out_length = 1.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; } in
+  let old_fade = { Fade.fade_in_length = 0.5; fade_out_length = 1.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml; } in
   let new_fade = { old_fade with Fade.fade_out_length = 2.0 } in
   let old_clip = { (create_basic_clip ()) with fade = Some old_fade } in
   let new_clip = { old_clip with fade = Some new_fade } in

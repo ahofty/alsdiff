@@ -93,6 +93,7 @@ module MIDIMapping = struct
     low : int;
     high : int;
     (* TODO: MIDI Note mapping *)
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let is_midi m = m.channel >= 0 && m.channel <= 15 (* MIDI Channel starts from 0 to 15 in Ableton Live .als XML *)
@@ -137,7 +138,7 @@ module MIDIMapping = struct
         | None, Some (l, h) -> (l, h, OnOff)
         | _ -> raise (Xml.Xml_error (xml, "Invalid XML for creating a MIDIMapping"))
       in
-      { target; channel; kind; low; high }
+      { target; channel; kind; low; high; xml }
 
   let create_opt (xml : Xml.t) : t option = try Some (create xml) with _ -> None
 
@@ -146,7 +147,7 @@ module MIDIMapping = struct
     let target = Upath.get_int_attr "/NoteOrController" "Value" xml in
     let channel = Upath.get_int_attr "/Channel" "Value" xml in
     (* NOTE: This function was only used for creating a MIDIMapping.t for Solo in the Mixer. Solo only supports on/off mapping *)
-    { target; channel; kind = OnOff; low = 64; high = 127; }
+    { target; channel; kind = OnOff; low = 64; high = 127; xml }
 end
 
 module GenericParam = struct
@@ -156,6 +157,7 @@ module GenericParam = struct
     automation : int;
     modulation : int;           (* parameter cannot modulated will be set to a negative number *)
     mapping : MIDIMapping.t option;  [@patch.skip]
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create ~parse_value xml =
@@ -166,7 +168,7 @@ module GenericParam = struct
     let modulation = Upath.get_int_attr_opt "/ModulationTarget" "Id" xml
       |> Option.value ~default:0 in
     let mapping = MIDIMapping.create_opt xml in
-    { name; value; automation; modulation; mapping }
+    { name; value; automation; modulation; mapping; xml }
 
   let create_int_manual xml =
     create xml ~parse_value:(fun x -> Int (Upath.get_int_attr "/Manual" "Value" x))
@@ -190,6 +192,7 @@ end
 module DeviceParam = struct
   type t = {
     base : GenericParam.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let has_same_id a b = a.base.name = b.base.name
@@ -215,7 +218,7 @@ module DeviceParam = struct
       in
       let base = GenericParam.create ~parse_value xml in
       let name_updated_base = { base with name } in
-      { base = name_updated_base }
+      { base = name_updated_base; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating DeviceParam"))
 
   let create_from_upath_find (path, xml) = create path xml
@@ -238,6 +241,7 @@ module PresetRef = struct
     pack_id : int;
     file_size : int;
     crc : int;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -276,7 +280,7 @@ module PresetRef = struct
       let file_size = Upath.get_int_attr "/OriginalFileSize" "Value" file_ref_xml in
       let crc = Upath.get_int_attr_opt "/OriginalCrc" "Value" file_ref_xml |> Option.value ~default:0 in
 
-      { id; name; preset_type; relative_path; path; pack_name; pack_id; file_size; crc }
+      { id; name; preset_type; relative_path; path; pack_name; pack_id; file_size; crc; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating PresetRef"))
 end
 
@@ -294,6 +298,7 @@ module PatchRef = struct
     file_size : int;
     crc : int;
     last_mod_date : int;  (* LastModDate Value attribute - UNIX timestamp *)
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -327,7 +332,7 @@ module PatchRef = struct
       let file_size = Upath.get_int_attr "/OriginalFileSize" "Value" file_ref_xml in
       let crc = Upath.get_int_attr_opt "/OriginalCrc" "Value" file_ref_xml |> Option.value ~default:0 in
 
-      { id; name; preset_type; relative_path; path; pack_name; pack_id; file_size; crc; last_mod_date }
+      { id; name; preset_type; relative_path; path; pack_name; pack_id; file_size; crc; last_mod_date; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating PatchRef (expected MxPatchRef)"))
 end
 
@@ -337,6 +342,7 @@ module PluginParam = struct
   type t = {
     id : int;
     base : GenericParam.t;
+    xml : Xml.t;
   } [@@deriving eq]
 
   let create (xml : Xml.t) : t =
@@ -359,7 +365,7 @@ module PluginParam = struct
     let base = Upath.find "/ParameterValue" xml |> snd |> GenericParam.create ~parse_value in
     let name = Upath.get_attr "/ParameterName" "Value" xml in
     let name_updated_base = { base with name } in
-    { id; base = name_updated_base; }
+    { id; base = name_updated_base; xml }
 
   module Patch = struct
     type t = {
@@ -405,6 +411,7 @@ module PluginDesc = struct
     (* NOTE: Since the controller state in VST3 is the state of the GUI, which has
        nothing to do with actual audio/dsp processing, we just ignore it for god's sake *)
     (* controller_state : string; *)
+    xml : Xml.t;
   } [@@deriving eq]
 
   let plugin_type_to_string = function
@@ -538,7 +545,7 @@ module PluginDesc = struct
       | Auv2 -> parse_au_info plugin_info_xml
     in
 
-    { name; uid; plugin_type; processor_state }
+    { name; uid; plugin_type; processor_state; xml }
 
   module Patch = struct
     type t = {
@@ -583,6 +590,7 @@ module Max4LiveParam = struct
     id : int;                   (* ParameterId *) [@id.id] [@patch.skip]
     index : int;                (* VisualIndex *)
     base : GenericParam.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   (** Extract enum description from Names/Name/Name structure - specific to M4L *)
@@ -629,7 +637,7 @@ module Max4LiveParam = struct
     let name = Upath.get_attr "/Name" "Value" xml in
     let base = Upath.find "/Timeable" xml |> snd |> GenericParam.create ~parse_value in
     let name_updated_base = { base with name } in
-    { id; index; base = name_updated_base; }
+    { id; index; base = name_updated_base; xml }
 
   let create_from_upath_find (path, xml) = create path xml
 end
@@ -643,6 +651,7 @@ module MixerDevice = struct
     speaker : DeviceParam.t;     (* mute or not *)
     volume : DeviceParam.t;      (* volume *)
     pan : DeviceParam.t;         (* panorama/panning *)
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -653,7 +662,7 @@ module MixerDevice = struct
       let speaker = Upath.find "/Speaker" xml |> DeviceParam.create_from_upath_find in
       let volume = Upath.find "/Volume" xml |> DeviceParam.create_from_upath_find in
       let pan = Upath.find "/Panorama" xml |> DeviceParam.create_from_upath_find in
-      { on; speaker; volume; pan }
+      { on; speaker; volume; pan; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating MixerDevice"))
 
   (* MixerDevice doesn't have a natural ID, so use placeholder interface *)
@@ -685,6 +694,7 @@ module Macro = struct
   type t = {
     id : int;               [@id.id] [@patch.skip]
     base : GenericParam.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (name_xml : Xml.t) (control_xml : Xml.t) : t =
@@ -695,7 +705,7 @@ module Macro = struct
     if name_id <> control_id then
       raise (Xml.Xml_error (name_xml, "Macro name ID " ^ string_of_int name_id ^ " does not match control ID " ^ string_of_int control_id ^ ". Macro names and controls must be paired correctly."))
     else
-      { id=name_id; base; }
+      { id=name_id; base; xml = control_xml }
 end
 
 
@@ -704,6 +714,7 @@ module Snapshot = struct
     id : int;               [@id.id] [@patch.skip]
     name : string;
     values : float list;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch]
 
   let create (xml : Xml.t) : t =
@@ -730,7 +741,7 @@ module Snapshot = struct
         |> List.map snd
       in
 
-      { id; name; values }
+      { id; name; values; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Snapshot"))
 
   let diff (old_snapshot : t) (new_snapshot : t) : Patch.t =
@@ -763,6 +774,7 @@ and regular_device = {
   enabled : DeviceParam.t;
   params : DeviceParam.t list;
   preset : PresetRef.t option;
+  xml : Xml.t;
 } [@@deriving eq]
 
 and plugin_device = {
@@ -775,6 +787,7 @@ and plugin_device = {
   params : PluginParam.t list;
   preset : PresetRef.t option;
   (* TODO: Support sidechain and MPE settigns *)
+  xml : Xml.t;
 } [@@deriving eq]
 
 and max4live_device = {
@@ -786,12 +799,14 @@ and max4live_device = {
   patch_ref : PatchRef.t;       (* the .amxd file *)
   params : Max4LiveParam.t list;
   preset : PresetRef.t option;
+  xml : Xml.t;
 } [@@deriving eq]
 
 and branch = {
   id : int;
   devices : device list;
   mixer : MixerDevice.t;
+  xml : Xml.t;
 } [@@deriving eq]
 and group_device = {
   id : int;
@@ -803,6 +818,7 @@ and group_device = {
   macros : Macro.t list;
   snapshots : Snapshot.t list;
   preset : PresetRef.t option;
+  xml : Xml.t;
 } [@@deriving eq]
 
 type device_patch =
@@ -1103,7 +1119,7 @@ module RegularDevice = struct
       let params = Alsdiff_base.Upath.find_all "/**/LomId/../Manual/.." xml
         |> List.map DeviceParam.create_from_upath_find
       in
-      { id; device_name=name; display_name; pointee; enabled; params; preset }
+      { id; device_name=name; display_name; pointee; enabled; params; preset; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Device"))
 
   module Patch = struct
@@ -1150,7 +1166,7 @@ module PluginDevice = struct
       |> List.map PluginParam.create
     in
 
-    { id; device_name; display_name; pointee; enabled; desc; params; preset }
+    { id; device_name; display_name; pointee; enabled; desc; params; preset; xml }
 
 
   module Patch = struct
@@ -1183,7 +1199,7 @@ module Branch = struct
       |> Xml.get_childs
       |> List.map device_creator
     in
-    { id; devices; mixer }
+    { id; devices; mixer; xml }
 
   module Patch = struct
     type t = branch_patch
@@ -1245,7 +1261,7 @@ module GroupDevice = struct
         |> List.map Snapshot.create
       in
 
-      { id; device_name=name; display_name; pointee;  enabled; branches; macros; snapshots; preset }
+      { id; device_name=name; display_name; pointee;  enabled; branches; macros; snapshots; preset; xml }
     | _ -> invalid_arg "Cannot create a GroupDevice on Data"
 
   module Patch = struct
@@ -1291,7 +1307,7 @@ module Max4LiveDevice = struct
     let all_params = float_params @ int_params @ bool_params @ enum_params in
     let params = List.map Max4LiveParam.create_from_upath_find all_params in
 
-    { id; device_name; display_name; pointee; enabled; patch_ref; params; preset }
+    { id; device_name; display_name; pointee; enabled; patch_ref; params; preset; xml }
 
   module Patch = struct
     type t = max4live_device_patch

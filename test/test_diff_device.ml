@@ -3,6 +3,8 @@ open Alsdiff_base.Xml
 open Alsdiff_live
 open Alsdiff_live.Device
 
+let dummy_xml = read_string "<dummy/>"
+
 (* Helper to create a dummy DeviceParam *)
 let make_param name value =
   {
@@ -12,7 +14,9 @@ let make_param name value =
       automation = 0;
       modulation = 0;
       mapping = None;
+      xml = dummy_xml;
     };
+    xml = dummy_xml;
   }
 
 (* Helper to create a dummy Regular Device *)
@@ -25,6 +29,7 @@ let make_regular_device id name params =
     enabled = make_param "Device On" (Bool true);
     params = params;
     preset = None;
+    xml = dummy_xml;
   }
 
 let test_regular_device_diff () =
@@ -33,7 +38,7 @@ let test_regular_device_diff () =
 
   let old_device = make_regular_device 1 "Overdrive" [param1; param2] in
 
-  let param1_mod = { DeviceParam.base = { param1.base with Device.GenericParam.value = Float 0.8 } } in
+  let param1_mod = { DeviceParam.base = { param1.base with Device.GenericParam.value = Float 0.8 }; xml = dummy_xml } in
   let new_device = make_regular_device 1 "Overdrive" [param1_mod; param2] in
 
   let patch = Device.diff old_device new_device in
@@ -75,7 +80,9 @@ let test_plugin_device_diff () =
         automation = 0;
         modulation = 0;
         mapping = None;
+        xml = dummy_xml;
       };
+      xml = dummy_xml;
     }
   in
 
@@ -90,9 +97,11 @@ let test_plugin_device_diff () =
         uid = "vst3:mysynth";
         plugin_type = PluginDesc.Vst3;
         processor_state = "";
+        xml = dummy_xml;
       };
       params = [make_plugin_param 1 "Cutoff" 1 (Float 0.5)];
       preset = None;
+      xml = dummy_xml;
     } in
 
   let new_plugin = Plugin {
@@ -106,9 +115,11 @@ let test_plugin_device_diff () =
         uid = "vst3:mysynth";
         plugin_type = PluginDesc.Vst3;
         processor_state = "";
+        xml = dummy_xml;
       };
       params = [make_plugin_param 1 "Cutoff" 1 (Float 0.7)];
       preset = None;
+      xml = dummy_xml;
     } in
 
   let patch = Device.diff old_plugin new_plugin in
@@ -215,7 +226,7 @@ let test_device_patch_is_not_empty_with_change () =
   let param1 = make_param "Drive" (Float 0.5) in
   let param2 = make_param "Tone" (Float 0.2) in
   let old_device = make_regular_device 1 "Overdrive" [param1; param2] in
-  let param1_mod = { DeviceParam.base = { param1.base with Device.GenericParam.value = Float 0.8 } } in
+  let param1_mod = { DeviceParam.base = { param1.base with Device.GenericParam.value = Float 0.8 }; xml = dummy_xml } in
   let new_device = make_regular_device 1 "Overdrive" [param1_mod; param2] in
   let patch = Device.diff old_device new_device in
   Alcotest.(check bool) "device patch is not empty" false (Device.Patch.is_empty patch)

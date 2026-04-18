@@ -15,6 +15,7 @@ module Routing = struct
     target : string;
     upper_string : string;
     lower_string : string;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   (** Parse route type from XML element name *)
@@ -35,7 +36,7 @@ module Routing = struct
       let upper_string = Upath.get_attr "/UpperDisplayString" "Value" xml in
       let lower_string = Upath.get_attr "/LowerDisplayString" "Value" xml in
 
-      { route_type; target; upper_string; lower_string }
+      { route_type; target; upper_string; lower_string; xml }
     | Xml.Data _ ->
       raise (Xml.Xml_error (xml, "Invalid XML element for creating Routing"))
 
@@ -48,6 +49,7 @@ module RoutingSet = struct
     audio_out : Routing.t;  [@id.ref]
     midi_in : Routing.t;    [@id.ref]
     midi_out : Routing.t;   [@id.ref]
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -55,7 +57,7 @@ module RoutingSet = struct
     let audio_out = Upath.find "AudioOutputRouting" xml |> snd |> Routing.create in
     let midi_in = Upath.find "MidiInputRouting" xml |> snd |> Routing.create in
     let midi_out = Upath.find "MidiOutputRouting" xml |> snd |> Routing.create in
-    { audio_in; audio_out; midi_in; midi_out }
+    { audio_in; audio_out; midi_in; midi_out; xml }
 
 end
 
@@ -68,6 +70,7 @@ module Send = struct
   type t = {
     id : int;                   [@id.id] [@patch.skip]
     amount : GenericParam.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   (** Create [Send.t] from XML element.
@@ -75,7 +78,7 @@ module Send = struct
   let create (xml : Xml.t) : t =
     let id = Xml.get_int_attr "Id" xml in
     let amount = Upath.find "/Send" xml |> snd |> GenericParam.create_float_manual in
-    { id; amount }
+    { id; amount; xml }
 
 end
 
@@ -87,6 +90,7 @@ module Mixer = struct
     mute : GenericParam.t;
     solo : GenericParam.t;
     sends : Send.t list;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -102,18 +106,20 @@ module Mixer = struct
       |> Option.map snd
       |> Option.map Device.MIDIMapping.create_head_key_midi
     in
+    let solo_xml = Xml.Element { name = "SoloSink"; attrs = [ ("Value", string_of_bool solo_value) ]; childs = [] } in
     let solo = {
       GenericParam.name = "SoloSink";
       value = Bool solo_value;
       automation = 0;
       modulation = 0;
       mapping;
+      xml = solo_xml;
     } in
     let sends = xml
       |> Upath.find_all "/Sends/TrackSendHolder"
       |> List.map (fun (_, xml) -> Send.create xml)
     in
-    { volume; pan; mute; solo; sends }
+    { volume; pan; mute; solo; sends; xml }
 
 end
 
@@ -128,6 +134,7 @@ module MidiTrack = struct
     devices : Device.t list;
     mixer : Mixer.t;
     routings : RoutingSet.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -148,7 +155,7 @@ module MidiTrack = struct
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> Mixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
 
-    { id; name; current_name = name; clips; automations; devices; mixer; routings }
+    { id; name; current_name = name; clips; automations; devices; mixer; routings; xml }
 
 end
 
@@ -163,6 +170,7 @@ module AudioTrack = struct
     devices : Device.t list;
     mixer : Mixer.t;
     routings : RoutingSet.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -182,7 +190,7 @@ module AudioTrack = struct
       |> List.of_seq in
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> Mixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
-    { id; name; current_name = name; clips; automations; devices; mixer; routings }
+    { id; name; current_name = name; clips; automations; devices; mixer; routings; xml }
 
 end
 
@@ -194,6 +202,7 @@ module MainMixer = struct
     time_signature : GenericParam.t; (* TODO: how to parse the time signature number? *)
     crossfade : GenericParam.t;
     global_groove : GenericParam.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -202,7 +211,7 @@ module MainMixer = struct
     let time_signature = Upath.find "/TimeSignature" xml |> snd |> GenericParam.create_int_manual in
     let crossfade = Upath.find "/CrossFade" xml |> snd |> GenericParam.create_float_manual in
     let global_groove = Upath.find "/GlobalGrooveAmount" xml |> snd |> GenericParam.create_float_manual in
-    { base; tempo; time_signature; crossfade; global_groove; }
+    { base; tempo; time_signature; crossfade; global_groove; xml }
 
 end
 
@@ -215,6 +224,7 @@ module MainTrack = struct
     devices : Device.t list;
     mixer : MainMixer.t;
     routings : RoutingSet.t;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -230,7 +240,7 @@ module MainTrack = struct
       |> List.of_seq in
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> MainMixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
-    { name; current_name = name; automations; devices; mixer; routings }
+    { name; current_name = name; automations; devices; mixer; routings; xml }
 
   (* MainTrack is also a singleton *)
   let has_same_id _ _ = true

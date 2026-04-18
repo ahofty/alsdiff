@@ -1,6 +1,8 @@
 open Alsdiff_base.Xml
 open Alsdiff_live
 
+let dummy_xml = read_string "<dummy/>"
+
 let test_group_device_xml_path = Utils.resolve_test_data_path "group_device.xml"
 
 let test_group_device_macros_from_xml () =
@@ -134,13 +136,13 @@ let test_group_device_snapshots_from_xml () =
   Alcotest.(check (float 0.01)) "basic value 3" 82.0208282 (List.nth basic_values 3)
 
 let test_snapshot_diff_identical () =
-  let snapshot = Device.Snapshot.{ id = 1; name = "Test"; values = [0.0; 0.5; 1.0] } in
+  let snapshot = Device.Snapshot.{ id = 1; name = "Test"; values = [0.0; 0.5; 1.0]; xml = dummy_xml } in
   let patch = Device.Snapshot.diff snapshot snapshot in
   Alcotest.(check bool) "snapshot patch is empty" true (Device.Snapshot.Patch.is_empty patch)
 
 let test_snapshot_diff_with_changes () =
-  let old_snapshot = Device.Snapshot.{ id = 1; name = "Basic"; values = [0.0; 0.0; 0.0] } in
-  let new_snapshot = Device.Snapshot.{ id = 1; name = "Scream"; values = [0.5; 1.0; 0.0] } in
+  let old_snapshot = Device.Snapshot.{ id = 1; name = "Basic"; values = [0.0; 0.0; 0.0]; xml = dummy_xml } in
+  let new_snapshot = Device.Snapshot.{ id = 1; name = "Scream"; values = [0.5; 1.0; 0.0]; xml = dummy_xml } in
   let patch = Device.Snapshot.diff old_snapshot new_snapshot in
   Alcotest.(check bool) "snapshot patch is not empty" false (Device.Snapshot.Patch.is_empty patch)
 

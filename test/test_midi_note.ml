@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live.Clip.MidiNote
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 let test_create_basic () =
   let xml = Xml.read_file (resolve_test_data_path "midi_note.xml") in
   let note = create 60 xml in
@@ -41,22 +43,22 @@ let test_missing_note_id () =
   | _ -> () (* Expected to fail - missing required attribute *)
 
 let test_has_same_id () =
-  let note1 = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let note2 = { id = 1; note = 62; time = 2.0; duration = 1.0; velocity = 80.0; off_velocity = 50.0 } in
-  let note3 = { id = 2; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
+  let note1 = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let note2 = { id = 1; note = 62; time = 2.0; duration = 1.0; velocity = 80.0; off_velocity = 50.0; xml = dummy_xml } in
+  let note3 = { id = 2; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   check bool "same id" true (has_same_id note1 note2);
   check bool "different id" false (has_same_id note1 note3)
 
 let test_id_hash () =
-  let note1 = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let note2 = { id = 1; note = 62; time = 2.0; duration = 1.0; velocity = 80.0; off_velocity = 50.0 } in
+  let note1 = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let note2 = { id = 1; note = 62; time = 2.0; duration = 1.0; velocity = 80.0; off_velocity = 50.0; xml = dummy_xml } in
   let hash1 = id_hash note1 in
   let hash2 = id_hash note2 in
   check bool "same id produces same hash" true (hash1 = hash2)
 
 let test_diff_time_change () =
-  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { id = 1; note = 60; time = 2.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
+  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { id = 1; note = 60; time = 2.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff old_note new_note in
   (match patch.time with
    | `Modified m ->
@@ -65,8 +67,8 @@ let test_diff_time_change () =
    | _ -> fail "Expected time to be modified")
 
 let test_diff_velocity_change () =
-  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 80.0; off_velocity = 64.0 } in
+  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 80.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff old_note new_note in
   (match patch.velocity with
    | `Modified m ->
@@ -75,24 +77,24 @@ let test_diff_velocity_change () =
    | _ -> fail "Expected velocity to be modified")
 
 let test_diff_unchanged () =
-  let note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff note note in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_true () =
-  let note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff note note in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_false () =
-  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { id = 1; note = 60; time = 2.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
+  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { id = 1; note = 60; time = 2.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff old_note new_note in
   check bool "patch is not empty" false (Patch.is_empty patch)
 
 let test_diff_note_value_change () =
-  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { id = 1; note = 64; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
+  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { id = 1; note = 64; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff old_note new_note in
   (match patch.note with
    | `Modified m ->
@@ -101,8 +103,8 @@ let test_diff_note_value_change () =
    | _ -> fail "Expected note to be modified")
 
 let test_diff_duration_change () =
-  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { id = 1; note = 60; time = 1.0; duration = 1.5; velocity = 100.0; off_velocity = 64.0 } in
+  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { id = 1; note = 60; time = 1.0; duration = 1.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let patch = diff old_note new_note in
   (match patch.duration with
    | `Modified m ->
@@ -111,8 +113,8 @@ let test_diff_duration_change () =
    | _ -> fail "Expected duration to be modified")
 
 let test_diff_off_velocity_change () =
-  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 32.0 } in
+  let old_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { id = 1; note = 60; time = 1.0; duration = 0.5; velocity = 100.0; off_velocity = 32.0; xml = dummy_xml } in
   let patch = diff old_note new_note in
   (match patch.off_velocity with
    | `Modified m ->

@@ -7,6 +7,7 @@ module Locator = struct
     id : int; [@id.id] [@patch.skip]
     name : string;
     time : float;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) (_file_path : string) : t =
@@ -15,7 +16,7 @@ module Locator = struct
       let id = Xml.get_int_attr "Id" xml in
       let name = Upath.get_attr "/Name" "Value" xml in
       let time = Upath.get_float_attr "/Time" "Value" xml in
-      { id; name; time }
+      { id; name; time; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Locator"))
 end
 
@@ -49,6 +50,7 @@ type t = {
   main : Track.t;
   locators : Locator.t list;
   pointees : pointee IntHashtbl.t;
+  xml : Xml.t;
 }
 
 (* Helper to extract devices from any track type *)
@@ -274,7 +276,8 @@ let create (xml : Xml.t) (file_path : string) : t =
     returns;
     main;
     locators;
-    pointees = IntHashtbl.create 512  (* Initial size estimate *)
+    pointees = IntHashtbl.create 512;  (* Initial size estimate *)
+    xml;
   } in
 
   (* 9. Build pointees table *)

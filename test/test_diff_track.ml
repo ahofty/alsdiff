@@ -4,6 +4,8 @@ open Alsdiff_live
 open Alsdiff_live.Track
 open Track_helpers
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 (* Helper to create a dummy Midi Track *)
 let make_midi_track id name mixer =
   Midi {
@@ -15,6 +17,7 @@ let make_midi_track id name mixer =
     devices = [];
     mixer = mixer;
     routings = make_empty_routing_set ();
+    xml = dummy_xml;
   }
 
 let make_main_track ?(name = "Main") tempo =
@@ -30,8 +33,10 @@ let make_main_track ?(name = "Main") tempo =
       time_signature = make_generic_param "TimeSignature" (Device.Int 4);
       crossfade = make_generic_param "CrossFade" (Device.Float 0.0);
       global_groove = make_generic_param "GlobalGrooveAmount" (Device.Float 0.0);
+      xml = dummy_xml;
     };
     routings = make_empty_routing_set ();
+    xml = dummy_xml;
   }
 
 let test_midi_track_diff () =
@@ -82,6 +87,7 @@ let test_audio_track_diff () =
       devices = [];
       mixer = mixer1;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let mixer2 = make_mixer 0.9 0.0 in
@@ -94,6 +100,7 @@ let test_audio_track_diff () =
       devices = [];
       mixer = mixer2;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let patch = Track.diff old_track new_track in
@@ -131,6 +138,7 @@ let test_group_track_diff () =
       devices = [];
       mixer = mixer1;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let mixer2 = make_mixer 0.8 0.0 in
@@ -143,6 +151,7 @@ let test_group_track_diff () =
       devices = [];
       mixer = mixer2;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let patch = Track.diff old_track new_track in
@@ -180,6 +189,7 @@ let test_return_track_diff () =
       devices = [];
       mixer = mixer1;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let mixer2 = make_mixer 1.0 0.5 in
@@ -192,6 +202,7 @@ let test_return_track_diff () =
       devices = [];
       mixer = mixer2;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let patch = Track.diff old_track new_track in
@@ -226,6 +237,7 @@ let test_cross_type_diff_error () =
       current_name = "Midi Track";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let audio_track = Audio {
@@ -234,6 +246,7 @@ let test_cross_type_diff_error () =
       current_name = "Audio Track";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   (* Cross-type diff should raise an exception *)
@@ -256,6 +269,7 @@ let test_same_track_no_changes () =
       current_name = "Midi Track";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let patch = Track.diff track track in

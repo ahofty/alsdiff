@@ -105,6 +105,14 @@ let open_als filename =
   | e ->
     raise (File_error (filename, "Failed to open ALS file: " ^ Printexc.to_string e))
 
+let write_als (filename : string) (xml : Xml.t) : unit =
+  let xml_str = Xml.to_string xml in
+  let gz = Gzip.open_out ~level:9 filename in
+  Fun.protect
+    ~finally:(fun () -> Gzip.close_out gz)
+    (fun () ->
+       Gzip.output gz (Bytes.of_string xml_str) 0 (String.length xml_str))
+
 let time_it (f : unit -> 'a)  =
   let start_time = Sys.time() in
   let result = f () in

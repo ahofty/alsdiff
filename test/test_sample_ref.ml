@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live.Clip.SampleRef
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 let test_create_basic () =
   let xml = Xml.read_file (resolve_test_data_path "sample_ref.xml") in
   let sample_ref = create xml in
@@ -67,8 +69,8 @@ let test_missing_last_mod_date () =
   | _ -> () (* Expected to fail - missing required element *)
 
 let test_diff_file_path_change () =
-  let old_ref = { file_path = "/path/to/old.wav"; crc = "12345"; last_modified_date = 1742403845 } in
-  let new_ref = { file_path = "/path/to/new.wav"; crc = "12345"; last_modified_date = 1742403845 } in
+  let old_ref = { file_path = "/path/to/old.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
+  let new_ref = { file_path = "/path/to/new.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
   let patch = diff old_ref new_ref in
   (match patch.file_path with
    | `Modified m ->
@@ -77,8 +79,8 @@ let test_diff_file_path_change () =
    | _ -> fail "Expected file_path to be modified")
 
 let test_diff_crc_change () =
-  let old_ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845 } in
-  let new_ref = { file_path = "/path/to/file.wav"; crc = "67890"; last_modified_date = 1742403845 } in
+  let old_ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
+  let new_ref = { file_path = "/path/to/file.wav"; crc = "67890"; last_modified_date = 1742403845; xml = dummy_xml } in
   let patch = diff old_ref new_ref in
   (match patch.crc with
    | `Modified m ->
@@ -87,8 +89,8 @@ let test_diff_crc_change () =
    | _ -> fail "Expected crc to be modified")
 
 let test_diff_last_modified_date_change () =
-  let old_ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845 } in
-  let new_ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403900 } in
+  let old_ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
+  let new_ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403900; xml = dummy_xml } in
   let patch = diff old_ref new_ref in
   (match patch.last_modified_date with
    | `Modified m ->
@@ -97,8 +99,8 @@ let test_diff_last_modified_date_change () =
    | _ -> fail "Expected last_modified_date to be modified")
 
 let test_diff_all_change () =
-  let old_ref = { file_path = "/path/to/old.wav"; crc = "12345"; last_modified_date = 1742403845 } in
-  let new_ref = { file_path = "/path/to/new.wav"; crc = "67890"; last_modified_date = 1742403900 } in
+  let old_ref = { file_path = "/path/to/old.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
+  let new_ref = { file_path = "/path/to/new.wav"; crc = "67890"; last_modified_date = 1742403900; xml = dummy_xml } in
   let patch = diff old_ref new_ref in
   (match patch.file_path with
    | `Modified m ->
@@ -117,18 +119,18 @@ let test_diff_all_change () =
    | _ -> fail "Expected last_modified_date to be modified")
 
 let test_diff_unchanged () =
-  let ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845 } in
+  let ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
   let patch = diff ref ref in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_true () =
-  let ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845 } in
+  let ref = { file_path = "/path/to/file.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
   let patch = diff ref ref in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_false () =
-  let old_ref = { file_path = "/path/to/old.wav"; crc = "12345"; last_modified_date = 1742403845 } in
-  let new_ref = { file_path = "/path/to/new.wav"; crc = "12345"; last_modified_date = 1742403845 } in
+  let old_ref = { file_path = "/path/to/old.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
+  let new_ref = { file_path = "/path/to/new.wav"; crc = "12345"; last_modified_date = 1742403845; xml = dummy_xml } in
   let patch = diff old_ref new_ref in
   check bool "patch is not empty" false (Patch.is_empty patch)
 

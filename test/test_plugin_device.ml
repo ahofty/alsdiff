@@ -1,6 +1,8 @@
 open Alsdiff_base.Xml
 open Alsdiff_live
 
+let dummy_xml = read_string "<dummy/>"
+
 module PluginDevice = Device.PluginDevice
 module PluginParam = Device.PluginParam
 module PluginDesc = Device.PluginDesc
@@ -190,12 +192,14 @@ let test_plugin_desc_diff () =
       uid = "test-uid-123";
       plugin_type = PluginDesc.Vst3;
       processor_state = "old-state";
+      xml = dummy_xml;
     } in
   let desc2 = PluginDesc.{
       name = "TestPlugin";
       uid = "test-uid-123";
       plugin_type = PluginDesc.Vst3;
       processor_state = "new-state";
+      xml = dummy_xml;
     } in
   let patch = PluginDesc.diff desc1 desc2 in
   Alcotest.(check bool) "plugin desc patch is not empty" false (PluginDesc.Patch.is_empty patch)

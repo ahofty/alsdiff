@@ -2,6 +2,8 @@ open Alsdiff_live
 open Alsdiff_live.Track
 open Track_helpers
 
+let dummy_xml = Alsdiff_base.Xml.read_string "<dummy/>"
+
 let test_get_name_midi_track () =
   let mixer = make_mixer 0.8 0.0 in
   let track = Midi {
@@ -13,6 +15,7 @@ let test_get_name_midi_track () =
       devices = [];
       mixer;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   Alcotest.(check string) "get_name MidiTrack" "Midi Track Name" (Track.get_name track)
 
@@ -28,6 +31,7 @@ let test_get_name_audio_track () =
       devices = [];
       mixer;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   Alcotest.(check string) "get_name AudioTrack" "Audio Track Name" (Track.get_name track)
 
@@ -43,6 +47,7 @@ let test_get_name_group_track () =
       devices = [];
       mixer;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   Alcotest.(check string) "get_name GroupTrack" "Group Track Name" (Track.get_name track)
 
@@ -58,6 +63,7 @@ let test_get_name_return_track () =
       devices = [];
       mixer;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   Alcotest.(check string) "get_name ReturnTrack" "Return Track Name" (Track.get_name track)
 
@@ -71,6 +77,7 @@ let test_get_name_main_track () =
       devices = [];
       mixer;
       routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   Alcotest.(check string) "get_name MainTrack" "Main" (Track.get_name track)
 
@@ -85,6 +92,7 @@ let test_type_name_all_track_types () =
       current_name = "Midi";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let audio_track = Audio {
@@ -93,6 +101,7 @@ let test_type_name_all_track_types () =
       current_name = "Audio";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let group_track = Group {
@@ -101,6 +110,7 @@ let test_type_name_all_track_types () =
       current_name = "Group";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let return_track = Return {
@@ -109,6 +119,7 @@ let test_type_name_all_track_types () =
       current_name = "Return";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   let main_track = Main {
@@ -116,6 +127,7 @@ let test_type_name_all_track_types () =
       current_name = "Master";
       automations = []; devices = [];
       mixer = main_mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   Alcotest.(check string) "type_name Midi" "MidiTrack" (Track.type_name midi_track);
@@ -133,6 +145,7 @@ let test_has_same_id_midi_track () =
       current_name = "Track 1";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Midi {
       MidiTrack.id = 1;
@@ -140,6 +153,7 @@ let test_has_same_id_midi_track () =
       current_name = "Track 2";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track3 = Midi {
       MidiTrack.id = 2;
@@ -147,6 +161,7 @@ let test_has_same_id_midi_track () =
       current_name = "Track 3";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   Alcotest.(check bool) "has_same_id same id" true (Track.has_same_id track1 track2);
@@ -161,6 +176,7 @@ let test_has_same_id_audio_track () =
       current_name = "Audio 1";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Audio {
       AudioTrack.id = 10;
@@ -168,6 +184,7 @@ let test_has_same_id_audio_track () =
       current_name = "Audio 2";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   Alcotest.(check bool) "has_same_id Audio same id" true (Track.has_same_id track1 track2)
@@ -181,6 +198,7 @@ let test_has_same_id_group_track () =
       current_name = "Group 1";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Group {
       AudioTrack.id = 20;
@@ -188,6 +206,7 @@ let test_has_same_id_group_track () =
       current_name = "Group 2";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   Alcotest.(check bool) "has_same_id Group same id" true (Track.has_same_id track1 track2)
@@ -201,6 +220,7 @@ let test_has_same_id_return_track () =
       current_name = "Return 1";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Return {
       AudioTrack.id = 30;
@@ -208,6 +228,7 @@ let test_has_same_id_return_track () =
       current_name = "Return 2";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   Alcotest.(check bool) "has_same_id Return same id" true (Track.has_same_id track1 track2)
@@ -220,12 +241,14 @@ let test_has_same_id_main_track_always_true () =
       current_name = "Master";
       automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Main {
       MainTrack.name = "Master";
       current_name = "Master";
       automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   (* MainTrack uses singleton pattern - has_same_id always returns true *)
@@ -240,6 +263,7 @@ let test_has_same_id_cross_type () =
       current_name = "Midi";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let audio_track = Audio {
       AudioTrack.id = 1;
@@ -247,6 +271,7 @@ let test_has_same_id_cross_type () =
       current_name = "Audio";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   (* Cross-type comparisons always return false *)
@@ -261,6 +286,7 @@ let test_id_hash_midi_track () =
       current_name = "Track";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Midi {
       MidiTrack.id = 42;
@@ -268,6 +294,7 @@ let test_id_hash_midi_track () =
       current_name = "Other Track";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   (* Same ID should produce same hash *)
@@ -283,12 +310,14 @@ let test_id_hash_main_track_constant () =
       current_name = "Master";
       automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Main {
       MainTrack.name = "Master";
       current_name = "Master";
       automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
 
   (* MainTrack uses constant hash (Hashtbl.hash 0) *)
@@ -306,6 +335,7 @@ let test_patch_is_empty_midi_patch () =
       current_name = "Test";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let patch = Track.diff track track in
 
@@ -322,6 +352,7 @@ let test_patch_is_empty_audio_patch () =
       current_name = "Test";
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let patch = Track.diff track track in
 
@@ -337,6 +368,7 @@ let test_patch_is_empty_main_patch () =
       current_name = "Master";
       automations = []; devices = [];
       mixer = main_mixer; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let patch = Track.diff track track in
 
@@ -354,6 +386,7 @@ let test_patch_is_not_empty () =
       current_name = "Old Name";
       clips = []; automations = []; devices = [];
       mixer = mixer1; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let track2 = Midi {
       MidiTrack.id = 1;
@@ -361,6 +394,7 @@ let test_patch_is_not_empty () =
       current_name = "New Name";
       clips = []; automations = []; devices = [];
       mixer = mixer2; routings = make_empty_routing_set ();
+      xml = dummy_xml;
     } in
   let patch = Track.diff track1 track2 in
 

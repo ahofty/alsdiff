@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live.Clip
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 let test_midi_clip_parsing () =
   (* Read the midi_clip.xml file *)
   let xml = Xml.read_file (resolve_test_data_path "midi_clip.xml") in
@@ -14,11 +16,12 @@ let test_midi_clip_parsing () =
   let expected_id = 2 in
   let expected_start_time = 80.0 in
   let expected_end_time = 100.0 in
-  let expected_signature = { TimeSignature.numer = 4; TimeSignature.denom = 4 } in
+  let expected_signature = { TimeSignature.numer = 4; TimeSignature.denom = 4; xml = dummy_xml } in
   let expected_loop = Some {
       Loop.start_time = 92.0;
       Loop.end_time = 112.0;
       Loop.on = false;
+      xml = dummy_xml;
     } in
 
   (* Test basic fields *)
@@ -102,9 +105,10 @@ let create_basic_clip () =
     name = "Test Clip";
     start_time = 0.0;
     end_time = 4.0;
-    loop = { Loop.start_time = 0.0; end_time = 4.0; on = false; };
-    signature = { TimeSignature.numer = 4; denom = 4; };
+    loop = { Loop.start_time = 0.0; end_time = 4.0; on = false; xml = dummy_xml; };
+    signature = { TimeSignature.numer = 4; denom = 4; xml = dummy_xml; };
     notes = [];
+    xml = dummy_xml;
   }
 
 (* Diff function tests *)
@@ -140,7 +144,7 @@ let test_diff_end_time_change () =
 
 let test_diff_loop_change () =
   let old_clip = create_basic_clip () in
-  let new_loop = { Loop.start_time = 1.0; end_time = 3.0; on = true; } in
+  let new_loop = { Loop.start_time = 1.0; end_time = 3.0; on = true; xml = dummy_xml; } in
   let new_clip = { old_clip with loop = new_loop } in
   let patch = MidiClip.diff old_clip new_clip in
   match patch.MidiClip.Patch.loop with
@@ -150,7 +154,7 @@ let test_diff_loop_change () =
 
 let test_diff_signature_change () =
   let old_clip = create_basic_clip () in
-  let new_sig = { TimeSignature.numer = 3; denom = 4; } in
+  let new_sig = { TimeSignature.numer = 3; denom = 4; xml = dummy_xml; } in
   let new_clip = { old_clip with signature = new_sig } in
   let patch = MidiClip.diff old_clip new_clip in
   match patch.MidiClip.Patch.signature with
@@ -160,7 +164,7 @@ let test_diff_signature_change () =
 
 let test_diff_notes_change () =
   let old_clip = create_basic_clip () in
-  let new_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 0.0; } in
+  let new_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 0.0; xml = dummy_xml; } in
   let new_clip = { old_clip with notes = [new_note] } in
   let patch = MidiClip.diff old_clip new_clip in
   (* notes diff is a list of changes *)

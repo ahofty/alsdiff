@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live.Clip.Fade
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 let test_create_basic () =
   let xml = Xml.read_file (resolve_test_data_path "fade.xml") in
   let fade = create xml in
@@ -63,8 +65,8 @@ let test_missing_fade_in_length () =
   | Upath.Path_not_found _ -> () (* Expected - missing required attribute *)
 
 let test_diff_fade_in_length_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 2.5; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 2.5; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.fade_in_length with
    | `Modified m ->
@@ -73,8 +75,8 @@ let test_diff_fade_in_length_change () =
    | _ -> fail "Expected fade_in_length to be modified")
 
 let test_diff_fade_out_length_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 4.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 4.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.fade_out_length with
    | `Modified m ->
@@ -83,8 +85,8 @@ let test_diff_fade_out_length_change () =
    | _ -> fail "Expected fade_out_length to be modified")
 
 let test_diff_is_initialized_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = false; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = false; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.is_initialized with
    | `Modified m ->
@@ -93,8 +95,8 @@ let test_diff_is_initialized_change () =
    | _ -> fail "Expected is_initialized to be modified")
 
 let test_diff_crossfade_state_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 0; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.crossfade_state with
    | `Modified m ->
@@ -103,8 +105,8 @@ let test_diff_crossfade_state_change () =
    | _ -> fail "Expected crossfade_state to be modified")
 
 let test_diff_fade_in_curve_skew_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.5; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.5; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.fade_in_curve_skew with
    | `Modified m ->
@@ -113,8 +115,8 @@ let test_diff_fade_in_curve_skew_change () =
    | _ -> fail "Expected fade_in_curve_skew to be modified")
 
 let test_diff_fade_in_curve_slope_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.7; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.7; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.fade_in_curve_slope with
    | `Modified m ->
@@ -123,8 +125,8 @@ let test_diff_fade_in_curve_slope_change () =
    | _ -> fail "Expected fade_in_curve_slope to be modified")
 
 let test_diff_fade_out_curve_skew_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.3; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.3; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.fade_out_curve_skew with
    | `Modified m ->
@@ -133,8 +135,8 @@ let test_diff_fade_out_curve_skew_change () =
    | _ -> fail "Expected fade_out_curve_skew to be modified")
 
 let test_diff_fade_out_curve_slope_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.6; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.6; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.fade_out_curve_slope with
    | `Modified m ->
@@ -143,8 +145,8 @@ let test_diff_fade_out_curve_slope_change () =
    | _ -> fail "Expected fade_out_curve_slope to be modified")
 
 let test_diff_is_default_fade_in_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = true; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = true; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.is_default_fade_in with
    | `Modified m ->
@@ -153,8 +155,8 @@ let test_diff_is_default_fade_in_change () =
    | _ -> fail "Expected is_default_fade_in to be modified")
 
 let test_diff_is_default_fade_out_change () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = true } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = true; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   (match patch.is_default_fade_out with
    | `Modified m ->
@@ -163,18 +165,18 @@ let test_diff_is_default_fade_out_change () =
    | _ -> fail "Expected is_default_fade_out to be modified")
 
 let test_diff_unchanged () =
-  let fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff fade fade in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_true () =
-  let fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff fade fade in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_false () =
-  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
-  let new_fade = { fade_in_length = 2.5; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false } in
+  let old_fade = { fade_in_length = 0.0; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
+  let new_fade = { fade_in_length = 2.5; fade_out_length = 8.0; is_initialized = true; crossfade_state = 1; fade_in_curve_skew = 0.0; fade_in_curve_slope = 0.0; fade_out_curve_skew = 0.0; fade_out_curve_slope = 0.0; is_default_fade_in = false; is_default_fade_out = false; xml = dummy_xml } in
   let patch = diff old_fade new_fade in
   check bool "patch is not empty" false (Patch.is_empty patch)
 

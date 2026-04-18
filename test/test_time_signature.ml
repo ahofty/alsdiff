@@ -3,6 +3,8 @@ open Alsdiff_base
 open Alsdiff_live.Clip.TimeSignature
 open Utils
 
+let dummy_xml = Xml.read_string "<dummy/>"
+
 let test_create_basic_44 () =
   let xml = Xml.read_file (resolve_test_data_path "time_signature.xml") in
   let sig_val = create xml in
@@ -61,8 +63,8 @@ let test_missing_denominator () =
   | Upath.Path_not_found _ -> ()
 
 let test_diff_numer_change () =
-  let old_sig = { numer = 4; denom = 4 } in
-  let new_sig = { numer = 3; denom = 4 } in
+  let old_sig = { numer = 4; denom = 4; xml = dummy_xml } in
+  let new_sig = { numer = 3; denom = 4; xml = dummy_xml } in
   let patch = diff old_sig new_sig in
   (match patch.numer with
    | `Modified m ->
@@ -71,8 +73,8 @@ let test_diff_numer_change () =
    | _ -> fail "Expected numer to be modified")
 
 let test_diff_denom_change () =
-  let old_sig = { numer = 4; denom = 4 } in
-  let new_sig = { numer = 4; denom = 8 } in
+  let old_sig = { numer = 4; denom = 4; xml = dummy_xml } in
+  let new_sig = { numer = 4; denom = 8; xml = dummy_xml } in
   let patch = diff old_sig new_sig in
   (match patch.denom with
    | `Modified m ->
@@ -81,8 +83,8 @@ let test_diff_denom_change () =
    | _ -> fail "Expected denom to be modified")
 
 let test_diff_both_change () =
-  let old_sig = { numer = 3; denom = 4 } in
-  let new_sig = { numer = 6; denom = 8 } in
+  let old_sig = { numer = 3; denom = 4; xml = dummy_xml } in
+  let new_sig = { numer = 6; denom = 8; xml = dummy_xml } in
   let patch = diff old_sig new_sig in
   (match patch.numer with
    | `Modified m ->
@@ -96,18 +98,18 @@ let test_diff_both_change () =
    | _ -> fail "Expected denom to be modified")
 
 let test_diff_unchanged () =
-  let sig_val = { numer = 4; denom = 4 } in
+  let sig_val = { numer = 4; denom = 4; xml = dummy_xml } in
   let patch = diff sig_val sig_val in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_true () =
-  let sig_val = { numer = 4; denom = 4 } in
+  let sig_val = { numer = 4; denom = 4; xml = dummy_xml } in
   let patch = diff sig_val sig_val in
   check bool "patch is empty" true (Patch.is_empty patch)
 
 let test_patch_is_empty_false () =
-  let old_sig = { numer = 4; denom = 4 } in
-  let new_sig = { numer = 3; denom = 4 } in
+  let old_sig = { numer = 4; denom = 4; xml = dummy_xml } in
+  let new_sig = { numer = 3; denom = 4; xml = dummy_xml } in
   let patch = diff old_sig new_sig in
   check bool "patch is not empty" false (Patch.is_empty patch)
 

@@ -1,6 +1,8 @@
 open Alcotest
 open Alsdiff_output
 
+let dummy_xml = Alsdiff_base.Xml.read_string "<dummy/>"
+
 let contains_substring ~haystack ~needle =
   let len_h = String.length haystack in
   let len_n = String.length needle in
@@ -292,36 +294,43 @@ let test_external_input_node_created_for_audioin_external () =
           target = "AudioIn/External/S1";
           upper_string = "Ext. In";
           lower_string = "1/2";
+          xml = dummy_xml;
         };
         audio_out = {
           route_type = Track.Routing.AudioOut;
           target = "Main";
           upper_string = "Main";
           lower_string = "";
+          xml = dummy_xml;
         };
         midi_in = {
           route_type = Track.Routing.MidiIn;
           target = "MidiIn/None";
           upper_string = "None";
           lower_string = "";
+          xml = dummy_xml;
         };
         midi_out = {
           route_type = Track.Routing.MidiOut;
           target = "MidiOut/None";
           upper_string = "None";
           lower_string = "";
+          xml = dummy_xml;
         };
+        xml = dummy_xml;
       };
       mixer = {
-        volume = { name = "Volume"; value = Device.Float 1.0; automation = 0; modulation = 0; mapping = None };
-        pan = { name = "Pan"; value = Device.Float 0.0; automation = 0; modulation = 0; mapping = None };
-        mute = { name = "Mute"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None };
-        solo = { name = "Solo"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None };
+        volume = { name = "Volume"; value = Device.Float 1.0; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+        pan = { name = "Pan"; value = Device.Float 0.0; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+        mute = { name = "Mute"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+        solo = { name = "Solo"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
         sends = [];
+        xml = dummy_xml;
       };
       devices = [];
       clips = [];
       automations = [];
+      xml = dummy_xml;
     } in
   let liveset = {
     Liveset.name = "Test";
@@ -338,44 +347,53 @@ let test_external_input_node_created_for_audioin_external () =
             target = "AudioIn/None";
             upper_string = "None";
             lower_string = "";
+            xml = dummy_xml;
           };
           audio_out = {
             route_type = Track.Routing.AudioOut;
             target = "AudioOut/None";
             upper_string = "None";
             lower_string = "";
+            xml = dummy_xml;
           };
           midi_in = {
             route_type = Track.Routing.MidiIn;
             target = "MidiIn/None";
             upper_string = "None";
             lower_string = "";
+            xml = dummy_xml;
           };
           midi_out = {
             route_type = Track.Routing.MidiOut;
             target = "MidiOut/None";
             upper_string = "None";
             lower_string = "";
+            xml = dummy_xml;
           };
+          xml = dummy_xml;
         };
         mixer = {
           base = {
-            volume = { name = "Volume"; value = Device.Float 1.0; automation = 0; modulation = 0; mapping = None };
-            pan = { name = "Pan"; value = Device.Float 0.0; automation = 0; modulation = 0; mapping = None };
-            mute = { name = "Mute"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None };
-            solo = { name = "Solo"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None };
+            volume = { name = "Volume"; value = Device.Float 1.0; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+            pan = { name = "Pan"; value = Device.Float 0.0; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+            mute = { name = "Mute"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+            solo = { name = "Solo"; value = Device.Bool false; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
             sends = [];
+            xml = dummy_xml;
           };
-          tempo = { name = "Tempo"; value = Device.Float 120.0; automation = 0; modulation = 0; mapping = None };
-          time_signature = { name = "Time Signature"; value = Device.Int 4; automation = 0; modulation = 0; mapping = None };
-          crossfade = { name = "Crossfade"; value = Device.Float 0.5; automation = 0; modulation = 0; mapping = None };
-          global_groove = { name = "Global Groove"; value = Device.Float 1.0; automation = 0; modulation = 0; mapping = None };
+          tempo = { name = "Tempo"; value = Device.Float 120.0; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+          time_signature = { name = "Time Signature"; value = Device.Int 4; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+          crossfade = { name = "Crossfade"; value = Device.Float 0.5; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+          global_groove = { name = "Global Groove"; value = Device.Float 1.0; automation = 0; modulation = 0; mapping = None; xml = dummy_xml };
+          xml = dummy_xml;
         };
         devices = [];
         automations = [];
+        xml = dummy_xml;
       };
     locators = [];
     pointees = Liveset.IntHashtbl.create 0;
+    xml = dummy_xml;
   } in
   (* Create minimal XML structure with LiveSet and Tracks for build_group_info *)
   let xml = Xml.Element { name = "Ableton"; attrs = []; childs = [
@@ -453,6 +471,7 @@ let test_should_skip_routing_for_no_output_destination () =
     target = "MidiOut/None";
     upper_string = "None";
     lower_string = "";
+    xml = dummy_xml;
   } in
   check bool "routing to no-output is skipped" true (should_skip_routing routing)
 

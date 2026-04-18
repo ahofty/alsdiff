@@ -152,3 +152,59 @@ let to_string xml =
 
 let pp_xml_error fmt (xml, msg) =
   Fmt.pf fmt "%s@\nProblematic XML:\n%a@\n" msg pp xml
+
+let rec equal a b =
+  match a, b with
+  | Element { name = n1; attrs = a1; childs = c1 },
+    Element { name = n2; attrs = a2; childs = c2 } ->
+    String.equal n1 n2
+    && List.equal
+      (fun (k1, v1) (k2, v2) -> String.equal k1 k2 && String.equal v1 v2)
+      a1 a2
+    && List.equal equal c1 c2
+  | Data s1, Data s2 -> String.equal s1 s2
+  | _ -> false
+
+let replace_child tree ~old ~replacement =
+  match tree with
+  | Element { name; attrs; childs } ->
+    let childs =
+      List.map (fun c -> if c == old then replacement else c) childs
+    in
+    Element { name; attrs; childs }
+  | Data _ -> tree
+
+let remove_child tree ~child =
+  match tree with
+  | Element { name; attrs; childs } ->
+    let childs = List.filter (fun c -> c != child) childs in
+    Element { name; attrs; childs }
+  | Data _ -> tree
+
+let add_child tree child =
+  match tree with
+  | Element { name; attrs; childs } ->
+    Element { name; attrs; childs = childs @ [ child ] }
+  | Data _ -> tree
+
+let insert_child_before tree ~reference ~new_child =
+  match tree with
+  | Element { name; attrs; childs } ->
+    let childs =
+      List.concat_map
+        (fun c -> if c == reference then [ new_child; c ] else [ c ])
+        childs
+    in
+    Element { name; attrs; childs }
+  | Data _ -> tree
+
+let rec update_descendant ~root ~target ~f =
+  if root == target then f root
+  else
+    match root with
+    | Element { name; attrs; childs } ->
+      let childs =
+        List.map (fun c -> update_descendant ~root:c ~target ~f) childs
+      in
+      Element { name; attrs; childs }
+    | Data _ -> root

@@ -24,6 +24,7 @@ module EnvelopeEvent = struct
     time : float;
     value : event_value;
     curve : CurveControls.t option;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -46,7 +47,7 @@ module EnvelopeEvent = struct
       | "EnumEvent" -> EnumEvent (Xml.get_int_attr "Value" xml)
       | _ -> raise (Xml.Xml_error (xml, "Unknown event type: " ^ tag_name))
     in
-    { id; time; value; curve }
+    { id; time; value; curve; xml }
 end
 
 
@@ -54,6 +55,7 @@ type t = {
   id : int; [@id.id] [@patch.identity]
   target : int; [@id.id] [@patch.identity]
   events : EnvelopeEvent.t list;
+  xml : Xml.t; [@patch.skip]
 } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
 (* Automation contains a list of EnvelopeEvents and is therefore
@@ -67,4 +69,4 @@ let create (xml : Alsdiff_base.Xml.t) : t =
     |> List.map (fun (_, event) -> EnvelopeEvent.create event)
     |> List.sort (fun a b -> Float.compare a.EnvelopeEvent.time b.EnvelopeEvent.time)
   in
-  { id; target; events }
+  { id; target; events; xml }

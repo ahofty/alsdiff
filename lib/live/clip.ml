@@ -3,13 +3,14 @@ open Alsdiff_base.Diff
 
 
 module TimeSignature = struct
-  type t = { numer : int; denom : int } [@@deriving eq, patch] [@@patch.generate_diff]
+  type t = { numer : int; denom : int; xml : Xml.t; [@patch.skip] } [@@deriving eq, patch]
+  [@@patch.generate_diff]
   let create (xml : Xml.t) : t =
     match xml with
     | Xml.Element { name = "RemoteableTimeSignature"; _ } ->
       let numer = Upath.get_int_attr "/Numerator" "Value" xml in
       let denom = Upath.get_int_attr "/Denominator" "Value" xml in
-      { numer; denom }
+      { numer; denom; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating TimeSignature"))
 end
 
@@ -22,6 +23,7 @@ module MidiNote = struct
     duration : float;
     velocity : float;
     off_velocity : float;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (note: int) (xml : Xml.t) : t =
@@ -32,7 +34,7 @@ module MidiNote = struct
       let duration = Xml.get_float_attr "Duration" xml in
       let velocity = Xml.get_float_attr "Velocity" xml in
       let off_velocity = Xml.get_float_attr "OffVelocity" xml in
-      { id; note; time; duration; velocity; off_velocity }
+      { id; note; time; duration; velocity; off_velocity; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating MidiNote"))
 end
 
@@ -41,6 +43,7 @@ module Loop = struct
     start_time : float;
     end_time : float;
     on : bool;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
 
@@ -50,7 +53,7 @@ module Loop = struct
       let start = Upath.get_float_attr "/LoopStart" "Value" xml in
       let end_ = Upath.get_float_attr "/LoopEnd" "Value" xml in
       let on = Upath.get_bool_attr "/LoopOn" "Value" xml in
-      { start_time = start; end_time = end_; on; }
+      { start_time = start; end_time = end_; on; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Loop"))
 end
 
@@ -64,6 +67,7 @@ module MidiClip = struct
     loop : Loop.t;
     signature : TimeSignature.t;
     notes : MidiNote.t list;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -93,7 +97,7 @@ module MidiClip = struct
         |> List.of_seq
       in
 
-      { id; name; start_time; end_time; loop; signature; notes }
+      { id; name; start_time; end_time; loop; signature; notes; xml }
     | _ -> raise (Xml.Xml_error (xml, "Expected MidiClip element"))
 end
 
@@ -103,6 +107,7 @@ module SampleRef = struct
     file_path : string;
     crc : string;
     last_modified_date : int; (* unix timestamp *)
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -111,7 +116,7 @@ module SampleRef = struct
       let last_modified_date = Upath.get_int_attr "LastModDate" "Value" xml in
       let file_path = Upath.get_attr "FileRef/Path" "Value" xml in
       let crc = Upath.get_attr "FileRef/OriginalCrc" "Value" xml in
-      { file_path; crc; last_modified_date }
+      { file_path; crc; last_modified_date; xml }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating SampleRef"))
 
 end
@@ -129,6 +134,7 @@ module Fade = struct
     fade_out_curve_slope : float;
     is_default_fade_in : bool;
     is_default_fade_out : bool;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, patch] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -149,6 +155,7 @@ module Fade = struct
         crossfade_state; fade_in_curve_skew; fade_in_curve_slope;
         fade_out_curve_skew; fade_out_curve_slope;
         is_default_fade_in; is_default_fade_out;
+        xml;
       }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating Fade"))
 
@@ -166,6 +173,7 @@ module AudioClip = struct
     signature : TimeSignature.t;
     sample_ref : SampleRef.t;
     fade : Fade.t option;
+    xml : Xml.t; [@patch.skip]
   } [@@deriving eq, id, patch]
 
   let create (xml : Xml.t) : t =
@@ -194,12 +202,12 @@ module AudioClip = struct
           None
       in
 
-      { id; name; start_time; end_time; loop; signature; sample_ref; fade }
+      { id; name; start_time; end_time; loop; signature; sample_ref; fade; xml }
     | _ -> raise (Xml.Xml_error (xml, "Expected AudioClip element"))
 
   let diff (old_clip : t) (new_clip : t) : Patch.t =
-    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade } = old_clip in
-    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; sample_ref = new_sample; fade = new_fade } = new_clip in
+    let { id = old_id; name = old_name; start_time = old_start; end_time = old_end; loop = old_loop; signature = old_sig; sample_ref = old_sample; fade = old_fade; xml = _ } = old_clip in
+    let { id = new_id; name = new_name; start_time = new_start; end_time = new_end; loop = new_loop; signature = new_sig; sample_ref = new_sample; fade = new_fade; xml = _ } = new_clip in
 
     (* Only compare clips with the same id *)
     if old_id <> new_id then

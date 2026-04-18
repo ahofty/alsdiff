@@ -5,6 +5,8 @@ open Alsdiff_live
 open Alsdiff_live.Clip
 open Alsdiff_output.View_model
 
+let dummy_xml = read_string "<dummy/>"
+
 (* ========== Helper Functions ========== *)
 
 (* Helper: Check if a view is a Field and return it *)
@@ -81,7 +83,7 @@ let test_change_type_of () =
 (* ========== Create Function Tests ========== *)
 
 let test_create_note_item_added () =
-  let note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let change = `Added note in
 
   let item = create_note_item change in
@@ -99,8 +101,8 @@ let test_create_note_item_added () =
 
 
 let test_create_note_item_modified () =
-  let old_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
-  let new_note = { MidiNote.id = 1; note = 60; time = 0.5; duration = 1.5; velocity = 100.0; off_velocity = 64.0 } in
+  let old_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_note = { MidiNote.id = 1; note = 60; time = 0.5; duration = 1.5; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
 
   let patch = MidiNote.diff old_note new_note in
   let change = `Modified patch in
@@ -121,7 +123,7 @@ let test_create_note_item_modified () =
 
 let test_create_note_item_sharp_style () =
   (* Note 54 = F#3 in sharp notation *)
-  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let change = `Added note in
 
   (* Test with explicit Sharp style *)
@@ -133,7 +135,7 @@ let test_create_note_item_sharp_style () =
 
 let test_create_note_item_flat_style () =
   (* Note 54 = Gb3 in flat notation *)
-  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let change = `Added note in
 
   let item = create_note_item ~note_name_style:Flat change in
@@ -144,7 +146,7 @@ let test_create_note_item_flat_style () =
 
 let test_create_note_item_flat_style_ab_note () =
   (* Note 56 = Ab3 in flat notation *)
-  let note = { MidiNote.id = 1; note = 56; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { MidiNote.id = 1; note = 56; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let change = `Added note in
 
   let item = create_note_item ~note_name_style:Flat change in
@@ -155,7 +157,7 @@ let test_create_note_item_flat_style_ab_note () =
 
 let test_create_note_item_default_is_sharp () =
   (* Verify that without specifying style, default is Sharp *)
-  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let note = { MidiNote.id = 1; note = 54; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
   let change = `Added note in
 
   let item = create_note_item change in
@@ -165,8 +167,8 @@ let test_create_note_item_default_is_sharp () =
 
 let test_create_midi_clip_item () =
   (* Setup data *)
-  let old_midi_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
-  let new_midi_note = { MidiNote.id = 1; note = 60; time = 0.5; duration = 1.0; velocity = 100.0; off_velocity = 64.0 } in
+  let old_midi_note = { MidiNote.id = 1; note = 60; time = 0.0; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
+  let new_midi_note = { MidiNote.id = 1; note = 60; time = 0.5; duration = 1.0; velocity = 100.0; off_velocity = 64.0; xml = dummy_xml } in
 
   let note_change = MidiNote.diff old_midi_note new_midi_note in
   let notes_changes = [`Modified note_change] in
@@ -249,9 +251,9 @@ let test_create_midi_clip_item () =
 
 
 let test_create_audio_clip_item_added () =
-  let sample_ref = { SampleRef.file_path = "/path/to/sample.wav"; crc = "abc123"; last_modified_date = 12345 } in
-  let loop = { Loop.start_time = 0.0; end_time = 4.0; on = true } in
-  let signature = { TimeSignature.numer = 4; denom = 4 } in
+  let sample_ref = { SampleRef.file_path = "/path/to/sample.wav"; crc = "abc123"; last_modified_date = 12345; xml = dummy_xml } in
+  let loop = { Loop.start_time = 0.0; end_time = 4.0; on = true; xml = dummy_xml } in
+  let signature = { TimeSignature.numer = 4; denom = 4; xml = dummy_xml } in
   let clip = {
     AudioClip.id = 1;
     name = "Audio Clip 1";
@@ -261,6 +263,7 @@ let test_create_audio_clip_item_added () =
     signature;
     sample_ref;
     fade = None;
+    xml = dummy_xml;
   } in
 
   let change = `Added clip in
