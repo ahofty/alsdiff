@@ -16,6 +16,12 @@
  (modes byte exe)
  (libraries alsdiff_base alsdiff_live alsdiff_output alsdiff_tui_lib eio_main cmdliner dune-build-info))
 
+(executable
+ (public_name alsmerge)
+ (name alsmerge)
+ (modes byte exe)
+ (libraries alsdiff_base alsdiff_live alsdiff_merge cmdliner))
+
 ;; Auto indent files with `dune build @fmt`
 (subdir
  run
