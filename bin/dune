@@ -20,7 +20,7 @@
  (public_name alsmerge)
  (name alsmerge)
  (modes byte exe)
- (libraries alsdiff_base alsdiff_live alsdiff_merge cmdliner))
+ (libraries alsdiff_base alsdiff_live alsdiff_merge alsmerge_tui_lib eio_main cmdliner))
 
 ;; Auto indent files with `dune build @fmt`
 (subdir

@@ -12,6 +12,22 @@ let update_root_attr xml attr_name value =
     Xml.Element { name; attrs; childs }
   | Xml.Data _ -> xml
 
+let rec resolve_action_tree
+    (resolutions : (string, Conflict.resolution) Hashtbl.t)
+    (action : merge_action) : merge_action =
+  match action with
+  | Recurse fields ->
+    Recurse (List.map (fun f ->
+        { f with action = resolve_action_tree resolutions f.action }
+      ) fields)
+  | Conflict c ->
+    (match Hashtbl.find_opt resolutions c.Conflict.path with
+     | Some Conflict.Ours -> Take_ours
+     | Some Conflict.Theirs -> Take_theirs
+     | Some Conflict.Base -> Keep
+     | None -> Take_ours)
+  | other -> other
+
 let apply_merge
     ~base_xml ~base:_ ~ours:_ ~theirs:_
     ~(action : merge_action)
@@ -19,7 +35,10 @@ let apply_merge
     ~(return_merges : entity_merge list)
     ~(locator_merges : entity_merge list)
     ~(ours_patch : Liveset.Patch.t)
-    ~(theirs_patch : Liveset.Patch.t) =
+    ~(theirs_patch : Liveset.Patch.t)
+    ?(resolutions : (string, Conflict.resolution) Hashtbl.t option)
+    () =
+  let resolutions = match resolutions with Some r -> r | None -> Hashtbl.create 0 in
   let xml = ref base_xml in
   ignore action;
 
@@ -33,13 +52,23 @@ let apply_merge
         | Entity_modify (base_entity_xml, new_xml) ->
           xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:new_xml
         | Entity_modify_both (action, base_entity_xml, ours_xml, theirs_xml) ->
-          (match action with
-           | Take_ours | Both_agree | Conflict _ | Recurse _ ->
+          let resolved = resolve_action_tree resolutions action in
+          (match resolved with
+           | Take_ours | Both_agree | Recurse _ ->
              xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:ours_xml
            | Take_theirs ->
              xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:theirs_xml
-           | Keep -> ())
-        | Entity_conflict _ -> ())
+           | Keep -> ()
+           | Conflict _ ->
+             xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:ours_xml)
+        | Entity_conflict c ->
+          (match Hashtbl.find_opt resolutions c.Conflict.path with
+           | Some Conflict.Ours ->
+             xml := Xml.replace_child !xml ~old:base_xml ~replacement:base_xml
+           | Some Conflict.Theirs ->
+             xml := Xml.replace_child !xml ~old:base_xml ~replacement:base_xml
+           | Some Conflict.Base -> ()
+           | None -> ()))
       merges
   in
 

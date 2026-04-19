@@ -1,0 +1,4 @@
+(library
+ (name alsmerge_tui_lib)
+ (libraries alsdiff_base alsdiff_live alsdiff_merge mosaic)
+ (modules model merge_tree msg update view app keymap))
