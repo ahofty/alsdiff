@@ -138,13 +138,49 @@ let rec update_node_status (path : string) (resolution : Alsdiff_merge.Conflict.
       else { n with children = update_node_status path resolution n.children }
     ) nodes
 
+let rec propagate_parent_status (nodes : merge_node list) : merge_node list =
+  List.map (fun n ->
+      let children = propagate_parent_status n.children in
+      let parent_status =
+        if children = [] then n.status
+        else
+          let child_statuses = List.map (fun c -> c.status) children in
+          let all_resolved = List.for_all (function
+              | Resolved _ | Auto | Mixed_resolved -> true
+              | Unresolved -> false
+            ) child_statuses
+          in
+          let any_resolved = List.exists (function
+              | Resolved _ | Mixed_resolved -> true
+              | Auto | Unresolved -> false
+            ) child_statuses
+          in
+          if all_resolved && any_resolved then
+            let resolutions = List.filter_map (function
+                | Resolved r -> Some r | _ -> None
+              ) child_statuses
+            in
+            let all_same = match resolutions with
+              | [] | [_] -> true
+              | first :: rest -> List.for_all (fun r -> r = first) rest
+            in
+            if all_same && List.length resolutions = List.length child_statuses then
+              Resolved (List.hd resolutions)
+            else
+              Mixed_resolved
+          else n.status
+      in
+      { n with status = parent_status; children }
+    ) nodes
+
 let resolve_current (model : t) (resolution : Alsdiff_merge.Conflict.resolution) : t =
   let visible = get_visible_nodes model in
   match List.nth_opt visible model.cursor_index with
-  | None | Some { status = Auto; _ } -> model
+  | None -> model
   | Some node ->
     Hashtbl.replace model.resolutions node.path resolution;
-    { model with flat_nodes = update_node_status node.path resolution model.flat_nodes }
+    let flat_nodes = update_node_status node.path resolution model.flat_nodes in
+    { model with flat_nodes = propagate_parent_status flat_nodes }
 
 let rec resolve_all_unresolved (resolution : Alsdiff_merge.Conflict.resolution)
     (nodes : merge_node list) : merge_node list =
@@ -202,7 +238,7 @@ let count_resolved (model : t) : int * int =
     List.iter (fun n ->
         (match n.status with
          | Unresolved -> incr total
-         | Resolved _ -> incr total; incr resolved
+         | Resolved _ | Mixed_resolved -> incr total; incr resolved
          | Auto -> ());
         count n.children
       ) nodes
@@ -220,6 +256,159 @@ let write_merge (model : t) : t * Msg.t Mosaic.Cmd.t =
   exit_code_ref := 0;
   (model, Mosaic.Cmd.Quit)
 
+let resolve_debug model label =
+  let visible = get_visible_nodes model in
+  match List.nth_opt visible model.cursor_index with
+  | None -> Fmt.str "no node at cursor (%d/%d)" model.cursor_index (List.length visible)
+  | Some { status = Auto; path = p; _ } -> Fmt.str "override auto %s as %s" p label
+  | Some { status = Unresolved; path = p; _ } -> Fmt.str "resolve %s as %s" p label
+  | Some { status = Resolved _; path = p; _ } -> Fmt.str "re-resolve %s as %s" p label
+  | Some { status = Mixed_resolved; path = p; _ } -> Fmt.str "re-resolve %s as %s" p label
+
+let rec handle_cherry_pick_msg (model : t) (msg : Msg.t) : t * Msg.t Mosaic.Cmd.t =
+  match model.cherry_pick, msg with
+  | None, _ -> ({ model with mode = Merge }, Mosaic.Cmd.none)
+  | Some _, Msg.Resize (w, h) ->
+    ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
+  | Some _, Msg.LeaveCherryPick ->
+    ({ model with mode = Merge; cherry_pick = None; last_action = "" }, Mosaic.Cmd.none)
+  | Some cp, Msg.SelectFieldOurs ->
+    let selections = List.mapi (fun i (name, r) ->
+        if i = cp.cursor_field then (name, Alsdiff_merge.Conflict.Ours)
+        else (name, r)
+      ) cp.field_selections in
+    ({ model with cherry_pick = Some { cp with field_selections = selections } },
+     Mosaic.Cmd.none)
+  | Some cp, Msg.SelectFieldTheirs ->
+    let selections = List.mapi (fun i (name, r) ->
+        if i = cp.cursor_field then (name, Alsdiff_merge.Conflict.Theirs)
+        else (name, r)
+      ) cp.field_selections in
+    ({ model with cherry_pick = Some { cp with field_selections = selections } },
+     Mosaic.Cmd.none)
+  | Some cp, Msg.SelectFieldBase ->
+    let selections = List.mapi (fun i (name, r) ->
+        if i = cp.cursor_field then (name, Alsdiff_merge.Conflict.Base)
+        else (name, r)
+      ) cp.field_selections in
+    ({ model with cherry_pick = Some { cp with field_selections = selections } },
+     Mosaic.Cmd.none)
+  | Some cp, Msg.CherryPickNextField ->
+    let max_field = max 0 (List.length cp.field_selections - 1) in
+    let cursor = min max_field (cp.cursor_field + 1) in
+    ({ model with cherry_pick = Some { cp with cursor_field = cursor } },
+     Mosaic.Cmd.none)
+  | Some cp, Msg.CherryPickPrevField ->
+    let cursor = max 0 (cp.cursor_field - 1) in
+    ({ model with cherry_pick = Some { cp with cursor_field = cursor } },
+     Mosaic.Cmd.none)
+  | Some cp, Msg.ApplyCherryPick ->
+    List.iter (fun (field_name, resolution) ->
+        let field_path = cp.entity_path ^ "/" ^ field_name in
+        Hashtbl.replace model.resolutions field_path resolution
+      ) cp.field_selections;
+    let model = { model with mode = Merge; cherry_pick = None;
+                             last_action = "cherry-pick applied" } in
+    let model = { model with flat_nodes = propagate_parent_status model.flat_nodes } in
+    (model, Mosaic.Cmd.none)
+  | Some _, (Msg.ResolveOurs | Msg.MoveUp) ->
+    handle_cherry_pick_msg model Msg.SelectFieldOurs
+  | Some _, (Msg.ResolveTheirs | Msg.MoveDown) ->
+    handle_cherry_pick_msg model Msg.SelectFieldTheirs
+  | Some _, Msg.ResolveBase ->
+    handle_cherry_pick_msg model Msg.SelectFieldBase
+  | Some _, (Msg.NextConflict | Msg.ToggleExpand) ->
+    handle_cherry_pick_msg model Msg.CherryPickNextField
+  | Some _, Msg.PrevConflict ->
+    handle_cherry_pick_msg model Msg.CherryPickPrevField
+  | Some _, (Msg.Quit | Msg.Write) ->
+    handle_cherry_pick_msg model Msg.ApplyCherryPick
+  | Some _, _ -> (model, Mosaic.Cmd.none)
+
+let handle_merge_msg (model : t) (msg : Msg.t) : t * Msg.t Mosaic.Cmd.t =
+  match msg with
+  | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown
+  | Msg.MoveToStart | Msg.MoveToEnd ->
+    let model = { model with last_action = "" } in
+    (move_cursor model msg, Mosaic.Cmd.none)
+  | Msg.ToggleExpand ->
+    let visible = get_visible_nodes model in
+    let model = { model with last_action = "" } in
+    (match List.nth_opt visible model.cursor_index with
+     | Some { ours_desc = Some _; _ } as node ->
+       ({ model with mode = Detail; detail_node = node }, Mosaic.Cmd.none)
+     | _ -> (toggle_expand model, Mosaic.Cmd.none))
+  | Msg.MoveLeft ->
+    let model = { model with last_action = "" } in
+    (move_left model, Mosaic.Cmd.none)
+  | Msg.MoveRight ->
+    let model = { model with last_action = "" } in
+    (move_right model, Mosaic.Cmd.none)
+  | Msg.NextConflict ->
+    let model = { model with last_action = "" } in
+    (next_conflict model, Mosaic.Cmd.none)
+  | Msg.PrevConflict ->
+    let model = { model with last_action = "" } in
+    (prev_conflict model, Mosaic.Cmd.none)
+  | Msg.ResolveOurs ->
+    let debug = resolve_debug model "ours" in
+    let model' = resolve_current model Alsdiff_merge.Conflict.Ours in
+    ({ model' with last_action = debug }, Mosaic.Cmd.none)
+  | Msg.ResolveTheirs ->
+    let debug = resolve_debug model "theirs" in
+    let model' = resolve_current model Alsdiff_merge.Conflict.Theirs in
+    ({ model' with last_action = debug }, Mosaic.Cmd.none)
+  | Msg.ResolveBase ->
+    let debug = resolve_debug model "base" in
+    let model' = resolve_current model Alsdiff_merge.Conflict.Base in
+    ({ model' with last_action = debug }, Mosaic.Cmd.none)
+  | Msg.ResolveAllOurs ->
+    let debug = "resolve all as ours" in
+    let model' = resolve_all model Alsdiff_merge.Conflict.Ours in
+    ({ model' with last_action = debug }, Mosaic.Cmd.none)
+  | Msg.ResolveAllTheirs ->
+    let debug = "resolve all as theirs" in
+    let model' = resolve_all model Alsdiff_merge.Conflict.Theirs in
+    ({ model' with last_action = debug }, Mosaic.Cmd.none)
+  | Msg.Write -> write_merge model
+  | Msg.ShowHelp -> ({ model with mode = Help; last_action = "" }, Mosaic.Cmd.none)
+  | Msg.HideHelp -> ({ model with last_action = "" }, Mosaic.Cmd.none)
+  | Msg.Quit -> (model, Mosaic.Cmd.Quit)
+  | Msg.Resize (w, h) -> ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
+  | Msg.ToggleView -> ({ model with mode = SideBySide; last_action = "" }, Mosaic.Cmd.none)
+  | Msg.EnterCherryPick ->
+    (match List.nth_opt (get_visible_nodes model) model.cursor_index with
+     | Some { entity_data = Some edata; path; _ } ->
+       let base_xml = Option.value edata.base_xml
+           ~default:(Alsdiff_base.Xml.Element { name = "none"; attrs = []; childs = [] }) in
+       let ours_xml = Option.value edata.ours_xml
+           ~default:(Alsdiff_base.Xml.Element { name = "none"; attrs = []; childs = [] }) in
+       let theirs_xml = Option.value edata.theirs_xml
+           ~default:(Alsdiff_base.Xml.Element { name = "none"; attrs = []; childs = [] }) in
+       let field_diffs = Alsdiff_merge.Xml_compare.compare_three_way
+           ~base:base_xml ~ours:ours_xml ~theirs:theirs_xml in
+       let field_selections = List.map (fun (d : Alsdiff_merge.Xml_compare.field_diff) ->
+           let field_path = path ^ "/" ^ d.Alsdiff_merge.Xml_compare.field_name in
+           let resolution = match Hashtbl.find_opt model.resolutions field_path with
+             | Some r -> r
+             | None -> Alsdiff_merge.Conflict.Ours
+           in
+           (d.Alsdiff_merge.Xml_compare.field_name, resolution)
+         ) field_diffs in
+       let state : cherry_pick_state = {
+         entity_path = path;
+         field_selections;
+         field_diffs;
+         cursor_field = 0;
+       } in
+       ({ model with mode = CherryPick; cherry_pick = Some state; last_action = "cherry-pick" },
+        Mosaic.Cmd.none)
+     | _ -> ({ model with last_action = "no entity data" }, Mosaic.Cmd.none))
+  | (Msg.LeaveCherryPick | Msg.SelectFieldOurs | Msg.SelectFieldTheirs
+    | Msg.SelectFieldBase | Msg.CherryPickNextField | Msg.CherryPickPrevField
+    | Msg.ApplyCherryPick) ->
+    (model, Mosaic.Cmd.none)
+
 let update (model : t) (msg : Msg.t) : t * Msg.t Mosaic.Cmd.t =
   match model.mode with
   | Help ->
@@ -228,22 +417,14 @@ let update (model : t) (msg : Msg.t) : t * Msg.t Mosaic.Cmd.t =
      | Msg.ShowHelp -> ({ model with mode = Merge }, Mosaic.Cmd.none)
      | Msg.HideHelp -> ({ model with mode = Merge }, Mosaic.Cmd.none)
      | _ -> ({ model with mode = Merge }, Mosaic.Cmd.none))
-  | Merge ->
+  | Detail ->
     (match msg with
-     | Msg.MoveUp | Msg.MoveDown | Msg.PageUp | Msg.PageDown
-     | Msg.MoveToStart | Msg.MoveToEnd -> (move_cursor model msg, Mosaic.Cmd.none)
-     | Msg.ToggleExpand -> (toggle_expand model, Mosaic.Cmd.none)
-     | Msg.MoveLeft -> (move_left model, Mosaic.Cmd.none)
-     | Msg.MoveRight -> (move_right model, Mosaic.Cmd.none)
-     | Msg.NextConflict -> (next_conflict model, Mosaic.Cmd.none)
-     | Msg.PrevConflict -> (prev_conflict model, Mosaic.Cmd.none)
-     | Msg.ResolveOurs -> (resolve_current model Alsdiff_merge.Conflict.Ours, Mosaic.Cmd.none)
-     | Msg.ResolveTheirs -> (resolve_current model Alsdiff_merge.Conflict.Theirs, Mosaic.Cmd.none)
-     | Msg.ResolveBase -> (resolve_current model Alsdiff_merge.Conflict.Base, Mosaic.Cmd.none)
-     | Msg.ResolveAllOurs -> (resolve_all model Alsdiff_merge.Conflict.Ours, Mosaic.Cmd.none)
-     | Msg.ResolveAllTheirs -> (resolve_all model Alsdiff_merge.Conflict.Theirs, Mosaic.Cmd.none)
-     | Msg.Write -> write_merge model
-     | Msg.ShowHelp -> ({ model with mode = Help }, Mosaic.Cmd.none)
-     | Msg.HideHelp -> (model, Mosaic.Cmd.none)
-     | Msg.Quit -> (model, Mosaic.Cmd.Quit)
-     | Msg.Resize (w, h) -> ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none))
+     | Msg.Resize (w, h) -> ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
+     | _ -> ({ model with mode = Merge; detail_node = None }, Mosaic.Cmd.none))
+  | Merge -> handle_merge_msg model msg
+  | SideBySide ->
+    (match msg with
+     | Msg.ToggleView -> ({ model with mode = Merge }, Mosaic.Cmd.none)
+     | _ -> handle_merge_msg model msg)
+  | CherryPick ->
+    handle_cherry_pick_msg model msg

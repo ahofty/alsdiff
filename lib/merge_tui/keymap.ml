@@ -12,10 +12,12 @@ let handle_key (ev : Mosaic.Event.key) : t option =
      | 'a' -> Some ResolveOurs
      | 't' -> Some ResolveTheirs
      | 'b' -> Some ResolveBase
+     | 'c' -> Some EnterCherryPick
      | 'A' -> Some ResolveAllOurs
      | 'T' -> Some ResolveAllTheirs
      | ' ' | '\r' -> Some ToggleExpand
      | 'w' -> Some Write
+     | 'v' -> Some ToggleView
      | '?' -> Some ShowHelp
      | 'q' -> Some Quit
      | _ -> None)

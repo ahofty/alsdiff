@@ -4,6 +4,16 @@
  (libraries alsdiff_base alcotest))
 
 (test
+ (name test_xml_compare)
+ (modules test_xml_compare)
+ (libraries alsdiff_base alsdiff_merge alcotest))
+
+(test
+ (name test_xml_merge_fields)
+ (modules test_xml_merge_fields)
+ (libraries alsdiff_base alsdiff_merge alcotest))
+
+(test
  (name test_xml)
  (modules test_xml utils)
  (libraries alsdiff_base alcotest))

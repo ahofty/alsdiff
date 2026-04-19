@@ -12,21 +12,7 @@ let update_root_attr xml attr_name value =
     Xml.Element { name; attrs; childs }
   | Xml.Data _ -> xml
 
-let rec resolve_action_tree
-    (resolutions : (string, Conflict.resolution) Hashtbl.t)
-    (action : merge_action) : merge_action =
-  match action with
-  | Recurse fields ->
-    Recurse (List.map (fun f ->
-        { f with action = resolve_action_tree resolutions f.action }
-      ) fields)
-  | Conflict c ->
-    (match Hashtbl.find_opt resolutions c.Conflict.path with
-     | Some Conflict.Ours -> Take_ours
-     | Some Conflict.Theirs -> Take_theirs
-     | Some Conflict.Base -> Keep
-     | None -> Take_ours)
-  | other -> other
+let resolve_action_tree = Xml_merge_fields.resolve_action_tree
 
 let apply_merge
     ~base_xml ~base:_ ~ours:_ ~theirs:_
@@ -54,19 +40,40 @@ let apply_merge
         | Entity_modify_both (action, base_entity_xml, ours_xml, theirs_xml) ->
           let resolved = resolve_action_tree resolutions action in
           (match resolved with
-           | Take_ours | Both_agree | Recurse _ ->
+           | Take_ours | Both_agree ->
              xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:ours_xml
            | Take_theirs ->
              xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:theirs_xml
            | Keep -> ()
-           | Conflict _ ->
-             xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:ours_xml)
-        | Entity_conflict c ->
+           | Recurse fields ->
+             let merged = Xml_merge_fields.merge_from_fields
+                 ~base:base_entity_xml ~ours:ours_xml ~theirs:theirs_xml
+                 ~fields ~resolutions
+             in
+             xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:merged
+           | Conflict c ->
+             let has_field_resolutions =
+               let prefix = c.Conflict.path ^ "/" in
+               let found = ref false in
+               Hashtbl.iter (fun k _ ->
+                   if String.starts_with ~prefix k then found := true
+                 ) resolutions;
+               !found
+             in
+             if has_field_resolutions then
+               let merged = Xml_merge_fields.merge_generic
+                   ~base:base_entity_xml ~ours:ours_xml ~theirs:theirs_xml
+                   ~resolutions ~conflict_path:c.Conflict.path
+               in
+               xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:merged
+             else
+               xml := Xml.replace_child !xml ~old:base_entity_xml ~replacement:ours_xml)
+        | Entity_conflict (c, ours_xml, theirs_xml) ->
           (match Hashtbl.find_opt resolutions c.Conflict.path with
            | Some Conflict.Ours ->
-             xml := Xml.replace_child !xml ~old:base_xml ~replacement:base_xml
+             xml := Xml.replace_child !xml ~old:base_xml ~replacement:ours_xml
            | Some Conflict.Theirs ->
-             xml := Xml.replace_child !xml ~old:base_xml ~replacement:base_xml
+             xml := Xml.replace_child !xml ~old:base_xml ~replacement:theirs_xml
            | Some Conflict.Base -> ()
            | None -> ()))
       merges

@@ -1,5 +1,5 @@
 (library
  (name alsdiff_merge)
  (public_name alsdiff.merge)
- (modules conflict patch_compare xml_merge merge)
+ (modules conflict patch_compare xml_merge xml_compare xml_merge_fields merge)
  (libraries alsdiff_base alsdiff_live))

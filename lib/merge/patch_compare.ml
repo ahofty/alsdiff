@@ -2,6 +2,11 @@ open Alsdiff_base
 open Alsdiff_base.Diff
 open Alsdiff_live
 
+type xml_location =
+  | Attr of string
+  | Child of string
+  | Path of string
+
 type merge_action =
   | Keep
   | Take_ours
@@ -13,6 +18,7 @@ type merge_action =
 and merge_field = {
   field_name : string;
   action : merge_action;
+  xml_loc : xml_location option;
 }
 
 type entity_merge =
@@ -21,7 +27,7 @@ type entity_merge =
   | Entity_remove of Xml.t
   | Entity_modify of Xml.t * Xml.t
   | Entity_modify_both of merge_action * Xml.t * Xml.t * Xml.t
-  | Entity_conflict of Conflict.t
+  | Entity_conflict of Conflict.t * Xml.t * Xml.t
 
 let pp_merge_action fmt = function
   | Keep -> Fmt.string fmt "Keep"
@@ -170,8 +176,11 @@ let compare_entity_changes path
           ours_desc = "added";
           theirs_desc = "removed";
         } in
+        let ours_xml = match ours_entity with
+          | Some oe -> get_xml oe | None -> base_xml () in
+        let theirs_xml = base_xml () in
         conflicts := c :: !conflicts;
-        results := Entity_conflict c :: !results
+        results := Entity_conflict (c, ours_xml, theirs_xml) :: !results
       | None, Some _, Some _, None ->
         let c = {
           Conflict.path = path ^ "/" ^ name;
@@ -179,8 +188,11 @@ let compare_entity_changes path
           ours_desc = "removed";
           theirs_desc = "added";
         } in
+        let ours_xml = base_xml () in
+        let theirs_xml = match theirs_entity with
+          | Some te -> get_xml te | None -> base_xml () in
         conflicts := c :: !conflicts;
-        results := Entity_conflict c :: !results
+        results := Entity_conflict (c, ours_xml, theirs_xml) :: !results
       | Some _, Some _, Some _, Some _ ->
         results := Entity_keep :: !results
       | None, None, None, None ->
@@ -211,28 +223,31 @@ let compare_track_patch path ours_patch theirs_patch =
   let fields = ref [] in
   let conflicts = ref [] in
 
-  let add_field name action =
-    fields := { field_name = name; action } :: !fields;
+  let add_field ?xml_loc name action =
+    fields := { field_name = name; action; xml_loc } :: !fields;
     conflicts := collect_conflicts action @ !conflicts
   in
+  let attr_name : xml_location = Attr "Name" in
+  let child_dev : xml_location = Child "DeviceChain" in
+  let child_mixer : xml_location = Child "Mixer" in
 
   (match ours_patch, theirs_patch with
    | Track.Patch.MidiPatch op, Track.Patch.MidiPatch tp ->
-     add_field "name" (compare_atomic_update
-                         (path ^ "/name") op.Track.MidiTrack.Patch.name tp.Track.MidiTrack.Patch.name
-                         ~equal:String.equal
-                         ~pp_value:(fun fmt s -> Fmt.string fmt s));
-     add_field "devices" Keep;
-     add_field "mixer" Keep
+     add_field ~xml_loc:attr_name "name" (compare_atomic_update
+                                            (path ^ "/name") op.Track.MidiTrack.Patch.name tp.Track.MidiTrack.Patch.name
+                                            ~equal:String.equal
+                                            ~pp_value:(fun fmt s -> Fmt.string fmt s));
+     add_field ~xml_loc:child_dev "devices" Keep;
+     add_field ~xml_loc:child_mixer "mixer" Keep
    | Track.Patch.AudioPatch op, Track.Patch.AudioPatch tp ->
-     add_field "name" (compare_atomic_update
-                         (path ^ "/name") op.Track.AudioTrack.Patch.name tp.Track.AudioTrack.Patch.name
-                         ~equal:String.equal
-                         ~pp_value:(fun fmt s -> Fmt.string fmt s));
-     add_field "devices" Keep;
-     add_field "mixer" Keep
+     add_field ~xml_loc:attr_name "name" (compare_atomic_update
+                                            (path ^ "/name") op.Track.AudioTrack.Patch.name tp.Track.AudioTrack.Patch.name
+                                            ~equal:String.equal
+                                            ~pp_value:(fun fmt s -> Fmt.string fmt s));
+     add_field ~xml_loc:child_dev "devices" Keep;
+     add_field ~xml_loc:child_mixer "mixer" Keep
    | Track.Patch.MainPatch _, Track.Patch.MainPatch _ ->
-     add_field "mixer" Keep
+     add_field ~xml_loc:child_mixer "mixer" Keep
    | _ ->
      add_field "track" Keep);
 
@@ -271,8 +286,8 @@ let three_way_compare
   let fields = ref [] in
   let all_conflicts = ref [] in
 
-  let add_field name action =
-    fields := { field_name = name; action } :: !fields;
+  let add_field ?xml_loc name action =
+    fields := { field_name = name; action; xml_loc } :: !fields;
     all_conflicts := collect_conflicts action @ !all_conflicts
   in
 
@@ -290,7 +305,7 @@ let three_way_compare
       ~is_empty:(fun (p : Track.MainTrack.Patch.t) ->
           Track.MainTrack.Patch.is_empty p)
       ~recurse:(fun _ours_p _theirs_p ->
-          [{ field_name = "main_track"; action = Keep }])
+          [{ field_name = "main_track"; action = Keep; xml_loc = None }])
   in
   add_field "main" main_action;
 
@@ -318,7 +333,7 @@ let three_way_compare
           |> fst)
   in
   all_conflicts := track_conflicts @ !all_conflicts;
-  fields := { field_name = "tracks"; action = Keep } :: !fields;
+  fields := { field_name = "tracks"; action = Keep; xml_loc = None } :: !fields;
 
   let return_results, return_conflicts =
     compare_entity_changes "Returns"
@@ -337,7 +352,7 @@ let three_way_compare
           |> fst)
   in
   all_conflicts := return_conflicts @ !all_conflicts;
-  fields := { field_name = "returns"; action = Keep } :: !fields;
+  fields := { field_name = "returns"; action = Keep; xml_loc = None } :: !fields;
 
   let locator_results, locator_conflicts =
     compare_entity_changes "Locators"
@@ -350,7 +365,7 @@ let three_way_compare
       ~compare_patches:(fun _base_a _ours_a _theirs_a -> Keep)
   in
   all_conflicts := locator_conflicts @ !all_conflicts;
-  fields := { field_name = "locators"; action = Keep } :: !fields;
+  fields := { field_name = "locators"; action = Keep; xml_loc = None } :: !fields;
 
   let action = Recurse (List.rev !fields) in
   action, List.rev !all_conflicts,
