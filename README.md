@@ -4,7 +4,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/krfantasy/alsdiff)](https://github.com/krfantasy/alsdiff/releases/latest)
 [![License](https://img.shields.io/badge/license-THE_LICENSE-magenta)](https://github.com/krfantasy/the-license)
 
-> `alsdiff` is a semantic diff tool for Ableton Live Set (.als) files that makes version control meaningful for music producers.
+> `alsdiff` is a suite of tools for Ableton Live Set (.als) files — semantic diff, interactive TUI, and routing flowcharts — that makes version control meaningful for music producers.
 
 ## The Problem
 
@@ -22,30 +22,51 @@ While existing workarounds allow decompressing `.als` files to `.xml` for diffin
 The output of `alsdiff` looks like this:
 
 ```
-* LiveSet
-  * Tracks
-    * MidiTrack: "Lead Synth"
-      * DeviceChain
-        + Compressor2
-        * Eq8
-          * Bands
-            * Band.4
-              * Freq: 2500.0 -> 3200.0
-              * Gain: 0.0 -> 2.5
-      * Clips
-        * MidiClip: "Verse"
-          * Notes (3 Added, 1 Removed)
+* LiveSet: Thick Air v6 [Name: Demo v5 -> Demo v6, Creator: Ableton Live 12.2.6 -> Ableton Live 12.3.6]
+  * Version [Minor: 12.0_12203 -> 12.0_12300, Revision: 54fbddc6d0dc7047766a6a04b12063b5f6fe4b68 -> 3ba2aa8bc4e1ef55b1b55f468470aed387684e63]
+  * Main Track
+    * MainTrack (#0): Main
+      * Automations
+        + Automation (id=2, target=Parameter: StereoWidth)
+      * Devices
+        * StereoGain (#6): StereoGain
+          * Parameters
+            * On [Value: false -> true]
+        * Eq8 (#8): Eq8
+          * Parameters
+            * Bands.0/ParameterA/IsOn [Value: true -> false]
+            * Bands.1/ParameterA/Freq [Value: 202.06 -> 274.49]
+            * Bands.1/ParameterA/Gain [Value: 0.00 -> -2.62]
+            * Bands.1/ParameterA/Q [Value: 0.71 -> 6.53]
+        * Limiter (#1): Limiter
+          * Parameters
+            * Mode [Value: 2.00 -> 0.00]
+  + MidiTrack (#129): 7-Cello Section [Name: 7-Cello Section]
+    + Clips
+      + MidiClip (#0):  [Name: , Start Time: 96.00, End Time: 120.00]
+        + Loop [Start Time: 0.00, End Time: 172.00, On: true]
+        + TimeSignature [Numerator: 4, Denominator: 4]
+        + Notes
+          + Note E2 (40) [Time: 0.00, Duration: 8.00, Velocity: 100.00, Note: 40, Off Velocity: 64.00]
+          + Note E2 (40) [Time: 32.00, Duration: 8.00, Velocity: 100.00, Note: 40, Off Velocity: 64.00]
+          + Note G#2 (44) [Time: 12.00, Duration: 8.00, Velocity: 100.00, Note: 44, Off Velocity: 64.00]
+          + Note G#2 (44) [Time: 44.00, Duration: 8.00, Velocity: 100.00, Note: 44, Off Velocity: 64.00]
+          + Note A2 (45) [Time: 8.03, Duration: 4.00, Velocity: 100.00, Note: 45, Off Velocity: 64.00]
+          + Note A2 (45) [Time: 54.00, Duration: 6.00, Velocity: 100.00, Note: 45, Off Velocity: 64.00]
+          + Note B2 (47) [Time: 24.00, Duration: 6.00, Velocity: 100.00, Note: 47, Off Velocity: 64.00]
+          + Note E3 (52) [Time: 61.00, Duration: 3.00, Velocity: 100.00, Note: 52, Off Velocity: 64.00]
+...
 ```
 
 ## Installation
 
 ### Install from pre-built binaries
 
-Download from [GitHub Releases](https://github.com/krfantasy/alsdiff/releases):
+Download from [GitHub Releases](https://github.com/krfantasy/alsdiff/releases). Each release includes three binaries: `alsdiff`, `alsdiff-tui`, and `alsflow`.
 
 ```bash
-chmod +x ./alsdiff
-mv alsdiff ~/.local/bin  # or any directory in your PATH
+chmod +x ./alsdiff ./alsdiff-tui ./alsflow
+mv alsdiff alsdiff-tui alsflow ~/.local/bin  # or any directory in your PATH
 ```
 
 > **Note**: The Windows build is currently **untested** as I don't have access to a Windows machine. Feedback welcome!
@@ -133,8 +154,8 @@ dune build
 # Run tests (optional)
 dune runtest
 
-# Install to ~/.local/bin
-dune install alsdiff --prefix ~/.local/
+# Install alsdiff, alsdiff-tui, and alsflow to ~/.local/bin
+dune install --prefix ~/.local/
 ```
 
 #### Run without installing
@@ -458,6 +479,26 @@ You can customize display behavior for specific types of elements using `type_ov
 ```
 
 </details>
+
+## Helper Tools
+
+### alsdiff-tui
+
+Interactive terminal UI for exploring diffs with keyboard-driven navigation, search, and filtering.
+
+```bash
+alsdiff-tui v1.als v2.als    # diff two files
+alsdiff-tui                   # browser mode: pick files interactively
+```
+
+### alsflow
+
+Generates track routing flowcharts from `.als` files in Mermaid or DOT format.
+
+```bash
+alsflow project.als --format mermaid    # output Mermaid diagram
+alsflow project.als --format dot        # output DOT graph
+```
 
 ## Current Status
 
