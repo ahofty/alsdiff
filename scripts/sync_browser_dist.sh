@@ -10,4 +10,7 @@ dune build lib/browser/alsdiff.js
 echo "[sync-browser-dist] Syncing bundle -> test/browser/dist/alsdiff.js"
 cp _build/default/lib/browser/alsdiff.js test/browser/dist/alsdiff.js
 
+echo "[sync-browser-dist] Syncing bundle -> web/public/alsdiff.js"
+cp _build/default/lib/browser/alsdiff.js web/public/alsdiff.js
+
 echo "[sync-browser-dist] Done"

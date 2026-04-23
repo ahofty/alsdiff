@@ -1,0 +1,142 @@
+.arrangement-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.arrangement-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.track-headers {
+  flex-shrink: 0;
+  width: var(--header-width);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+}
+
+.track-header {
+  height: var(--track-height);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  gap: 8px;
+}
+
+.track-header:hover {
+  background: var(--bg-hover);
+}
+
+.track-header.selected {
+  background: var(--bg-selected);
+}
+
+.track-header .change-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.track-header .track-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-area {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.timeline-ruler {
+  height: var(--ruler-height);
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.track-lanes {
+  position: relative;
+}
+
+.track-lane {
+  height: var(--track-height);
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.track-lane:nth-child(even) {
+  background: var(--bg-primary);
+}
+
+.track-lane.selected {
+  background: var(--bg-selected);
+}
+
+.clip-block {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  min-width: 4px;
+  transition: opacity 0.15s;
+}
+
+.clip-block:hover {
+  opacity: 0.85;
+}
+
+.clip-block .clip-name {
+  padding: 2px 6px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-block.added {
+  background: var(--color-added);
+  border: 1px solid var(--color-added);
+}
+
+.clip-block.removed {
+  background: transparent;
+  border: 2px dashed var(--color-removed);
+}
+
+.clip-block.removed .clip-name {
+  color: var(--color-removed);
+}
+
+.clip-block.modified {
+  background: linear-gradient(90deg, var(--color-removed) 50%, var(--color-added) 50%);
+}
+
+.clip-block.unchanged {
+  background: var(--color-unchanged);
+  opacity: 0.6;
+}
+
+.clip-block.midi {
+  border-left: 3px solid var(--color-clip-midi);
+}
+
+.clip-block.audio {
+  border-left: 3px solid var(--color-clip-audio);
+}

@@ -7,6 +7,11 @@
 _build
 build
 install
+_build-pages-release
+.vite
+node_modules
+dist
+web/public
 
 .vscode
 .claude

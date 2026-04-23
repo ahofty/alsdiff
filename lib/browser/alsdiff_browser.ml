@@ -22,7 +22,7 @@ let console_call (method_name : string) (msg : string) : unit =
   let fn = Js.Unsafe.get console (Js.string method_name) in
   ignore
   @@ Js.Unsafe.call fn Js.undefined
-       [| Js.Unsafe.inject (Js.string msg) |]
+    [| Js.Unsafe.inject (Js.string msg) |]
 
 let debug_log (msg : string) : unit =
   if !debug_enabled then console_call "log" msg
@@ -32,7 +32,7 @@ let browser_yield () : unit Lwt.t =
   let callback = Js.wrap_callback (fun () -> Lwt.wakeup wake (); Js.undefined) in
   ignore
   @@ Js.Unsafe.fun_call (Js.Unsafe.js_expr "setTimeout")
-       [| Js.Unsafe.inject callback; Js.Unsafe.inject (Js.number_of_float 0.) |];
+    [| Js.Unsafe.inject callback; Js.Unsafe.inject (Js.number_of_float 0.) |];
   result
 
 type browser_file = {
@@ -197,7 +197,7 @@ module Browser_file_id = struct
   let from_js_file_id = from_js_file_id
 end
 
-type output_mode = Tree | Stats
+type output_mode = Tree | Stats | Json
 
 type config = {
   output_mode: output_mode;
@@ -262,7 +262,8 @@ let output_mode_of_string (s : string) : (output_mode, string) result =
   match String.lowercase_ascii (String.trim s) with
   | "tree" -> Ok Tree
   | "stats" -> Ok Stats
-  | _ -> Error "Invalid mode: expected 'tree' or 'stats'"
+  | "json" -> Ok Json
+  | _ -> Error "Invalid mode: expected 'tree', 'stats', or 'json'"
 
 let preset_of_string (s : string) : (preset, string) result =
   match String.lowercase_ascii (String.trim s) with
@@ -569,6 +570,11 @@ let resolve_runtime_config_from_options (raw_options : Js.Unsafe.any) : (config,
         build_base_renderer_config ~default_config:Text_renderer.stats_default options
       in
       Ok { output_mode = Stats; renderer_config }
+  | Json ->
+    let* renderer_config =
+      build_base_renderer_config ~default_config:Text_renderer.full options
+    in
+    Ok { output_mode = Json; renderer_config }
   | Tree ->
     let* base_renderer_config =
       build_base_renderer_config ~default_config:Text_renderer.quiet options
@@ -632,6 +638,7 @@ module Liveset_diff = struct
       match config.output_mode with
       | Tree -> Text_renderer.render config.renderer_config views
       | Stats -> Stats_renderer.render config.renderer_config views
+      | Json -> Json_renderer.render config.renderer_config views
     in
     debug_log "[alsdiff] diff_livesets rendered output";
     Lwt.return output
@@ -669,6 +676,7 @@ module Liveset_diff_id = struct
       match config.output_mode with
       | Tree -> Text_renderer.render config.renderer_config views
       | Stats -> Stats_renderer.render config.renderer_config views
+      | Json -> Json_renderer.render config.renderer_config views
     in
     debug_log "[alsdiff] diff_livesets_by_id rendered output";
     Lwt.return output
@@ -715,9 +723,9 @@ let settle_js_promise ~(request_id : int) ~(method_name : string) (payload : str
   in
   ignore
   @@ Js.Unsafe.fun_call js_fun
-       [| Js.Unsafe.inject (Js.number_of_float (float_of_int request_id));
-          Js.Unsafe.inject (Js.string method_name);
-          Js.Unsafe.inject (Js.string payload) |]
+    [| Js.Unsafe.inject (Js.number_of_float (float_of_int request_id));
+       Js.Unsafe.inject (Js.string method_name);
+       Js.Unsafe.inject (Js.string payload) |]
 
 let next_request_id =
   let counter = ref 0 in

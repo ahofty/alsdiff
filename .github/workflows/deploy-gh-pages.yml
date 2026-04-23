@@ -91,18 +91,29 @@ jobs:
       - name: Build alsdiff.js (release profile)
         run: DUNE_BUILD_DIR=_build-pages-release opam exec -- dune build --profile release lib/browser/alsdiff.js
 
-      - name: Stage gh-pages payload
-        shell: bash
-        run: |
-          mkdir -p payload
-          cp test/browser/dist/index.html payload/index.html
-          cp _build-pages-release/default/lib/browser/alsdiff.js payload/alsdiff.js
+      - name: Copy alsdiff.js to webapp
+        run: cp _build-pages-release/default/lib/browser/alsdiff.js web/public/alsdiff.js
+
+      - name: Set-up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install webapp dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build webapp
+        run: npm run build
+        working-directory: web
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ./payload
+          publish_dir: ./web/dist
           force_orphan: true
           keep_files: false

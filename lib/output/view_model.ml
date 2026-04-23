@@ -1433,8 +1433,125 @@ let create_max4live_device_item
   build_item_from_specs ~name:section_name ~domain_type:DTDevice ~specs c
 
 
-(** [create_group_device_item] creates a [item] from a GroupDevice structured change (new type system). *)
-let create_group_device_item
+(** GenericParam field specifications using unified_field_spec system *)
+let generic_param_field_specs : (Device.GenericParam.t, Device.GenericParam.Patch.t) unified_field_spec list = [
+  { name = "Value";
+    get_value = (fun p -> param_value_to_field_value p.value);
+    get_patch = (fun p -> param_value_atomic_to_field_value p.value) };
+  { name = "Automation";
+    get_value = (fun p -> int_value p.automation);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.automation) };
+  { name = "Modulation";
+    get_value = (fun p -> int_value p.modulation);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.modulation) };
+]
+
+let create_generic_param_fields = build_value_field_views generic_param_field_specs ~domain_type:DTParam
+let create_generic_param_patch_fields = build_patch_field_views generic_param_field_specs ~domain_type:DTParam
+
+
+(** [create_branch_mixer_item] builds a [item option] for a branch's MixerDevice. *)
+let create_branch_mixer_item
+    (c : (Device.MixerDevice.t, Device.MixerDevice.Patch.t) structured_change)
+  : item option =
+  let dp_value_fields (ct : change_type) (dp : Device.DeviceParam.t) : view list =
+    create_generic_param_fields ct dp.Device.DeviceParam.base
+  in
+  let dp_patch_fields (dp : Device.DeviceParam.Patch.t) : view list =
+    match dp.base with
+    | `Unchanged -> []
+    | `Modified gpp -> create_generic_param_patch_fields gpp
+  in
+  build_item_from_specs_opt ~name:"Mixer" ~domain_type:DTMixer ~specs:[
+    Spec.child ~name:"Volume"
+      ~of_value:(fun (m : Device.MixerDevice.t) -> m.volume)
+      ~of_patch:(fun (p : Device.MixerDevice.Patch.t) -> p.volume)
+      ~build_value_children:dp_value_fields
+      ~build_patch_children:dp_patch_fields
+      ~domain_type:DTMixer;
+    Spec.child ~name:"Pan"
+      ~of_value:(fun (m : Device.MixerDevice.t) -> m.pan)
+      ~of_patch:(fun (p : Device.MixerDevice.Patch.t) -> p.pan)
+      ~build_value_children:dp_value_fields
+      ~build_patch_children:dp_patch_fields
+      ~domain_type:DTMixer;
+    Spec.child ~name:"Speaker"
+      ~of_value:(fun (m : Device.MixerDevice.t) -> m.speaker)
+      ~of_patch:(fun (p : Device.MixerDevice.Patch.t) -> p.speaker)
+      ~build_value_children:dp_value_fields
+      ~build_patch_children:dp_patch_fields
+      ~domain_type:DTMixer;
+    Spec.child ~name:"On"
+      ~of_value:(fun (m : Device.MixerDevice.t) -> m.on)
+      ~of_patch:(fun (p : Device.MixerDevice.Patch.t) -> p.on)
+      ~build_value_children:dp_value_fields
+      ~build_patch_children:dp_patch_fields
+      ~domain_type:DTMixer;
+  ] c
+
+
+(** Forward reference for [create_group_device_item], used by [create_device_item_raw] to break
+    the circular dependency between [create_group_device_item] and [create_branch_item]. *)
+let create_group_device_item_ref
+  : ((Device.GroupDevice.t, Device.GroupDevice.Patch.t) structured_change -> item) ref
+  = ref (fun _ -> failwith "create_group_device_item_ref not initialized")
+
+let create_group_device_item c = !create_group_device_item_ref c
+
+(** [create_device_item_raw] dispatches a raw [device, device_patch] structured change
+    to the specific device type function. This is needed because [Device.Patch.t] and
+    [device_patch] are nominally distinct types despite being structurally identical. *)
+let create_device_item_raw
+    (c : (Device.device, Device.device_patch) structured_change)
+  : item =
+  match c with
+  | `Added (Device.Regular d) -> create_regular_device_item (`Added d)
+  | `Removed (Device.Regular d) -> create_regular_device_item (`Removed d)
+  | `Modified (Device.RegularPatch p) -> create_regular_device_item (`Modified p)
+  | `Added (Device.Plugin d) -> create_plugin_device_item (`Added d)
+  | `Removed (Device.Plugin d) -> create_plugin_device_item (`Removed d)
+  | `Modified (Device.PluginPatch p) -> create_plugin_device_item (`Modified p)
+  | `Added (Device.Max4Live d) -> create_max4live_device_item (`Added d)
+  | `Removed (Device.Max4Live d) -> create_max4live_device_item (`Removed d)
+  | `Modified (Device.Max4LivePatch p) -> create_max4live_device_item (`Modified p)
+  | `Added (Device.Group d) -> create_group_device_item (`Added d)
+  | `Removed (Device.Group d) -> create_group_device_item (`Removed d)
+  | `Modified (Device.GroupPatch p) -> create_group_device_item (`Modified p)
+  | `Unchanged ->
+    { name = "Device"; change = Unchanged; domain_type = DTDevice; children = [] }
+
+(** [create_branch_item] builds a [item] for a single branch within a GroupDevice. *)
+let create_branch_item
+    (c : (Device.branch, Device.branch_patch) structured_change)
+  : item =
+  let device_views = match c with
+    | `Added b ->
+      List.map (fun d -> Item (create_device_item_raw (`Added d))) b.Device.devices
+    | `Removed b ->
+      List.map (fun d -> Item (create_device_item_raw (`Removed d))) b.Device.devices
+    | `Modified p ->
+      List.map (fun dc -> Item (create_device_item_raw dc)) p.Device.devices
+    | `Unchanged -> []
+  in
+  let mixer_view = match c with
+    | `Added b ->
+      create_branch_mixer_item (`Added b.Device.mixer) |> Option.map (fun i -> Item i)
+    | `Removed b ->
+      create_branch_mixer_item (`Removed b.Device.mixer) |> Option.map (fun i -> Item i)
+    | `Modified p -> begin
+        match p.Device.mixer with
+        | `Unchanged -> None
+        | `Modified mp ->
+          create_branch_mixer_item (`Modified mp) |> Option.map (fun i -> Item i)
+      end
+    | `Unchanged -> None
+  in
+  let children = device_views @ Option.to_list mixer_view in
+  { name = "Branch"; change = ViewBuilder.change_type_of c; domain_type = DTDevice; children }
+
+
+(** [create_group_device_item_impl] is the actual implementation, bound to the ref above. *)
+let create_group_device_item_impl
     (c : (Device.GroupDevice.t, Device.GroupDevice.Patch.t) structured_change)
   : item =
   let section_name = build_device_section_name
@@ -1457,6 +1574,11 @@ let create_group_device_item
       ~of_value:(fun (d : Device.GroupDevice.t) -> d.preset)
       ~of_patch:(fun (p : Device.GroupDevice.Patch.t) -> p.preset)
       ~domain_type:DTPreset;
+    Spec.collection ~name:"Branches"
+      ~of_value:(fun (d : Device.GroupDevice.t) -> d.branches)
+      ~of_patch:(fun (p : Device.GroupDevice.Patch.t) -> p.branches)
+      ~build_item:create_branch_item
+      ~domain_type:DTDevice;
     Spec.collection ~name:"Macros"
       ~of_value:(fun (d : Device.GroupDevice.t) -> d.macros)
       ~of_patch:(fun (p : Device.GroupDevice.Patch.t) -> p.macros)
@@ -1470,24 +1592,10 @@ let create_group_device_item
   ] in
   build_item_from_specs ~name:section_name ~domain_type:DTDevice ~specs c
 
+let () = create_group_device_item_ref := create_group_device_item_impl
+
 
 (* ==================== Track View Helpers ==================== *)
-
-(** GenericParam field specifications using unified_field_spec system *)
-let generic_param_field_specs : (Device.GenericParam.t, Device.GenericParam.Patch.t) unified_field_spec list = [
-  { name = "Value";
-    get_value = (fun p -> param_value_to_field_value p.value);
-    get_patch = (fun p -> param_value_atomic_to_field_value p.value) };
-  { name = "Automation";
-    get_value = (fun p -> int_value p.automation);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.automation) };
-  { name = "Modulation";
-    get_value = (fun p -> int_value p.modulation);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update int_value p.modulation) };
-]
-
-let create_generic_param_fields = build_value_field_views generic_param_field_specs ~domain_type:DTParam
-let create_generic_param_patch_fields = build_patch_field_views generic_param_field_specs ~domain_type:DTParam
 
 
 (** Routing field specifications *)
