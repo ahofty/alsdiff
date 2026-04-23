@@ -2,8 +2,8 @@ let init ~(views : Alsdiff_output.View_model.view list)
     ?(detail_config = Alsdiff_output.Config.full) () : Model.t * Msg.t Mosaic.Cmd.t =
   (Model.init ~detail_config views, Mosaic.Cmd.none)
 
-let init_browser ~root () : Model.t * Msg.t Mosaic.Cmd.t =
-  (Model.init_browser ~root (), Mosaic.Cmd.none)
+let init_browser ~root ?(note_name_style = Alsdiff_output.View_model.Sharp) () : Model.t * Msg.t Mosaic.Cmd.t =
+  (Model.init_browser ~root ~note_name_style (), Mosaic.Cmd.none)
 
 let update (msg : Msg.t) (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
   let model, cmd = Update.update model msg in
@@ -28,6 +28,7 @@ let subscriptions (model : Model.t) : Msg.t Mosaic.Sub.t =
 
 let run ~(views : Alsdiff_output.View_model.view list)
     ?(detail_config = Alsdiff_output.Config.full) () : unit =
+  Update.export_output_ref := None;
   let app = {
     Mosaic.init = init ~views ~detail_config;
     update;
@@ -36,9 +37,10 @@ let run ~(views : Alsdiff_output.View_model.view list)
   } in
   Mosaic.run app
 
-let run_browser ~root () : unit =
+let run_browser ~root ?(note_name_style = Alsdiff_output.View_model.Sharp) () : unit =
+  Update.export_output_ref := None;
   let app = {
-    Mosaic.init = init_browser ~root;
+    Mosaic.init = init_browser ~root ~note_name_style;
     update;
     view;
     subscriptions;
