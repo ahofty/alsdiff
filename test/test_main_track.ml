@@ -225,6 +225,69 @@ let test_main_track_edge_case_empty () =
   Alcotest.(check int) "empty main track automation count" 0 (List.length main_track.automations);
   Alcotest.(check int) "empty main track device count" 0 (List.length main_track.devices)
 
+let ts_eq = Alsdiff_live.Clip.TimeSignature.equal
+
+let test_decode_time_signature_44 () =
+  (* 44to114: values 200..208 map to 3/4 .. 11/4 *)
+  let checks = [
+    (200, 3, 4); (201, 4, 4); (202, 5, 4); (203, 6, 4);
+    (204, 7, 4); (205, 8, 4); (206, 9, 4); (207, 10, 4); (208, 11, 4);
+  ] in
+  List.iter (fun (code, numer, denom) ->
+      let ts = MainTrack.decode_time_signature code in
+      Alcotest.(check bool) (Printf.sprintf "%d -> %d/%d" code numer denom)
+        true (ts_eq ts { Alsdiff_live.Clip.TimeSignature.numer; denom })
+    ) checks
+
+let test_decode_time_signature_48 () =
+  (* 48to138: values 299..309 map to 3/8 .. 13/8 *)
+  let checks = [
+    (299, 3, 8); (300, 4, 8); (301, 5, 8); (302, 6, 8);
+    (303, 7, 8); (304, 8, 8); (305, 9, 8); (306, 10, 8);
+    (307, 11, 8); (308, 12, 8); (309, 13, 8);
+  ] in
+  List.iter (fun (code, numer, denom) ->
+      let ts = MainTrack.decode_time_signature code in
+      Alcotest.(check bool) (Printf.sprintf "%d -> %d/%d" code numer denom)
+        true (ts_eq ts { Alsdiff_live.Clip.TimeSignature.numer; denom })
+    ) checks
+
+let test_time_to_position_48to138 () =
+  (* 48to138 project: time signature automation from 4/8 through 13/8 *)
+  let open Alsdiff_live.Clip.TimeSignature in
+  let events = [
+    (-63072000.0, { numer = 4; denom = 8 });
+    (16.0, { numer = 3; denom = 8 });
+    (40.0, { numer = 4; denom = 8 });
+    (72.0, { numer = 5; denom = 8 });
+    (92.0, { numer = 6; denom = 8 });
+    (116.0, { numer = 7; denom = 8 });
+    (144.0, { numer = 8; denom = 8 });
+    (176.0, { numer = 9; denom = 8 });
+    (212.0, { numer = 10; denom = 8 });
+    (232.0, { numer = 11; denom = 8 });
+    (254.0, { numer = 12; denom = 8 });
+    (278.0, { numer = 13; denom = 8 });
+  ] in
+  let check_pos time (exp_bar, exp_beat, exp_sixteenth) =
+    let bar, beat, sixteenth = MainTrack.time_to_position events time in
+    let label = Printf.sprintf "Time=%.0f -> (%d,%d,%d)" time exp_bar exp_beat exp_sixteenth in
+    Alcotest.(check int) (label ^ " bar") exp_bar bar;
+    Alcotest.(check int) (label ^ " beat") exp_beat beat;
+    Alcotest.(check int) (label ^ " sixteenth") exp_sixteenth sixteenth
+  in
+  check_pos 16.0 (9, 1, 1);
+  check_pos 40.0 (25, 1, 1);
+  check_pos 72.0 (41, 1, 1);
+  check_pos 92.0 (49, 1, 1);
+  check_pos 116.0 (57, 1, 1);
+  check_pos 144.0 (65, 1, 1);
+  check_pos 176.0 (73, 1, 1);
+  check_pos 212.0 (81, 1, 1);
+  check_pos 232.0 (85, 1, 1);
+  check_pos 254.0 (89, 1, 1);
+  check_pos 278.0 (93, 1, 1)
+
 let () =
   Alcotest.run "MainTrack" [
     "track_creation", [
@@ -235,5 +298,12 @@ let () =
       Alcotest.test_case "parse MainTrack routing configuration" `Quick test_main_track_routing;
       Alcotest.test_case "comprehensive MainTrack parsing" `Quick test_main_track_comprehensive;
       Alcotest.test_case "handle empty track edge case" `Quick test_main_track_edge_case_empty;
+    ];
+    "decode_time_signature", [
+      Alcotest.test_case "decode /4 time signatures (200..208)" `Quick test_decode_time_signature_44;
+      Alcotest.test_case "decode /8 time signatures (299..309)" `Quick test_decode_time_signature_48;
+    ];
+    "time_to_position", [
+      Alcotest.test_case "48to138 bar-boundary mappings" `Quick test_time_to_position_48to138;
     ]
   ]
