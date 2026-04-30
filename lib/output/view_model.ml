@@ -4,6 +4,11 @@ open Ptime.Span
 
 type note_display_style = Sharp | Flat [@@deriving yojson, jsonschema]
 
+type time_format = QuarterNotes | BeatTime | RealTime [@@deriving yojson, jsonschema]
+
+let format_position (bar, beat, sixteenth) = Printf.sprintf "%d:%d:%d" bar beat sixteenth
+let format_realtime (min, sec, ms) = Printf.sprintf "%d:%02d.%03d" min sec ms
+
 let get_note_name_from_int ?(style : note_display_style = Sharp) (note_int : int) : string =
   let note_names_sharp = [| "C"; "C#"; "D"; "D#"; "E"; "F"; "F#"; "G"; "G#"; "A"; "A#"; "B" |] in
   let note_names_flat = [| "C"; "Db"; "D"; "Eb"; "E"; "F"; "Gb"; "G"; "Ab"; "A"; "Bb"; "B" |] in
@@ -45,6 +50,12 @@ let int_value x = Fint x
 let float_value x = Ffloat x
 let bool_value x = Fbool x
 let string_value x = Fstring x
+let default_format_time (time : float) : field_value = Ffloat time
+let format_time_str (format_time : float -> field_value) time =
+  match format_time time with
+  | Fstring s -> s
+  | Ffloat f -> Printf.sprintf "%.2f" f
+  | _ -> Printf.sprintf "%.2f" time
 
 
 (** [option_to_list] converts an option to a list. *)
@@ -625,16 +636,21 @@ let make_bool n v p = make_spec bool_value n v p
 
 let make_string_const n v = make_spec_const string_value n v
 
+let make_time_field (format_time : float -> field_value) name get_v get_p =
+  make_spec format_time name get_v get_p
+
 
 (** Loop field specifications *)
-let loop_field_specs : (Clip.Loop.t, Clip.Loop.Patch.t) unified_field_spec list = [
-  make_float "Start Time" (fun (l : Clip.Loop.t) -> l.start_time) (fun (p : Clip.Loop.Patch.t) -> p.start_time);
-  make_float "End Time" (fun (l : Clip.Loop.t) -> l.end_time) (fun (p : Clip.Loop.Patch.t) -> p.end_time);
+let loop_field_specs ?(format_time = float_value) () : (Clip.Loop.t, Clip.Loop.Patch.t) unified_field_spec list = [
+  make_time_field format_time "Start Time" (fun (l : Clip.Loop.t) -> l.start_time) (fun (p : Clip.Loop.Patch.t) -> p.start_time);
+  make_time_field format_time "End Time" (fun (l : Clip.Loop.t) -> l.end_time) (fun (p : Clip.Loop.Patch.t) -> p.end_time);
   make_bool "On" (fun (l : Clip.Loop.t) -> l.on) (fun (p : Clip.Loop.Patch.t) -> p.on);
 ]
 
-let create_loop_fields = build_value_field_views loop_field_specs ~domain_type:DTLoop
-let create_loop_patch_fields = build_patch_field_views loop_field_specs ~domain_type:DTLoop
+let create_loop_fields ?(format_time = float_value) =
+  build_value_field_views (loop_field_specs ~format_time ()) ~domain_type:DTLoop
+let create_loop_patch_fields ?(format_time = float_value) =
+  build_patch_field_views (loop_field_specs ~format_time ()) ~domain_type:DTLoop
 
 
 (** TimeSignature field specifications *)
@@ -667,11 +683,12 @@ let default_note_name_style = Sharp
 *)
 let create_note_item
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Clip.MidiNote.t, Clip.MidiNote.Patch.t) structured_change)
   : item =
   let open Clip.MidiNote in
   let specs = [
-    make_float "Time" (fun (x : t) -> x.time) (fun (x : Patch.t) -> x.time);
+    make_time_field format_time "Time" (fun (x : t) -> x.time) (fun (x : Patch.t) -> x.time);
     make_float "Duration" (fun (x : t) -> x.duration) (fun (x : Patch.t) -> x.duration);
     make_float "Velocity" (fun (x : t) -> x.velocity) (fun (x : Patch.t) -> x.velocity);
     make_int "Note" (fun (x : t) -> x.note) (fun (x : Patch.t) -> x.note);
@@ -740,11 +757,12 @@ let event_value_atomic_to_field_value (update : Automation.event_value atomic_up
     @param c the envelope event structured change
 *)
 let create_events_item
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Automation.EnvelopeEvent.t, Automation.EnvelopeEvent.Patch.t) structured_change)
   : item =
   let open Automation in
   let base_specs = [
-    make_float "Time" (fun (x : EnvelopeEvent.t) -> x.time) (fun (x : EnvelopeEvent.Patch.t) -> x.time);
+    make_time_field format_time "Time" (fun (x : EnvelopeEvent.t) -> x.time) (fun (x : EnvelopeEvent.Patch.t) -> x.time);
     make_spec event_value_to_field_value "Value"
       (fun (x : EnvelopeEvent.t) -> x.value) (fun (x : EnvelopeEvent.Patch.t) -> x.value);
   ]
@@ -997,16 +1015,16 @@ let build_device_section_name
 (* ==================== MidiClip Specs (using new infrastructure) ==================== *)
 
 (** MidiClip field specifications *)
-let midi_clip_field_specs : (Clip.MidiClip.t, Clip.MidiClip.Patch.t) unified_field_spec list = [
+let midi_clip_field_specs ?(format_time = float_value) () : (Clip.MidiClip.t, Clip.MidiClip.Patch.t) unified_field_spec list = [
   { name = "Name";
     get_value = (fun c -> string_value c.Clip.MidiClip.name);
     get_patch = (fun p -> ViewBuilder.map_atomic_update string_value p.Clip.MidiClip.Patch.name) };
   { name = "Start Time";
-    get_value = (fun c -> float_value c.Clip.MidiClip.start_time);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update float_value p.Clip.MidiClip.Patch.start_time) };
+    get_value = (fun c -> format_time c.Clip.MidiClip.start_time);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update format_time p.Clip.MidiClip.Patch.start_time) };
   { name = "End Time";
-    get_value = (fun c -> float_value c.Clip.MidiClip.end_time);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update float_value p.Clip.MidiClip.Patch.end_time) };
+    get_value = (fun c -> format_time c.Clip.MidiClip.end_time);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update format_time p.Clip.MidiClip.Patch.end_time) };
 ]
 
 (** [build_clip_section_name ~clip_type ~get_id ~get_name ~get_patch_id ~get_patch_name c]
@@ -1045,15 +1063,15 @@ let build_midi_clip_section_name =
     ~get_patch_name:(fun p -> p.Clip.MidiClip.Patch.name)
 
 (** MidiClip section specs - defines the structure of a MidiClip item *)
-let midi_clip_section_specs ?(note_name_style = default_note_name_style) () :
+let midi_clip_section_specs ?(note_name_style = default_note_name_style) ?(format_time = default_format_time) () :
   (Clip.MidiClip.t, Clip.MidiClip.Patch.t) section_spec list =
   [
-    Spec.inline_fields ~specs:midi_clip_field_specs ~domain_type:DTClip;
+    Spec.inline_fields ~specs:(midi_clip_field_specs ~format_time ()) ~domain_type:DTClip;
     Spec.child ~name:"Loop"
       ~of_value:(fun (c : Clip.MidiClip.t) -> c.loop)
       ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.loop)
-      ~build_value_children:create_loop_fields
-      ~build_patch_children:create_loop_patch_fields
+      ~build_value_children:(create_loop_fields ~format_time)
+      ~build_patch_children:(create_loop_patch_fields ~format_time)
       ~domain_type:DTLoop;
     Spec.child ~name:"TimeSignature"
       ~of_value:(fun (c : Clip.MidiClip.t) -> c.signature)
@@ -1064,7 +1082,7 @@ let midi_clip_section_specs ?(note_name_style = default_note_name_style) () :
     Spec.collection ~name:"Notes"
       ~of_value:(fun (c : Clip.MidiClip.t) -> c.notes)
       ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.notes)
-      ~build_item:(create_note_item ~note_name_style)
+      ~build_item:(create_note_item ~note_name_style ~format_time)
       ~domain_type:DTNote;
   ]
 
@@ -1074,26 +1092,27 @@ let midi_clip_section_specs ?(note_name_style = default_note_name_style) () :
 *)
 let create_midi_clip_item
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Clip.MidiClip.t, Clip.MidiClip.Patch.t) structured_change)
   : item =
   let name = build_midi_clip_section_name c in
-  let specs = midi_clip_section_specs ~note_name_style () in
+  let specs = midi_clip_section_specs ~note_name_style ~format_time () in
   build_item_from_specs ~name ~domain_type:DTClip ~specs c
 
 
 (* ==================== AudioClip Specs (using new infrastructure) ==================== *)
 
 (** AudioClip field specifications *)
-let audio_clip_field_specs : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) unified_field_spec list = [
+let audio_clip_field_specs ?(format_time = float_value) () : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) unified_field_spec list = [
   { name = "Name";
     get_value = (fun c -> string_value c.Clip.AudioClip.name);
     get_patch = (fun p -> ViewBuilder.map_atomic_update string_value p.Clip.AudioClip.Patch.name) };
   { name = "Start Time";
-    get_value = (fun c -> float_value c.Clip.AudioClip.start_time);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update float_value p.Clip.AudioClip.Patch.start_time) };
+    get_value = (fun c -> format_time c.Clip.AudioClip.start_time);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update format_time p.Clip.AudioClip.Patch.start_time) };
   { name = "End Time";
-    get_value = (fun c -> float_value c.Clip.AudioClip.end_time);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update float_value p.Clip.AudioClip.Patch.end_time) };
+    get_value = (fun c -> format_time c.Clip.AudioClip.end_time);
+    get_patch = (fun p -> ViewBuilder.map_atomic_update format_time p.Clip.AudioClip.Patch.end_time) };
 ]
 
 (** [build_audio_clip_section_name] builds the section name for an AudioClip. *)
@@ -1106,13 +1125,13 @@ let build_audio_clip_section_name =
     ~get_patch_name:(fun p -> p.Clip.AudioClip.Patch.name)
 
 (** AudioClip section specs - defines the structure of an AudioClip item *)
-let audio_clip_section_specs : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) section_spec list = [
-  Spec.inline_fields ~specs:audio_clip_field_specs ~domain_type:DTClip;
+let audio_clip_section_specs ?(format_time = default_format_time) () : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) section_spec list = [
+  Spec.inline_fields ~specs:(audio_clip_field_specs ~format_time ()) ~domain_type:DTClip;
   Spec.child ~name:"Loop"
     ~of_value:(fun (c : Clip.AudioClip.t) -> c.loop)
     ~of_patch:(fun (p : Clip.AudioClip.Patch.t) -> p.loop)
-    ~build_value_children:create_loop_fields
-    ~build_patch_children:create_loop_patch_fields
+    ~build_value_children:(create_loop_fields ~format_time)
+    ~build_patch_children:(create_loop_patch_fields ~format_time)
     ~domain_type:DTLoop;
   Spec.child ~name:"TimeSignature"
     ~of_value:(fun (c : Clip.AudioClip.t) -> c.signature)
@@ -1138,10 +1157,11 @@ let audio_clip_section_specs : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) sectio
     @param c the audio clip structured change
 *)
 let create_audio_clip_item
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Clip.AudioClip.t, Clip.AudioClip.Patch.t) structured_change)
   : item =
   let name = build_audio_clip_section_name c in
-  build_item_from_specs ~name ~domain_type:DTClip ~specs:audio_clip_section_specs c
+  build_item_from_specs ~name ~domain_type:DTClip ~specs:(audio_clip_section_specs ~format_time ()) c
 
 
 
@@ -1613,6 +1633,7 @@ let format_curve_controls (curve : Automation.CurveControls.t) : string =
 
 let create_automation_item
     ~(get_pointee_name : int -> string)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Automation.t, Automation.Patch.t) structured_change)
   : item =
   let open Automation in
@@ -1623,6 +1644,8 @@ let create_automation_item
     | `Modified patch -> Printf.sprintf "Automation (id=%d, target=%s)" patch.id (get_pointee_name patch.target)
     | `Unchanged -> "Automation"
   in
+
+  let format_time_str_local t = format_time_str format_time t in
 
   (* Build event field views for Modified automation *)
   let event_children : view list = match c with
@@ -1644,8 +1667,8 @@ let create_automation_item
                | None -> ""
                | Some c -> ", " ^ format_curve_controls c
              in
-             Some (Item { name = Printf.sprintf "%s Added: Time=%.2f, Value=%s%s"
-                              prefix e.Automation.EnvelopeEvent.time
+             Some (Item { name = Printf.sprintf "%s Added: Time=%s, Value=%s%s"
+                              prefix (format_time_str_local e.Automation.EnvelopeEvent.time)
                               (format_event_value e.Automation.EnvelopeEvent.value) curve_str;
                           change = Added; domain_type = DTEvent; children = [] })
            | `Removed e ->
@@ -1653,8 +1676,8 @@ let create_automation_item
                | None -> ""
                | Some c -> ", " ^ format_curve_controls c
              in
-             Some (Item { name = Printf.sprintf "%s Removed: Time=%.2f, Value=%s%s"
-                              prefix e.Automation.EnvelopeEvent.time
+             Some (Item { name = Printf.sprintf "%s Removed: Time=%s, Value=%s%s"
+                              prefix (format_time_str_local e.Automation.EnvelopeEvent.time)
                               (format_event_value e.Automation.EnvelopeEvent.value) curve_str;
                           change = Removed; domain_type = DTEvent; children = [] })
            | `Modified ep ->
@@ -1681,7 +1704,7 @@ let create_automation_item
              in
              let parts = List.filter_map Fun.id [
                  (match time_change with
-                  | Some (oldval, newval) -> Some (Printf.sprintf "Time: %.2f->%.2f" oldval newval)
+                  | Some (oldval, newval) -> Some (Printf.sprintf "Time: %s->%s" (format_time_str_local oldval) (format_time_str_local newval))
                   | None -> None);
                  (match value_change with
                   | Some (oldval, newval) ->
@@ -1877,6 +1900,7 @@ let build_track_section_name
 let create_midi_track_item
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Track.MidiTrack.t, Track.MidiTrack.Patch.t) structured_change)
   : item =
   let section_name = build_track_section_name
@@ -1896,7 +1920,7 @@ let create_midi_track_item
     Spec.collection ~name:"Clips"
       ~of_value:(fun (t : Track.MidiTrack.t) -> t.clips)
       ~of_patch:(fun (p : Track.MidiTrack.Patch.t) -> p.clips)
-      ~build_item:(create_midi_clip_item ~note_name_style)
+      ~build_item:(create_midi_clip_item ~note_name_style ~format_time)
       ~domain_type:DTClip;
     child_from_specs ~name:"Mixer"
       ~of_value:(fun (t : Track.MidiTrack.t) -> t.mixer)
@@ -1907,7 +1931,7 @@ let create_midi_track_item
     Spec.collection ~name:"Automations"
       ~of_value:(fun (t : Track.MidiTrack.t) -> t.automations)
       ~of_patch:(fun (p : Track.MidiTrack.Patch.t) -> p.automations)
-      ~build_item:(create_automation_item ~get_pointee_name)
+      ~build_item:(create_automation_item ~get_pointee_name ~format_time)
       ~domain_type:DTAutomation;
     Spec.collection ~name:"Devices"
       ~of_value:(fun (t : Track.MidiTrack.t) -> t.devices)
@@ -1932,6 +1956,7 @@ let create_midi_track_item
 *)
 let create_audio_like_track_item
     ~(get_pointee_name : int -> string)
+    ?(format_time : float -> field_value = default_format_time)
     ~track_type_name
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
@@ -1952,7 +1977,7 @@ let create_audio_like_track_item
     Spec.collection ~name:"Clips"
       ~of_value:(fun (t : Track.AudioTrack.t) -> t.clips)
       ~of_patch:(fun (p : Track.AudioTrack.Patch.t) -> p.clips)
-      ~build_item:create_audio_clip_item
+      ~build_item:(create_audio_clip_item ~format_time)
       ~domain_type:DTClip;
     child_from_specs ~name:"Mixer"
       ~of_value:(fun (t : Track.AudioTrack.t) -> t.mixer)
@@ -1963,7 +1988,7 @@ let create_audio_like_track_item
     Spec.collection ~name:"Automations"
       ~of_value:(fun (t : Track.AudioTrack.t) -> t.automations)
       ~of_patch:(fun (p : Track.AudioTrack.Patch.t) -> p.automations)
-      ~build_item:(create_automation_item ~get_pointee_name)
+      ~build_item:(create_automation_item ~get_pointee_name ~format_time)
       ~domain_type:DTAutomation;
     Spec.collection ~name:"Devices"
       ~of_value:(fun (t : Track.AudioTrack.t) -> t.devices)
@@ -1983,19 +2008,21 @@ let create_audio_like_track_item
 let create_audio_track_item
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
   ignore (note_name_style : note_display_style);
-  create_audio_like_track_item ~get_pointee_name ~track_type_name:"AudioTrack" c
+  create_audio_like_track_item ~get_pointee_name ~format_time ~track_type_name:"AudioTrack" c
 
 
 let create_group_track_item
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
   ignore (note_name_style : note_display_style);
-  create_audio_like_track_item ~get_pointee_name ~track_type_name:"Group" c
+  create_audio_like_track_item ~get_pointee_name ~format_time ~track_type_name:"Group" c
 
 
 (** [create_main_track_item] creates a [item] from a MainTrack structured change (new type system).
@@ -2006,6 +2033,7 @@ let create_group_track_item
 let create_main_track_item
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Track.MainTrack.t, Track.MainTrack.Patch.t) structured_change)
   : item =
   ignore (note_name_style : note_display_style);
@@ -2032,7 +2060,7 @@ let create_main_track_item
     Spec.collection ~name:"Automations"
       ~of_value:(fun (t : Track.MainTrack.t) -> t.automations)
       ~of_patch:(fun (p : Track.MainTrack.Patch.t) -> p.automations)
-      ~build_item:(create_automation_item ~get_pointee_name)
+      ~build_item:(create_automation_item ~get_pointee_name ~format_time)
       ~domain_type:DTAutomation;
     Spec.collection ~name:"Devices"
       ~of_value:(fun (t : Track.MainTrack.t) -> t.devices)
@@ -2051,17 +2079,18 @@ let create_main_track_item
 
 (* ==================== Liveset View ==================== *)
 
-let locator_field_specs : (Liveset.Locator.t, Liveset.Locator.Patch.t) unified_field_spec list = [
+let locator_field_specs ?(format_time = float_value) () : (Liveset.Locator.t, Liveset.Locator.Patch.t) unified_field_spec list = [
   make_spec_const int_value "Id" (fun (x : Liveset.Locator.t) -> x.id);
   make_string "Name" (fun (x : Liveset.Locator.t) -> x.name) (fun (p : Liveset.Locator.Patch.t) -> p.name);
-  make_float "Time" (fun (x : Liveset.Locator.t) -> x.time) (fun (p : Liveset.Locator.Patch.t) -> p.time);
+  make_time_field format_time "Time" (fun (x : Liveset.Locator.t) -> x.time) (fun (p : Liveset.Locator.Patch.t) -> p.time);
 ]
 
-let locator_section_specs : (Liveset.Locator.t, Liveset.Locator.Patch.t) section_spec list = [
-  Spec.inline_fields ~specs:locator_field_specs ~domain_type:DTLocator;
+let locator_section_specs ?(format_time = default_format_time) () : (Liveset.Locator.t, Liveset.Locator.Patch.t) section_spec list = [
+  Spec.inline_fields ~specs:(locator_field_specs ~format_time ()) ~domain_type:DTLocator;
 ]
 
 let create_locator_item
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Liveset.Locator.t, Liveset.Locator.Patch.t) structured_change)
   : item =
   let locator_name = match c with
@@ -2070,7 +2099,7 @@ let create_locator_item
     | `Modified _ -> "Locator"
     | `Unchanged -> "Locator"
   in
-  build_item_from_specs ~name:locator_name ~domain_type:DTLocator ~specs:locator_section_specs c
+  build_item_from_specs ~name:locator_name ~domain_type:DTLocator ~specs:(locator_section_specs ~format_time ()) c
 
 
 (** Version field specifications *)
@@ -2091,6 +2120,20 @@ let create_version_patch_fields = build_patch_field_views version_field_specs ~d
 
 
 (* ==================== Liveset Helper Functions ==================== *)
+
+(** [make_format_time] creates a time formatting closure based on the chosen format.
+    Uses tempo and time signature events from the MainTrack for conversion.
+    QuarterNotes returns Ffloat (no change), BeatTime/RealTime return Fstring. *)
+let make_format_time (time_format : time_format)
+    ~(tempo_events : (float * float * Automation.CurveControls.t option) list)
+    ~(ts_events : (float * Clip.TimeSignature.t) list)
+    () : float -> field_value =
+  match time_format with
+  | QuarterNotes -> float_value
+  | BeatTime ->
+    fun x -> Fstring (format_position (Track.MainTrack.time_to_position ts_events x))
+  | RealTime ->
+    fun x -> Fstring (format_realtime (Track.MainTrack.time_to_realtime x tempo_events))
 
 (** [make_pointee_resolver c] creates a pointee name resolver function from a liveset change.
     This is used to resolve automation target IDs to human-readable names.
@@ -2119,23 +2162,24 @@ let make_pointee_resolver
 let dispatch_track_change
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (tc : (Track.t, Track.Patch.t) structured_change)
   : view option =
   match tc with
   (* Midi tracks *)
-  | `Added (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style (`Added t)))
-  | `Removed (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style (`Removed t)))
-  | `Modified (Track.Patch.MidiPatch pt) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style (`Modified pt)))
+  | `Added (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
+  | `Removed (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
+  | `Modified (Track.Patch.MidiPatch pt) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time (`Modified pt)))
   (* Audio tracks *)
-  | `Added (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Added t)))
-  | `Removed (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Removed t)))
-  | `Modified (Track.Patch.AudioPatch pt) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Modified pt)))
+  | `Added (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
+  | `Removed (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
+  | `Modified (Track.Patch.AudioPatch pt) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Modified pt)))
   (* Group tracks *)
-  | `Added (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style (`Added t)))
-  | `Removed (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style (`Removed t)))
+  | `Added (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
+  | `Removed (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
   (* Return tracks - use audio track builder since ReturnTrack = AudioTrack *)
-  | `Added (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Added t)))
-  | `Removed (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style (`Removed t)))
+  | `Added (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
+  | `Removed (Track.Return t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
   (* Main tracks - handled separately in create_liveset_item *)
   | `Added (Track.Main _) | `Removed (Track.Main _) | `Modified (Track.Patch.MainPatch _) -> None
   | `Unchanged -> None
@@ -2147,6 +2191,7 @@ let dispatch_track_change
 let build_liveset_tracks_items
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : view list =
   let is_regular_track = function
@@ -2171,7 +2216,7 @@ let build_liveset_tracks_items
       patch.tracks |> List.filter is_regular_track_change
     | `Unchanged -> []
   in
-  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style) track_changes
+  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style ~format_time) track_changes
 
 
 (** [build_liveset_returns_items ~get_pointee_name ~note_name_style c] builds view items for all return tracks
@@ -2180,6 +2225,7 @@ let build_liveset_tracks_items
 let build_liveset_returns_items
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : view list =
   let return_changes = match c with
@@ -2190,7 +2236,7 @@ let build_liveset_returns_items
     | `Modified patch -> patch.returns
     | `Unchanged -> []
   in
-  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style) return_changes
+  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style ~format_time) return_changes
 
 
 (** Liveset field specifications for atomic fields (Name, Creator) *)
@@ -2210,6 +2256,7 @@ let liveset_field_specs : (Liveset.t, Liveset.Patch.t) unified_field_spec list =
 *)
 let create_liveset_item
     ?(note_name_style : note_display_style = default_note_name_style)
+    ?(format_time : float -> field_value = default_format_time)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : item =
 
@@ -2256,13 +2303,13 @@ let create_liveset_item
           | _ -> failwith "Liveset.main must always contain Track.Main")
       ~of_patch:(fun (p : Liveset.Patch.t) -> p.main)
       ~build_value_children:(fun ct (main_track : Track.MainTrack.t) ->
-          [Item (create_main_track_item ~get_pointee_name ~note_name_style (match ct with
+          [Item (create_main_track_item ~get_pointee_name ~note_name_style ~format_time (match ct with
                | Added -> `Added main_track
                | Removed -> `Removed main_track
                | Unchanged -> failwith "Invalid change type for value"
                | Modified -> failwith "Invalid change type for value"))])
       ~build_patch_children:(fun pt ->
-          [Item (create_main_track_item ~get_pointee_name ~note_name_style (`Modified pt))])
+          [Item (create_main_track_item ~get_pointee_name ~note_name_style ~format_time (`Modified pt))])
       ~domain_type:DTTrack
   in
 
@@ -2271,7 +2318,7 @@ let create_liveset_item
       ~name:"Locators"
       ~of_value:(fun (ls : Liveset.t) -> ls.Liveset.locators)
       ~of_patch:(fun (p : Liveset.Patch.t) -> p.locators)
-      ~build_item:create_locator_item
+      ~build_item:(create_locator_item ~format_time)
       ~domain_type:DTLocator
   in
 
@@ -2280,8 +2327,8 @@ let create_liveset_item
     atomic_children
     @ (version_item |> Option.map (fun i -> Item i) |> option_to_list)
     @ (main_track_item |> Option.map (fun i -> Item i) |> option_to_list)
-    @ build_liveset_tracks_items ~get_pointee_name ~note_name_style c
-    @ build_liveset_returns_items ~get_pointee_name ~note_name_style c
+    @ build_liveset_tracks_items ~get_pointee_name ~note_name_style ~format_time c
+    @ build_liveset_returns_items ~get_pointee_name ~note_name_style ~format_time c
     @ (locators_collection |> Option.map (fun c -> Collection c) |> option_to_list)
   in
 

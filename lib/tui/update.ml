@@ -304,11 +304,15 @@ let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
            let change =
              if has_changes then `Modified patch else `Unchanged
            in
-           let views = [
-             Alsdiff_output.View_model.Item
-               (Alsdiff_output.View_model.create_liveset_item
-                  ~note_name_style:model.note_name_style change)
-           ] in
+           let format_time = match model.format_time with
+               | Some ft -> ft
+               | None -> Alsdiff_output.View_model.default_format_time
+             in
+             let views = [
+               Alsdiff_output.View_model.Item
+                 (Alsdiff_output.View_model.create_liveset_item
+                    ~note_name_style:model.note_name_style ~format_time change)
+             ] in
            let detail_config = Alsdiff_output.Config.full in
            let flat_nodes = Model.build_nodes_with_config ~cfg:detail_config views in
            ({ model with

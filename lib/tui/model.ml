@@ -48,6 +48,7 @@ type t = {
   (* Focus mode - show only descendants of focused node *)
   focused_path : string list option;
   note_name_style : View_model.note_display_style;
+  format_time : (float -> View_model.field_value) option;
 }
 
 and tree_node = {
@@ -220,7 +221,7 @@ let read_dir_entries ~root:_ ~cwd : file_entry list =
   let sort_key (e : file_entry) = (not e.is_dir, String.lowercase_ascii e.name) in
   List.sort (fun a b -> compare (sort_key a) (sort_key b)) entries
 
-let init_browser ~root ?(note_name_style = View_model.Sharp) () : t =
+let init_browser ~root ?(note_name_style = View_model.Sharp) ?(format_time = None) () : t =
   let cwd = root in
   let entries = read_dir_entries ~root ~cwd in
   let detail_modes = make_detail_modes () in
@@ -256,9 +257,10 @@ let init_browser ~root ?(note_name_style = View_model.Sharp) () : t =
     export_selected_format = Text;
     focused_path = None;
     note_name_style;
+    format_time;
   }
 
-let init ?(detail_config = Config.compact) ?(note_name_style = View_model.Sharp) (views : view list) : t =
+let init ?(detail_config = Config.compact) ?(note_name_style = View_model.Sharp) ?(format_time = None) (views : view list) : t =
   let detail_modes = make_detail_modes () in
   let detail_mode_index =
     match List.find_index (fun cfg -> cfg = detail_config) detail_modes with
@@ -293,4 +295,5 @@ let init ?(detail_config = Config.compact) ?(note_name_style = View_model.Sharp)
     export_selected_format = Text;
     focused_path = None;
     note_name_style;
+    format_time;
   }

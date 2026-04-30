@@ -13,9 +13,9 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style ~(format_time : float -> View_model.field_value) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item ~note_name_style change in
+  let item = View_model.create_liveset_item ~note_name_style ~format_time change in
   [View_model.Item item]
 
 type output_mode = Tree | Stats | Json
@@ -32,6 +32,7 @@ type config = {
   prefix_modified: string option;
   prefix_unchanged: string option;
   note_name_style: note_display_style option;
+  time_format: time_format option;
   max_collection_items: int option;
   dump_schema: bool;
   validate_config: string option;
@@ -79,6 +80,7 @@ let stats_incompatible_flags_provided config =
   || config.prefix_modified <> None
   || config.prefix_unchanged <> None
   || config.note_name_style <> None
+  || config.time_format <> None
   || config.max_collection_items <> None
 
 
@@ -141,7 +143,19 @@ let diff_cmd ~config ~domain_mgr : int =
       | Some style -> style
       | None -> View_model.Sharp
     in
-    let views = create_views ~note_name_style liveset_change in
+    let time_format_val = match config.time_format with
+      | Some f -> f | None -> QuarterNotes
+    in
+    let format_time = match time_format_val with
+      | QuarterNotes -> View_model.default_format_time
+      | _ ->
+        let main_track = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        View_model.make_format_time time_format_val
+          ~tempo_events:(Track.MainTrack.get_tempo_events main_track)
+          ~ts_events:(Track.MainTrack.get_time_signature_events main_track)
+          ()
+    in
+    let views = create_views ~note_name_style ~format_time liveset_change in
 
     let output = match config.output_mode with
       | Stats -> render_stats ~config ~reference_path views
@@ -200,6 +214,10 @@ let prefix_unchanged =
 let note_name_style =
   let doc = "Note name display style. $(b,Sharp)=C# D# etc., $(b,Flat)=Db Eb etc. (default from preset: Sharp)" in
   Arg.(value & opt (some (enum ["Sharp", Sharp; "Flat", Flat])) None & info ["note-name-style"] ~docv:"STYLE" ~doc)
+
+let time_format =
+  let doc = "Time format for time fields. $(b,QuarterNotes)=raw floats (default), $(b,BeatTime)=bars:beats:sixteenths, $(b,RealTime)=mm:ss.ms" in
+  Arg.(value & opt (some (enum ["QuarterNotes", QuarterNotes; "BeatTime", BeatTime; "RealTime", RealTime])) None & info ["time-format"] ~docv:"FORMAT" ~doc)
 
 let max_collection_items =
   let doc = "Maximum number of items to show in collections (default from preset: None/10/50 depending on preset)" in
@@ -318,8 +336,8 @@ let cmd =
   Cmd.make (Cmd.info "alsdiff" ~version:(match version () with
       | None -> "dev"
       | Some v -> Version.to_string v) ~doc ~man ~exits) @@
-  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ max_collection_items and+ output_mode and+ dump_schema and+ validate_config in
-  let cfg = { positional_args; git_mode; output_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; max_collection_items; dump_schema; validate_config } in
+  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ time_format and+ max_collection_items and+ output_mode and+ dump_schema and+ validate_config in
+  let cfg = { positional_args; git_mode; output_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; time_format; max_collection_items; dump_schema; validate_config } in
   config_ref := Some cfg;
   ()
 

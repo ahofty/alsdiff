@@ -224,6 +224,31 @@
           "maxItems": 1
         }
       ]
+    },
+    "time_format": {
+      "anyOf": [
+        {
+          "type": "array",
+          "prefixItems": [ { "const": "QuarterNotes" } ],
+          "unevaluatedItems": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        {
+          "type": "array",
+          "prefixItems": [ { "const": "BeatTime" } ],
+          "unevaluatedItems": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        {
+          "type": "array",
+          "prefixItems": [ { "const": "RealTime" } ],
+          "unevaluatedItems": false,
+          "minItems": 1,
+          "maxItems": 1
+        }
+      ]
     }
   },
   "type": "object",
@@ -233,6 +258,7 @@
       "description": "JSON Schema URI pointing to the schema for this config file."
     },
     "indent_width": { "type": "integer" },
+    "time_format": { "$ref": "#/$defs/time_format" },
     "note_name_style": { "$ref": "#/$defs/note_display_style" },
     "prefix_unchanged": { "type": "string" },
     "prefix_modified": { "type": "string" },

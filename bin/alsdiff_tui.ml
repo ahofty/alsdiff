@@ -11,14 +11,15 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style ~(format_time : float -> View_model.field_value) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item ~note_name_style change in
+  let item = View_model.create_liveset_item ~note_name_style ~format_time change in
   [View_model.Item item]
 
 type config = {
   positional_args: string list;
   note_name_style: note_display_style;
+  time_format: time_format;
 }
 
 let tui_cmd ~config ~domain_mgr : int =
@@ -44,7 +45,16 @@ let tui_cmd ~config ~domain_mgr : int =
         `Unchanged
     in
 
-    let views = create_views ~note_name_style:config.note_name_style liveset_change in
+    let format_time = match config.time_format with
+      | QuarterNotes -> View_model.default_format_time
+      | _ ->
+        let main_track = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        View_model.make_format_time config.time_format
+          ~tempo_events:(Track.MainTrack.get_tempo_events main_track)
+          ~ts_events:(Track.MainTrack.get_time_signature_events main_track)
+          ()
+    in
+    let views = create_views ~note_name_style:config.note_name_style ~format_time liveset_change in
 
     (* Run the TUI *)
     Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full ();
@@ -65,6 +75,10 @@ let positional_args =
 let note_name_style =
   let doc = "Note name display style (Sharp or Flat)" in
   Arg.(value & opt (some (enum ["Sharp", Sharp; "Flat", Flat])) None & info ["note-name-style"] ~docv:"STYLE" ~doc)
+
+let time_format =
+  let doc = "Time format for time fields (QuarterNotes, BeatTime, RealTime)" in
+  Arg.(value & opt (enum ["QuarterNotes", QuarterNotes; "BeatTime", BeatTime; "RealTime", RealTime]) QuarterNotes & info ["time-format"] ~docv:"FORMAT" ~doc)
 
 let cmd =
   let doc = "Compare two Ableton Live Set (.als) files in an interactive terminal UI" in
@@ -93,12 +107,12 @@ let cmd =
   let exits = Cmd.Exit.info 0 ~doc:"success" :: List.filter (fun e -> Cmd.Exit.info_code e <> 0) Cmd.Exit.defaults in
   Cmd.make (Cmd.info "alsdiff-tui" ~doc ~man ~exits) @@
   Term.ret @@
-  let+ positional_args and+ note_name_style in
+  let+ positional_args and+ note_name_style and+ time_format in
   let note_name_style = match note_name_style with
     | Some style -> style
     | None -> View_model.Sharp
   in
-  let cfg = { positional_args; note_name_style } in
+  let cfg = { positional_args; note_name_style; time_format } in
   let n = List.length positional_args in
   if n <> 0 && n <> 2 then
     `Error (true, "expected 0 or 2 file arguments")
