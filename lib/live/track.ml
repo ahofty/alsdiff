@@ -319,15 +319,15 @@ module MainTrack = struct
         3.0 *. s1 *. s1 *. s *. c1 +. 3.0 *. s1 *. s *. s *. c2 +. s *. s *. s
       in
       let solve_bezier_x target c1x c2x =
-        let lo = ref 0.0 in
-        let hi = ref 1.0 in
-        for _ = 1 to 30 do
-          let mid = (!lo +. !hi) /. 2.0 in
-          if bezier_coord mid c1x c2x < target
-          then lo := mid
-          else hi := mid
-        done;
-        (!lo +. !hi) /. 2.0
+        let rec search lo hi = function
+          | 0 -> (lo +. hi) /. 2.0
+          | k ->
+            let mid = (lo +. hi) /. 2.0 in
+            if bezier_coord mid c1x c2x < target
+            then search mid hi (k - 1)
+            else search lo mid (k - 1)
+        in
+        search 0.0 1.0 30
       in
       let linear_seconds dq t_start t_end =
         if dq <= 0.0 then 0.0
@@ -336,31 +336,29 @@ module MainTrack = struct
         else
           60.0 *. dq /. (t_end -. t_start) *. Float.log (t_end /. t_start)
       in
+      let simpson n h f =
+        let rec loop i sum =
+          if i > n then h /. 3.0 *. sum
+          else
+            let w = if i = 0 || i = n then 1.0
+              else if i mod 2 = 1 then 4.0
+              else 2.0 in
+            loop (i + 1) (sum +. w *. f i)
+        in
+        loop 0 0.0
+      in
+      let tempo_at_frac (curve : Automation.CurveControls.t) t_from t_to frac =
+        let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
+        let y = bezier_coord s curve.curve1_y curve.curve2_y in
+        t_from +. (t_to -. t_from) *. y
+      in
       let bezier_seconds dq t_prev t_next curve =
-        let open Automation.CurveControls in
         let n = 500 in
-        let tempo_at_n i =
-          let frac = float_of_int i /. float_of_int n in
-          let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
-          let y = bezier_coord s curve.curve1_y curve.curve2_y in
-          t_prev +. (t_next -. t_prev) *. y
+        let tempo_fn i =
+          tempo_at_frac curve t_prev t_next
+            (float_of_int i /. float_of_int n)
         in
-        let h = dq /. float_of_int n in
-        let f i = 60.0 /. tempo_at_n i in
-        let sum =
-          f 0 +. f n
-          +. 4.0 *. (let s = ref 0.0 in
-                     for i = 1 to n - 1 do
-                       if i mod 2 = 1 then s := !s +. f i
-                     done;
-                     !s)
-          +. 2.0 *. (let s = ref 0.0 in
-                     for i = 1 to n - 1 do
-                       if i mod 2 = 0 then s := !s +. f i
-                     done;
-                     !s)
-        in
-        h /. 3.0 *. sum
+        simpson n (dq /. float_of_int n) (fun i -> 60.0 /. tempo_fn i)
       in
       let rec walk evts cum_sec seg_start tempo prev_curve = match evts with
         | [] ->
@@ -380,31 +378,13 @@ module MainTrack = struct
               let t_at_target = tempo +. (evt_tempo -. tempo) *. remaining /. total in
               linear_seconds remaining tempo t_at_target
             | Some curve ->
-              let open Automation.CurveControls in
               let n = 500 in
               let norm_end = remaining /. (evt_time -. seg_start) in
-              let tempo_at_n i =
-                let frac = float_of_int i /. float_of_int n *. norm_end in
-                let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
-                let y = bezier_coord s curve.curve1_y curve.curve2_y in
-                tempo +. (evt_tempo -. tempo) *. y
+              let tempo_fn i =
+                tempo_at_frac curve tempo evt_tempo
+                  (float_of_int i /. float_of_int n *. norm_end)
               in
-              let h = remaining /. float_of_int n in
-              let f i = 60.0 /. tempo_at_n i in
-              let sum =
-                f 0 +. f n
-                +. 4.0 *. (let s = ref 0.0 in
-                           for i = 1 to n - 1 do
-                             if i mod 2 = 1 then s := !s +. f i
-                           done;
-                           !s)
-                +. 2.0 *. (let s = ref 0.0 in
-                           for i = 1 to n - 1 do
-                             if i mod 2 = 0 then s := !s +. f i
-                           done;
-                           !s)
-              in
-              h /. 3.0 *. sum
+              simpson n (remaining /. float_of_int n) (fun i -> 60.0 /. tempo_fn i)
           in
           cum_sec +. sec
       in
