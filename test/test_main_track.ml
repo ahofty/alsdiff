@@ -288,6 +288,63 @@ let test_time_to_position_48to138 () =
   check_pos 254.0 (89, 1, 1);
   check_pos 278.0 (93, 1, 1)
 
+let test_time_to_realtime_constant_tempo () =
+  (* Constant 120 BPM: 1 quarter note = 0.5 seconds *)
+  let events : (float * float * Alsdiff_live.Automation.CurveControls.t option) list = [
+    (-63072000.0, 120.0, None);
+    (1000.0, 120.0, None);
+  ] in
+  let check_rt qn (exp_min, exp_sec, exp_ms) =
+    let min, sec, ms = MainTrack.time_to_realtime qn events in
+    let label = Printf.sprintf "qn=%.0f -> (%d,%d,%d)" qn exp_min exp_sec exp_ms in
+    Alcotest.(check int) (label ^ " min") exp_min min;
+    Alcotest.(check int) (label ^ " sec") exp_sec sec;
+    Alcotest.(check int) (label ^ " ms") exp_ms ms
+  in
+  check_rt 16.0 (0, 8, 0);
+  check_rt 120.0 (1, 0, 0);
+  check_rt 278.0 (2, 19, 0)
+
+let test_time_to_realtime_linear_ramp () =
+  (* Tempo ramps from 60 to 120 BPM over 120 quarter notes (no curves) *)
+  let events : (float * float * Alsdiff_live.Automation.CurveControls.t option) list = [
+    (-63072000.0, 60.0, None);
+    (120.0, 120.0, None);
+  ] in
+  (* seconds = 60 * 120 / (120-60) * ln(120/60) = 120 * ln(2) ≈ 83.178 *)
+  let min, sec, ms = MainTrack.time_to_realtime 120.0 events in
+  Alcotest.(check int) "min" 1 min;
+  Alcotest.(check int) "sec" 23 sec;
+  Alcotest.(check int) "ms" 178 ms
+
+let test_time_to_realtime_tempo () =
+  (* Actual tempo automation from a real project, with Bezier curve *)
+  let open Alsdiff_live.Automation in
+  let events : (float * float * CurveControls.t option) list = [
+    (-63072000.0, 120.0, None);
+    (16.0, 120.0, None);
+    (16.0, 100.0, None);
+    (34.0, 100.0, None);
+    (40.0, 110.0, None);
+    (56.0, 110.0, Some { CurveControls.curve1_x = 0.0390625;
+                         curve1_y = 0.8828125;
+                         curve2_x = 0.1171875;
+                         curve2_y = 0.9609375 });
+    (72.0, 120.0, None);
+  ] in
+  let check_rt qn (exp_min, exp_sec, exp_ms) =
+    let min, sec, ms = MainTrack.time_to_realtime qn events in
+    let label = Printf.sprintf "qn=%.0f -> (%d,%d,%d)" qn exp_min exp_sec exp_ms in
+    Alcotest.(check int) (label ^ " min") exp_min min;
+    Alcotest.(check int) (label ^ " sec") exp_sec sec;
+    Alcotest.(check int) (label ^ " ms") exp_ms ms
+  in
+  check_rt 16.0 (0, 8, 0);
+  check_rt 34.0 (0, 18, 800);
+  check_rt 40.0 (0, 22, 231);
+  check_rt 56.0 (0, 30, 958);
+  check_rt 72.0 (0, 39, 34) (* DAW shows 35ms; 1ms numerical precision difference *)
+
 let () =
   Alcotest.run "MainTrack" [
     "track_creation", [
@@ -305,5 +362,10 @@ let () =
     ];
     "time_to_position", [
       Alcotest.test_case "48to138 bar-boundary mappings" `Quick test_time_to_position_48to138;
+    ];
+    "time_to_realtime", [
+      Alcotest.test_case "constant 120 BPM" `Quick test_time_to_realtime_constant_tempo;
+      Alcotest.test_case "linear ramp 60->120 BPM" `Quick test_time_to_realtime_linear_ramp;
+      Alcotest.test_case "tempo automation" `Quick test_time_to_realtime_tempo;
     ]
   ]

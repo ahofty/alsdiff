@@ -287,6 +287,139 @@ module MainTrack = struct
       walk real_events 0 0.0 initial_ts
     end
 
+  let get_tempo_events (t : t) : (float * float * Automation.CurveControls.t option) list =
+    let target_id = t.mixer.tempo.GenericParam.automation in
+    let automation =
+      List.find_opt (fun (a : Automation.t) -> a.target = target_id) t.automations
+    in
+    match automation with
+    | None -> []
+    | Some auto ->
+      List.filter_map (fun (e : Automation.EnvelopeEvent.t) ->
+          match e.value with
+          | FloatEvent bpm -> Some (e.time, bpm, e.curve)
+          | _ -> None
+        ) auto.events
+
+  let time_to_realtime (quarter_notes : float)
+      (tempo_events : (float * float * Automation.CurveControls.t option) list) :
+    int * int * int =
+    if quarter_notes <= 0.0 then (0, 0, 0)
+    else begin
+      let events =
+        List.sort (fun (t1, _, _) (t2, _, _) -> Float.compare t1 t2) tempo_events
+      in
+      let initial_tempo = match events with
+        | [] -> 120.0
+        | (_, bpm, _) :: _ -> bpm
+      in
+      let real_events = List.filter (fun (t, _, _) -> t >= 0.0) events in
+      let bezier_coord s c1 c2 =
+        let s1 = 1.0 -. s in
+        3.0 *. s1 *. s1 *. s *. c1 +. 3.0 *. s1 *. s *. s *. c2 +. s *. s *. s
+      in
+      let solve_bezier_x target c1x c2x =
+        let lo = ref 0.0 in
+        let hi = ref 1.0 in
+        for _ = 1 to 30 do
+          let mid = (!lo +. !hi) /. 2.0 in
+          if bezier_coord mid c1x c2x < target
+          then lo := mid
+          else hi := mid
+        done;
+        (!lo +. !hi) /. 2.0
+      in
+      let linear_seconds dq t_start t_end =
+        if dq <= 0.0 then 0.0
+        else if Float.abs (t_end -. t_start) < 0.0001 then
+          dq *. 60.0 /. t_start
+        else
+          60.0 *. dq /. (t_end -. t_start) *. Float.log (t_end /. t_start)
+      in
+      let bezier_seconds dq t_prev t_next curve =
+        let open Automation.CurveControls in
+        let n = 500 in
+        let tempo_at_n i =
+          let frac = float_of_int i /. float_of_int n in
+          let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
+          let y = bezier_coord s curve.curve1_y curve.curve2_y in
+          t_prev +. (t_next -. t_prev) *. y
+        in
+        let h = dq /. float_of_int n in
+        let f i = 60.0 /. tempo_at_n i in
+        let sum =
+          f 0 +. f n
+          +. 4.0 *. (let s = ref 0.0 in
+                     for i = 1 to n - 1 do
+                       if i mod 2 = 1 then s := !s +. f i
+                     done;
+                     !s)
+          +. 2.0 *. (let s = ref 0.0 in
+                     for i = 1 to n - 1 do
+                       if i mod 2 = 0 then s := !s +. f i
+                     done;
+                     !s)
+        in
+        h /. 3.0 *. sum
+      in
+      let rec walk evts cum_sec seg_start tempo prev_curve = match evts with
+        | [] ->
+          cum_sec +. (quarter_notes -. seg_start) *. 60.0 /. tempo
+        | (evt_time, evt_tempo, evt_curve) :: rest when evt_time <= quarter_notes ->
+          let dq = evt_time -. seg_start in
+          let sec = match prev_curve with
+            | None -> linear_seconds dq tempo evt_tempo
+            | Some curve -> bezier_seconds dq tempo evt_tempo curve
+          in
+          walk rest (cum_sec +. sec) evt_time evt_tempo evt_curve
+        | (evt_time, evt_tempo, _) :: _ ->
+          let remaining = quarter_notes -. seg_start in
+          let sec = match prev_curve with
+            | None ->
+              let total = evt_time -. seg_start in
+              let t_at_target = tempo +. (evt_tempo -. tempo) *. remaining /. total in
+              linear_seconds remaining tempo t_at_target
+            | Some curve ->
+              let open Automation.CurveControls in
+              let n = 500 in
+              let norm_end = remaining /. (evt_time -. seg_start) in
+              let tempo_at_n i =
+                let frac = float_of_int i /. float_of_int n *. norm_end in
+                let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
+                let y = bezier_coord s curve.curve1_y curve.curve2_y in
+                tempo +. (evt_tempo -. tempo) *. y
+              in
+              let h = remaining /. float_of_int n in
+              let f i = 60.0 /. tempo_at_n i in
+              let sum =
+                f 0 +. f n
+                +. 4.0 *. (let s = ref 0.0 in
+                           for i = 1 to n - 1 do
+                             if i mod 2 = 1 then s := !s +. f i
+                           done;
+                           !s)
+                +. 2.0 *. (let s = ref 0.0 in
+                           for i = 1 to n - 1 do
+                             if i mod 2 = 0 then s := !s +. f i
+                           done;
+                           !s)
+              in
+              h /. 3.0 *. sum
+          in
+          cum_sec +. sec
+      in
+      let initial_curve = match events with
+        | [] -> None
+        | (_, _, c) :: _ -> c
+      in
+      let total_ms =
+        int_of_float (Float.round (walk real_events 0.0 0.0 initial_tempo initial_curve *. 1000.0))
+      in
+      let minutes = total_ms / 60_000 in
+      let rem = total_ms mod 60_000 in
+      (minutes, rem / 1000, rem mod 1000)
+    end
+
   (* MainTrack is also a singleton *)
   let has_same_id _ _ = true
   let id_hash _ = Hashtbl.hash 0
