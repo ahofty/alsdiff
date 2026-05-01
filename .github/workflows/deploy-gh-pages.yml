@@ -92,7 +92,7 @@ jobs:
         run: DUNE_BUILD_DIR=_build-pages-release opam exec -- dune build --profile release lib/browser/alsdiff.js
 
       - name: Copy alsdiff.js to webapp
-        run: cp _build-pages-release/default/lib/browser/alsdiff.js web/public/alsdiff.js
+        run: mkdir -p web/public && cp _build-pages-release/default/lib/browser/alsdiff.js web/public/alsdiff.js
 
       - name: Set-up Node.js
         uses: actions/setup-node@v6
