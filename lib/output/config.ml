@@ -1055,12 +1055,12 @@ let resolve_detail_config
     ~preset_config
     ()
   =
-  match config_file with
-  | Some config_path ->
-    load_and_validate_config config_path
+  match preset_config with
+  | Some preset -> Ok preset
   | None ->
-    match preset_config with
-    | Some preset -> Ok preset
+    match config_file with
+    | Some config_path ->
+      load_and_validate_config config_path
     | None ->
       match discover_config_file ~cwd ?home_dir ~reference_path () with
       | Some auto_config -> load_and_validate_config auto_config
