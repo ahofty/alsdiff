@@ -233,172 +233,224 @@ module MainTrack = struct
     { name; current_name = name; automations; devices; mixer; routings }
 
   let decode_time_signature (code : int) : Clip.TimeSignature.t =
-    let denom_index = code / 99 in
-    let numer = (code mod 99) + 1 in
-    let denom = 1 lsl denom_index in
-    { Clip.TimeSignature.numer; denom }
+    if code < 0 then { Clip.TimeSignature.numer = 4; denom = 4 }
+    else begin
+      let denom_index = code / 99 in
+      if denom_index > 5 then { Clip.TimeSignature.numer = 4; denom = 4 }
+      else begin
+        let numer = (code mod 99) + 1 in
+        let denom = 1 lsl denom_index in
+        { Clip.TimeSignature.numer; denom }
+      end
+    end
 
   let get_time_signature_events (t : t) : (float * Clip.TimeSignature.t) list =
     let target_id = t.mixer.time_signature.GenericParam.automation in
     let automation =
       List.find_opt (fun (a : Automation.t) -> a.target = target_id) t.automations
     in
-    match automation with
-    | None -> []
-    | Some auto ->
-      List.filter_map (fun (e : Automation.EnvelopeEvent.t) ->
-          match e.value with
-          | EnumEvent code -> Some (e.time, decode_time_signature code)
-          | _ -> None
-        ) auto.events
+    let events = match automation with
+      | None -> []
+      | Some auto ->
+        List.filter_map (fun (e : Automation.EnvelopeEvent.t) ->
+            match e.value with
+            | EnumEvent code -> Some (e.time, decode_time_signature code)
+            | _ -> None
+          ) auto.events
+    in
+    let needs_seed = match events with
+      | [] -> true
+      | (t, _) :: _ -> t > 0.0
+    in
+    if needs_seed then begin
+      let code = match t.mixer.time_signature.GenericParam.value with
+        | Device.Int v -> v
+        | Device.Enum (v, _) -> v
+        | _ -> 201 (* 4/4 default *)
+      in
+      (0.0, decode_time_signature code) :: events
+    end else events
+
+  let prepare_ts_segments (events : (float * Clip.TimeSignature.t) list) =
+    let sorted = List.sort (fun (t1, _) (t2, _) -> Float.compare t1 t2) events in
+    let initial = match sorted with
+      | [] -> { Clip.TimeSignature.numer = 4; denom = 4 }
+      | (_, ts) :: _ -> ts
+    in
+    let real = List.filter (fun (t, _) -> t >= 0.0) sorted in
+    (real, initial)
+
+  let time_to_position_precomputed (real_events, initial_ts) time =
+    let qn_per_bar (ts : Clip.TimeSignature.t) =
+      float_of_int ts.numer *. 4.0 /. float_of_int ts.denom
+    in
+    let qn_per_beat (ts : Clip.TimeSignature.t) =
+      4.0 /. float_of_int ts.denom
+    in
+    let position_in_segment ts cum_bars seg_start =
+      let remaining = time -. seg_start in
+      let bar_off = int_of_float (remaining /. qn_per_bar ts) in
+      let rem_bar = remaining -. float_of_int bar_off *. qn_per_bar ts in
+      let beat_off = int_of_float (rem_bar /. qn_per_beat ts) in
+      let rem_beat = rem_bar -. float_of_int beat_off *. qn_per_beat ts in
+      let sixteenth_off = int_of_float (rem_beat *. 4.0) in
+      (cum_bars + bar_off + 1, beat_off + 1, sixteenth_off + 1)
+    in
+    let rec walk evts cum_bars seg_start ts = match evts with
+      | [] -> position_in_segment ts cum_bars seg_start
+      | (evt_time, evt_ts) :: rest when evt_time <= time ->
+        let bars = int_of_float (Float.round ((evt_time -. seg_start) /. qn_per_bar ts)) in
+        walk rest (cum_bars + bars) evt_time evt_ts
+      | _ -> position_in_segment ts cum_bars seg_start
+    in
+    walk real_events 0 0.0 initial_ts
 
   let time_to_position (events : (float * Clip.TimeSignature.t) list) (time : float) :
     int * int * int =
     if time <= 0.0 then (1, 1, 1)
-    else begin
-      let events = List.sort (fun (t1, _) (t2, _) -> Float.compare t1 t2) events in
-      let initial_ts = match events with
-        | [] -> { Clip.TimeSignature.numer = 4; denom = 4 }
-        | (_, ts) :: _ -> ts
-      in
-      let real_events = List.filter (fun (t, _) -> t >= 0.0) events in
-      let qn_per_bar (ts : Clip.TimeSignature.t) =
-        float_of_int ts.numer *. 4.0 /. float_of_int ts.denom
-      in
-      let qn_per_beat (ts : Clip.TimeSignature.t) =
-        4.0 /. float_of_int ts.denom
-      in
-      let position_in_segment ts cum_bars seg_start =
-        let remaining = time -. seg_start in
-        let bar_off = int_of_float (remaining /. qn_per_bar ts) in
-        let rem_bar = remaining -. float_of_int bar_off *. qn_per_bar ts in
-        let beat_off = int_of_float (rem_bar /. qn_per_beat ts) in
-        let rem_beat = rem_bar -. float_of_int beat_off *. qn_per_beat ts in
-        let sixteenth_off = int_of_float (rem_beat *. 4.0) in
-        (cum_bars + bar_off + 1, beat_off + 1, sixteenth_off + 1)
-      in
-      let rec walk evts cum_bars seg_start ts = match evts with
-        | [] -> position_in_segment ts cum_bars seg_start
-        | (evt_time, evt_ts) :: rest when evt_time <= time ->
-          let bars = int_of_float (Float.round ((evt_time -. seg_start) /. qn_per_bar ts)) in
-          walk rest (cum_bars + bars) evt_time evt_ts
-        | _ -> position_in_segment ts cum_bars seg_start
-      in
-      walk real_events 0 0.0 initial_ts
-    end
+    else time_to_position_precomputed (prepare_ts_segments events) time
 
   let get_tempo_events (t : t) : (float * float * Automation.CurveControls.t option) list =
     let target_id = t.mixer.tempo.GenericParam.automation in
     let automation =
       List.find_opt (fun (a : Automation.t) -> a.target = target_id) t.automations
     in
-    match automation with
-    | None -> []
-    | Some auto ->
-      List.filter_map (fun (e : Automation.EnvelopeEvent.t) ->
-          match e.value with
-          | FloatEvent bpm -> Some (e.time, bpm, e.curve)
-          | _ -> None
-        ) auto.events
+    let events = match automation with
+      | None -> []
+      | Some auto ->
+        List.filter_map (fun (e : Automation.EnvelopeEvent.t) ->
+            match e.value with
+            | FloatEvent bpm -> Some (e.time, bpm, e.curve)
+            | _ -> None
+          ) auto.events
+    in
+    let needs_seed = match events with
+      | [] -> true
+      | (t, _, _) :: _ -> t > 0.0
+    in
+    if needs_seed then begin
+      let bpm = match t.mixer.tempo.GenericParam.value with
+        | Device.Float v -> v
+        | _ -> 120.0
+      in
+      (0.0, bpm, None) :: events
+    end else events
 
-  let time_to_realtime (quarter_notes : float)
-      (tempo_events : (float * float * Automation.CurveControls.t option) list) :
-    int * int * int =
-    if quarter_notes <= 0.0 then (0, 0, 0)
-    else begin
-      let events =
-        List.sort (fun (t1, _, _) (t2, _, _) -> Float.compare t1 t2) tempo_events
+  let prepare_tempo_segments
+      (events : (float * float * Automation.CurveControls.t option) list) =
+    let sorted = List.sort (fun (t1, _, _) (t2, _, _) -> Float.compare t1 t2) events in
+    let initial_tempo = match sorted with
+      | [] -> 120.0
+      | (_, bpm, _) :: _ -> bpm
+    in
+    let initial_curve = match sorted with
+      | [] -> None
+      | (_, _, c) :: _ -> c
+    in
+    let real = List.filter (fun (t, _, _) -> t >= 0.0) sorted in
+    (real, initial_tempo, initial_curve)
+
+  let time_to_realtime_raw quarter_notes (real_events, initial_tempo, initial_curve) =
+    let bezier_coord s c1 c2 =
+      let s1 = 1.0 -. s in
+      3.0 *. s1 *. s1 *. s *. c1 +. 3.0 *. s1 *. s *. s *. c2 +. s *. s *. s
+    in
+    let solve_bezier_x target c1x c2x =
+      let rec search lo hi = function
+        | 0 -> (lo +. hi) /. 2.0
+        | k ->
+          let mid = (lo +. hi) /. 2.0 in
+          if bezier_coord mid c1x c2x < target
+          then search mid hi (k - 1)
+          else search lo mid (k - 1)
       in
-      let initial_tempo = match events with
-        | [] -> 120.0
-        | (_, bpm, _) :: _ -> bpm
-      in
-      let real_events = List.filter (fun (t, _, _) -> t >= 0.0) events in
-      let bezier_coord s c1 c2 =
-        let s1 = 1.0 -. s in
-        3.0 *. s1 *. s1 *. s *. c1 +. 3.0 *. s1 *. s *. s *. c2 +. s *. s *. s
-      in
-      let solve_bezier_x target c1x c2x =
-        let rec search lo hi = function
-          | 0 -> (lo +. hi) /. 2.0
-          | k ->
-            let mid = (lo +. hi) /. 2.0 in
-            if bezier_coord mid c1x c2x < target
-            then search mid hi (k - 1)
-            else search lo mid (k - 1)
-        in
-        search 0.0 1.0 30
-      in
-      let linear_seconds dq t_start t_end =
-        if dq <= 0.0 then 0.0
-        else if Float.abs (t_end -. t_start) < 0.0001 then
-          dq *. 60.0 /. t_start
+      search 0.0 1.0 30
+    in
+    let linear_seconds dq t_start t_end =
+      if dq <= 0.0 then 0.0
+      else if Float.abs (t_end -. t_start) < 0.0001 then
+        dq *. 60.0 /. t_start
+      else
+        60.0 *. dq /. (t_end -. t_start) *. Float.log (t_end /. t_start)
+    in
+    let simpson n h f =
+      let rec loop i sum =
+        if i > n then h /. 3.0 *. sum
         else
-          60.0 *. dq /. (t_end -. t_start) *. Float.log (t_end /. t_start)
+          let w = if i = 0 || i = n then 1.0
+            else if i mod 2 = 1 then 4.0
+            else 2.0 in
+          loop (i + 1) (sum +. w *. f i)
       in
-      let simpson n h f =
-        let rec loop i sum =
-          if i > n then h /. 3.0 *. sum
-          else
-            let w = if i = 0 || i = n then 1.0
-              else if i mod 2 = 1 then 4.0
-              else 2.0 in
-            loop (i + 1) (sum +. w *. f i)
+      loop 0 0.0
+    in
+    let tempo_at_frac (curve : Automation.CurveControls.t) t_from t_to frac =
+      let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
+      let y = bezier_coord s curve.curve1_y curve.curve2_y in
+      max 1.0 (t_from +. (t_to -. t_from) *. y)
+    in
+    let bezier_seconds dq t_prev t_next curve =
+      let n = 500 in
+      let tempo_fn i =
+        tempo_at_frac curve t_prev t_next
+          (float_of_int i /. float_of_int n)
+      in
+      simpson n (dq /. float_of_int n) (fun i -> 60.0 /. tempo_fn i)
+    in
+    let rec walk evts cum_sec seg_start tempo prev_curve = match evts with
+      | [] ->
+        cum_sec +. (quarter_notes -. seg_start) *. 60.0 /. tempo
+      | (evt_time, evt_tempo, evt_curve) :: rest when evt_time <= quarter_notes ->
+        let dq = evt_time -. seg_start in
+        let sec = match prev_curve with
+          | None -> linear_seconds dq tempo evt_tempo
+          | Some curve -> bezier_seconds dq tempo evt_tempo curve
         in
-        loop 0 0.0
-      in
-      let tempo_at_frac (curve : Automation.CurveControls.t) t_from t_to frac =
-        let s = solve_bezier_x frac curve.curve1_x curve.curve2_x in
-        let y = bezier_coord s curve.curve1_y curve.curve2_y in
-        t_from +. (t_to -. t_from) *. y
-      in
-      let bezier_seconds dq t_prev t_next curve =
-        let n = 500 in
-        let tempo_fn i =
-          tempo_at_frac curve t_prev t_next
-            (float_of_int i /. float_of_int n)
+        walk rest (cum_sec +. sec) evt_time evt_tempo evt_curve
+      | (evt_time, evt_tempo, _) :: _ ->
+        let remaining = quarter_notes -. seg_start in
+        let sec = match prev_curve with
+          | None ->
+            let total = evt_time -. seg_start in
+            let t_at_target = tempo +. (evt_tempo -. tempo) *. remaining /. total in
+            linear_seconds remaining tempo t_at_target
+          | Some curve ->
+            let n = 500 in
+            let norm_end = remaining /. (evt_time -. seg_start) in
+            let tempo_fn i =
+              tempo_at_frac curve tempo evt_tempo
+                (float_of_int i /. float_of_int n *. norm_end)
+            in
+            simpson n (remaining /. float_of_int n) (fun i -> 60.0 /. tempo_fn i)
         in
-        simpson n (dq /. float_of_int n) (fun i -> 60.0 /. tempo_fn i)
-      in
-      let rec walk evts cum_sec seg_start tempo prev_curve = match evts with
-        | [] ->
-          cum_sec +. (quarter_notes -. seg_start) *. 60.0 /. tempo
-        | (evt_time, evt_tempo, evt_curve) :: rest when evt_time <= quarter_notes ->
-          let dq = evt_time -. seg_start in
-          let sec = match prev_curve with
-            | None -> linear_seconds dq tempo evt_tempo
-            | Some curve -> bezier_seconds dq tempo evt_tempo curve
-          in
-          walk rest (cum_sec +. sec) evt_time evt_tempo evt_curve
-        | (evt_time, evt_tempo, _) :: _ ->
-          let remaining = quarter_notes -. seg_start in
-          let sec = match prev_curve with
-            | None ->
-              let total = evt_time -. seg_start in
-              let t_at_target = tempo +. (evt_tempo -. tempo) *. remaining /. total in
-              linear_seconds remaining tempo t_at_target
-            | Some curve ->
-              let n = 500 in
-              let norm_end = remaining /. (evt_time -. seg_start) in
-              let tempo_fn i =
-                tempo_at_frac curve tempo evt_tempo
-                  (float_of_int i /. float_of_int n *. norm_end)
-              in
-              simpson n (remaining /. float_of_int n) (fun i -> 60.0 /. tempo_fn i)
-          in
-          cum_sec +. sec
-      in
-      let initial_curve = match events with
-        | [] -> None
-        | (_, _, c) :: _ -> c
-      in
+        cum_sec +. sec
+    in
+    walk real_events 0.0 0.0 initial_tempo initial_curve
+
+  let seconds_to_mmssms total_seconds =
+    if Float.is_nan total_seconds || Float.is_infinite total_seconds then (0, 0, 0)
+    else begin
       let total_ms =
-        int_of_float (Float.round (walk real_events 0.0 0.0 initial_tempo initial_curve *. 1000.0))
+        int_of_float (Float.round (total_seconds *. 1000.0))
       in
       let minutes = total_ms / 60_000 in
       let rem = total_ms mod 60_000 in
       (minutes, rem / 1000, rem mod 1000)
     end
+
+  let time_to_realtime_precomputed quarter_notes (real_events, initial_tempo, initial_curve) =
+    if quarter_notes <= 0.0 then (0, 0, 0)
+    else begin
+      let total_seconds =
+        time_to_realtime_raw quarter_notes (real_events, initial_tempo, initial_curve)
+      in
+      seconds_to_mmssms total_seconds
+    end
+
+  let time_to_realtime (quarter_notes : float)
+      (tempo_events : (float * float * Automation.CurveControls.t option) list) :
+    int * int * int =
+    time_to_realtime_precomputed quarter_notes (prepare_tempo_segments tempo_events)
 
   (* MainTrack is also a singleton *)
   let has_same_id _ _ = true

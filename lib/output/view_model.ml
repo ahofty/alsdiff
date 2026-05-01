@@ -6,6 +6,12 @@ type note_display_style = Sharp | Flat [@@deriving yojson, jsonschema]
 
 type time_format = QuarterNotes | BeatTime | RealTime [@@deriving yojson, jsonschema]
 
+let time_format_equal a b = match a, b with
+  | QuarterNotes, QuarterNotes -> true
+  | BeatTime, BeatTime -> true
+  | RealTime, RealTime -> true
+  | _ -> false
+
 let format_position (bar, beat, sixteenth) = Printf.sprintf "%d:%d:%d" bar beat sixteenth
 let format_realtime (min, sec, ms) = Printf.sprintf "%d:%02d.%03d" min sec ms
 
@@ -2123,7 +2129,8 @@ let create_version_patch_fields = build_patch_field_views version_field_specs ~d
 
 (** [make_format_time] creates a time formatting closure based on the chosen format.
     Uses tempo and time signature events from the MainTrack for conversion.
-    QuarterNotes returns Ffloat (no change), BeatTime/RealTime return Fstring. *)
+    QuarterNotes returns Ffloat (no change), BeatTime/RealTime return Fstring.
+    Precomputes sorted segments once to avoid redundant sorting per call. *)
 let make_format_time (time_format : time_format)
     ~(tempo_events : (float * float * Automation.CurveControls.t option) list)
     ~(ts_events : (float * Clip.TimeSignature.t) list)
@@ -2131,9 +2138,11 @@ let make_format_time (time_format : time_format)
   match time_format with
   | QuarterNotes -> float_value
   | BeatTime ->
-    fun x -> Fstring (format_position (Track.MainTrack.time_to_position ts_events x))
+    let segments = Track.MainTrack.prepare_ts_segments ts_events in
+    fun x -> Fstring (format_position (Track.MainTrack.time_to_position_precomputed segments x))
   | RealTime ->
-    fun x -> Fstring (format_realtime (Track.MainTrack.time_to_realtime x tempo_events))
+    let segments = Track.MainTrack.prepare_tempo_segments tempo_events in
+    fun x -> Fstring (format_realtime (Track.MainTrack.time_to_realtime_precomputed x segments))
 
 (** [make_pointee_resolver c] creates a pointee name resolver function from a liveset change.
     This is used to resolve automation target IDs to human-readable names.

@@ -57,7 +57,8 @@ let tui_cmd ~config ~domain_mgr : int =
     let views = create_views ~note_name_style:config.note_name_style ~format_time liveset_change in
 
     (* Run the TUI *)
-    Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full ();
+    Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full
+      ~time_format:config.time_format ();
 
     (* Print export output if any *)
     (match !Alsdiff_tui_lib.Update.export_output_ref with

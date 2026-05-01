@@ -143,9 +143,9 @@ let diff_cmd ~config ~domain_mgr : int =
       | Some style -> style
       | None -> View_model.Sharp
     in
-    let time_format_val = match config.time_format with
-      | Some f -> f | None -> QuarterNotes
-    in
+    let resolved_config = build_base_renderer_config
+        ~default_config:Text_renderer.quiet ~reference_path config in
+    let time_format_val = resolved_config.time_format in
     let format_time = match time_format_val with
       | QuarterNotes -> View_model.default_format_time
       | _ ->
