@@ -307,15 +307,21 @@ let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
            let format_time =
              if Alsdiff_output.View_model.time_format_equal
                  model.time_format Alsdiff_output.View_model.QuarterNotes then
-               Alsdiff_output.View_model.default_format_time
+               Alsdiff_output.View_model.default_dual_time_formatter
              else begin
-               let main_track = match ls2.Alsdiff_live.Liveset.main with
+               let main_old = match ls1.Alsdiff_live.Liveset.main with
                  | Alsdiff_live.Track.Main m -> m
                  | _ -> failwith "Liveset.main must be Track.Main"
                in
-               Alsdiff_output.View_model.make_format_time model.time_format
-                 ~tempo_events:(Alsdiff_live.Track.MainTrack.get_tempo_events main_track)
-                 ~ts_events:(Alsdiff_live.Track.MainTrack.get_time_signature_events main_track)
+               let main_new = match ls2.Alsdiff_live.Liveset.main with
+                 | Alsdiff_live.Track.Main m -> m
+                 | _ -> failwith "Liveset.main must be Track.Main"
+               in
+               Alsdiff_output.View_model.make_dual_format_time model.time_format
+                 ~tempo_events_old:(Alsdiff_live.Track.MainTrack.get_tempo_events main_old)
+                 ~ts_events_old:(Alsdiff_live.Track.MainTrack.get_time_signature_events main_old)
+                 ~tempo_events_new:(Alsdiff_live.Track.MainTrack.get_tempo_events main_new)
+                 ~ts_events_new:(Alsdiff_live.Track.MainTrack.get_time_signature_events main_new)
                  ()
              end
            in

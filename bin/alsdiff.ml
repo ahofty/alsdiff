@@ -13,7 +13,7 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views ~note_name_style ~(format_time : float -> View_model.field_value) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style ~(format_time : View_model.dual_time_formatter) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
   let item = View_model.create_liveset_item ~note_name_style ~format_time change in
   [View_model.Item item]
@@ -110,7 +110,7 @@ let diff_cmd ~config ~domain_mgr : int =
   if (config.output_mode = Stats || config.output_mode = Json)
   && stats_incompatible_flags_provided config then begin
     Fmt.epr "Error: --mode stats/json is incompatible with --prefix-*, \
-             --note-name-style, and --max-collection-items@.";
+             --note-name-style, --time-format, and --max-collection-items@.";
     if config.git_mode then 2 else 1
   end else begin
     let file1, file2, reference_path =
@@ -151,12 +151,15 @@ let diff_cmd ~config ~domain_mgr : int =
         resolved_config.time_format
     in
     let format_time = match time_format_val with
-      | QuarterNotes -> View_model.default_format_time
+      | QuarterNotes -> View_model.default_dual_time_formatter
       | _ ->
-        let main_track = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
-        View_model.make_format_time time_format_val
-          ~tempo_events:(Track.MainTrack.get_tempo_events main_track)
-          ~ts_events:(Track.MainTrack.get_time_signature_events main_track)
+        let main_old = match liveset1.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        let main_new = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        View_model.make_dual_format_time time_format_val
+          ~tempo_events_old:(Track.MainTrack.get_tempo_events main_old)
+          ~ts_events_old:(Track.MainTrack.get_time_signature_events main_old)
+          ~tempo_events_new:(Track.MainTrack.get_tempo_events main_new)
+          ~ts_events_new:(Track.MainTrack.get_time_signature_events main_new)
           ()
     in
     let views = create_views ~note_name_style ~format_time liveset_change in
@@ -229,7 +232,7 @@ let max_collection_items =
 
 let stats_mode_doc =
   "Stats mode supports --config and --preset for customizing which types appear in statistics. \
-   Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
+   Incompatible with --prefix-*, --note-name-style, --time-format, and --max-collection-items."
 
 let output_mode =
   let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type, $(b,json)=structured JSON output. " ^ stats_mode_doc in

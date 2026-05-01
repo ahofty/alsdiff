@@ -11,7 +11,7 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views ~note_name_style ~(format_time : float -> View_model.field_value) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style ~(format_time : View_model.dual_time_formatter) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
   let item = View_model.create_liveset_item ~note_name_style ~format_time change in
   [View_model.Item item]
@@ -46,12 +46,15 @@ let tui_cmd ~config ~domain_mgr : int =
     in
 
     let format_time = match config.time_format with
-      | QuarterNotes -> View_model.default_format_time
+      | QuarterNotes -> View_model.default_dual_time_formatter
       | _ ->
-        let main_track = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
-        View_model.make_format_time config.time_format
-          ~tempo_events:(Track.MainTrack.get_tempo_events main_track)
-          ~ts_events:(Track.MainTrack.get_time_signature_events main_track)
+        let main_old = match liveset1.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        let main_new = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        View_model.make_dual_format_time config.time_format
+          ~tempo_events_old:(Track.MainTrack.get_tempo_events main_old)
+          ~ts_events_old:(Track.MainTrack.get_time_signature_events main_old)
+          ~tempo_events_new:(Track.MainTrack.get_tempo_events main_new)
+          ~ts_events_new:(Track.MainTrack.get_time_signature_events main_new)
           ()
     in
     let views = create_views ~note_name_style:config.note_name_style ~format_time liveset_change in

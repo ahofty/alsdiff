@@ -49,7 +49,7 @@ type t = {
   focused_path : string list option;
   note_name_style : View_model.note_display_style;
   time_format : View_model.time_format;
-  format_time : (float -> View_model.field_value) option;
+  format_time : View_model.dual_time_formatter option;
 }
 
 and tree_node = {
