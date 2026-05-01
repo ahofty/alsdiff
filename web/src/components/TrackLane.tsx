@@ -1,6 +1,6 @@
 import type { TrackData } from "../types";
 import ClipBlock from "./ClipBlock";
-import { pixelsPerBeat, selectedTrackIdx, selectedClipName } from "../stores/diff-store";
+import { selectedTrackIdx, selectedClipName } from "../stores/diff-store";
 import { extractClips } from "../lib/diff-parser";
 import { For } from "solid-js";
 

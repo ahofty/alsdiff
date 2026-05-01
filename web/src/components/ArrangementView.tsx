@@ -1,8 +1,10 @@
-import { For, Show, createEffect } from "solid-js";
+import { For, Show, createEffect, onMount, onCleanup } from "solid-js";
 import {
   tracks,
   pixelsPerBeat,
-  setPixelsPerBeat,
+  zoomFactor,
+  setZoomFactor,
+  setTimelineWidth,
   selectedTrackIdx,
   setSelectedTrackIdx,
   setSelectedClipName,
@@ -12,22 +14,48 @@ import { computeTimelineRange } from "../lib/diff-parser";
 import TrackHeader from "./TrackHeader";
 import TrackLane from "./TrackLane";
 
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 20;
+const LOG_RATIO = ZOOM_MAX / ZOOM_MIN;
+
+function zoomToSlider(zoom: number): number {
+  return Math.round(
+    (Math.log(zoom / ZOOM_MIN) / Math.log(LOG_RATIO)) * 100,
+  );
+}
+
+function sliderToZoom(val: number): number {
+  const t = val / 100;
+  return ZOOM_MIN * Math.pow(LOG_RATIO, t);
+}
+
 export default function ArrangementView() {
   const range = () => computeTimelineRange(tracks());
-  const totalWidth = () => range().totalBeats * pixelsPerBeat() + 100;
+  const totalWidth = () => {
+    const ppb = pixelsPerBeat();
+    return range().totalBeats * ppb;
+  };
+
+  const measureWidth = () => {
+    const el = document.querySelector(".timeline-area");
+    if (el) setTimelineWidth(el.clientWidth);
+  };
 
   createEffect(() => {
-    const t = tracks();
-    if (t.length === 0) return;
-    queueMicrotask(() => {
-      const el = document.querySelector(".timeline-area");
-      if (!el) return;
-      const available = el.clientWidth;
-      const r = computeTimelineRange(t);
-      if (r.totalBeats <= 0) return;
-      const fitted = Math.floor(available / r.totalBeats);
-      setPixelsPerBeat(Math.max(3, Math.min(300, fitted)));
-    });
+    tracks();
+    requestAnimationFrame(measureWidth);
+  });
+
+  createEffect(() => {
+    if (tracks().length > 0) setZoomFactor(1.0);
+  });
+
+  onMount(() => {
+    window.addEventListener("resize", measureWidth);
+  });
+
+  onCleanup(() => {
+    window.removeEventListener("resize", measureWidth);
   });
 
   const selectTrack = (idx: number) => {
@@ -45,11 +73,12 @@ export default function ArrangementView() {
   const beatMarkers = () => {
     const markers: { pos: number; label: string; isBar: boolean }[] = [];
     const r = range();
+    const ppb = pixelsPerBeat();
     const startBeat = Math.floor(r.minStart);
     const endBeat = Math.ceil(r.maxEnd);
     for (let b = startBeat; b <= endBeat; b++) {
       markers.push({
-        pos: (b - r.minStart) * pixelsPerBeat(),
+        pos: (b - r.minStart) * ppb,
         label: b % 4 === 0 ? String(b) : "",
         isBar: b % 4 === 0,
       });
@@ -92,14 +121,14 @@ export default function ArrangementView() {
           </span>
           <input
             type="range"
-            min="3"
-            max="300"
-            value={pixelsPerBeat()}
-            onInput={(e) => setPixelsPerBeat(Number(e.currentTarget.value))}
+            min="0"
+            max="100"
+            value={zoomToSlider(zoomFactor())}
+            onInput={(e) => setZoomFactor(sliderToZoom(Number(e.currentTarget.value)))}
             style={{ width: "120px" }}
           />
           <span style={{ color: "var(--text-dim)", "font-size": "11px" }}>
-            {pixelsPerBeat()}px/beat
+            {zoomFactor().toFixed(1)}x
           </span>
         </div>
 
