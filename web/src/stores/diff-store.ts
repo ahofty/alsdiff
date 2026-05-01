@@ -15,6 +15,8 @@ export const [selectedClipName, setSelectedClipName] = createSignal<
   string | null
 >(null);
 export const [pixelsPerBeat, setPixelsPerBeat] = createSignal(30);
+export const [detailHeight, setDetailHeight] = createSignal(300);
+export const [detailCollapsed, setDetailCollapsed] = createSignal(false);
 export const [detailTab, setDetailTab] = createSignal<"devices" | "clip">(
   "devices",
 );
@@ -23,4 +25,6 @@ export function resetSelection(): void {
   setSelectedTrackIdx(null);
   setSelectedClipName(null);
   setDetailTab("devices");
+  setDetailHeight(300);
+  setDetailCollapsed(false);
 }

@@ -1,5 +1,4 @@
 .detail-pane {
-  height: var(--detail-height);
   background: var(--bg-detail);
   border-top: 1px solid var(--border);
   display: flex;
@@ -201,3 +200,17 @@
 .diff-indicator.modified { color: var(--color-modified); }
 .diff-indicator.unchanged .dot { background: var(--color-unchanged); }
 .diff-indicator.unchanged { color: var(--color-unchanged); }
+
+.resize-handle {
+  height: 6px;
+  cursor: row-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+  background: var(--color-modified);
+}

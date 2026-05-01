@@ -1,5 +1,4 @@
-import { For } from "solid-js";
-import { Show } from "solid-js";
+import { For, Show, createEffect } from "solid-js";
 import {
   tracks,
   pixelsPerBeat,
@@ -16,6 +15,20 @@ import TrackLane from "./TrackLane";
 export default function ArrangementView() {
   const range = () => computeTimelineRange(tracks());
   const totalWidth = () => range().totalBeats * pixelsPerBeat() + 100;
+
+  createEffect(() => {
+    const t = tracks();
+    if (t.length === 0) return;
+    queueMicrotask(() => {
+      const el = document.querySelector(".timeline-area");
+      if (!el) return;
+      const available = el.clientWidth;
+      const r = computeTimelineRange(t);
+      if (r.totalBeats <= 0) return;
+      const fitted = Math.floor(available / r.totalBeats);
+      setPixelsPerBeat(Math.max(3, Math.min(300, fitted)));
+    });
+  });
 
   const selectTrack = (idx: number) => {
     setSelectedTrackIdx(idx);

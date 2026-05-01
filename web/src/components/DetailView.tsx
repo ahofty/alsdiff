@@ -5,6 +5,7 @@ import {
   selectedClipName,
   detailTab,
   setDetailTab,
+  detailHeight,
 } from "../stores/diff-store";
 import {
   extractDevices,
@@ -38,7 +39,7 @@ export default function DetailView() {
   const hasClip = () => selectedClip() !== null;
 
   return (
-    <div class="detail-pane">
+    <div class="detail-pane" style={{ height: `${detailHeight()}px` }}>
       <Show
         when={selectedTrack()}
         fallback={

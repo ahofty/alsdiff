@@ -2,6 +2,7 @@ import { Show, createSignal } from "solid-js";
 import { diffResult, rawJson } from "./stores/diff-store";
 import FileUpload from "./components/FileUpload";
 import ArrangementView from "./components/ArrangementView";
+import ResizeHandle from "./components/ResizeHandle";
 import DetailView from "./components/DetailView";
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
         }
       >
         <ArrangementView />
+        <ResizeHandle />
         <DetailView />
         <Show when={rawJson()}>
           <div

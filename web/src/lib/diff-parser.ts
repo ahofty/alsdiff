@@ -116,12 +116,17 @@ export function computeTimelineRange(tracks: TrackData[]): TimelineRange {
   let minStart = Infinity;
   let maxEnd = -Infinity;
 
+  const allClips: ClipData[] = [];
   for (const track of tracks) {
-    const clips = extractClips(track);
-    for (const clip of clips) {
-      if (clip.startTime < minStart) minStart = clip.startTime;
-      if (clip.endTime > maxEnd) maxEnd = clip.endTime;
-    }
+    allClips.push(...extractClips(track));
+  }
+
+  const changedClips = allClips.filter((c) => c.change !== "Unchanged");
+  const source = changedClips.length > 0 ? changedClips : allClips;
+
+  for (const clip of source) {
+    if (clip.startTime < minStart) minStart = clip.startTime;
+    if (clip.endTime > maxEnd) maxEnd = clip.endTime;
   }
 
   if (minStart === Infinity) {
@@ -129,10 +134,13 @@ export function computeTimelineRange(tracks: TrackData[]): TimelineRange {
     maxEnd = 32;
   }
 
+  const range = maxEnd - minStart;
+  const padding = Math.max(4, range * 0.1);
+
   return {
-    minStart,
-    maxEnd,
-    totalBeats: maxEnd - minStart,
+    minStart: minStart - padding,
+    maxEnd: maxEnd + padding,
+    totalBeats: range + 2 * padding,
   };
 }
 
