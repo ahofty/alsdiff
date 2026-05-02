@@ -30,6 +30,9 @@ function sliderToZoom(val: number): number {
 }
 
 export default function ArrangementView() {
+  let headersRef: HTMLDivElement | undefined;
+  let timelineRef: HTMLDivElement | undefined;
+
   const range = () => computeTimelineRange(tracks());
   const totalWidth = () => {
     const ppb = pixelsPerBeat();
@@ -48,6 +51,16 @@ export default function ArrangementView() {
 
   createEffect(() => {
     if (tracks().length > 0) setZoomFactor(1.0);
+  });
+
+  createEffect(() => {
+    tracks(); // reactive dependency — re-run when tracks load and refs become available
+    const timeline = timelineRef;
+    const headers = headersRef;
+    if (!timeline || !headers) return;
+    const handler = () => { headers.scrollTop = timeline.scrollTop; };
+    timeline.addEventListener("scroll", handler);
+    onCleanup(() => timeline.removeEventListener("scroll", handler));
   });
 
   onMount(() => {
@@ -133,7 +146,7 @@ export default function ArrangementView() {
         </div>
 
         <div class="arrangement-content">
-          <div class="track-headers">
+          <div class="track-headers" ref={headersRef}>
             <div style={{ height: `${28}px` }} />
             <For each={tracks()}>
               {(track, idx) => (
@@ -146,7 +159,7 @@ export default function ArrangementView() {
             </For>
           </div>
 
-          <div class="timeline-area">
+          <div class="timeline-area" ref={timelineRef}>
             <div class="timeline-ruler" style={{ width: `${totalWidth()}px` }}>
               <For each={beatMarkers()}>
                 {(m) => (
