@@ -138,9 +138,9 @@ export function computeTimelineRange(tracks: TrackData[]): TimelineRange {
   const padding = Math.max(4, range * 0.1);
 
   return {
-    minStart: minStart - padding,
+    minStart: Math.max(0, minStart - padding),
     maxEnd: maxEnd + padding,
-    totalBeats: range + 2 * padding,
+    totalBeats: (maxEnd + padding) - Math.max(0, minStart - padding),
   };
 }
 

@@ -83,18 +83,32 @@ export default function ArrangementView() {
     setDetailTab("clip");
   };
 
+  // Ordered finest-to-coarsest; walk until interval * ppb >= threshold
+  const GRID_INTERVALS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+  const MIN_GRID_PX = 30;
+
   const beatMarkers = () => {
-    const markers: { pos: number; label: string; isBar: boolean }[] = [];
+    const markers: { pos: number; label: string; isMajor: boolean }[] = [];
     const r = range();
     const ppb = pixelsPerBeat();
-    const startBeat = Math.floor(r.minStart);
-    const endBeat = Math.ceil(r.maxEnd);
-    for (let b = startBeat; b <= endBeat; b++) {
-      markers.push({
-        pos: (b - r.minStart) * ppb,
-        label: b % 4 === 0 ? String(b) : "",
-        isBar: b % 4 === 0,
-      });
+
+    // Pick finest interval that keeps markers >= MIN_GRID_PX apart
+    let minor = GRID_INTERVALS[GRID_INTERVALS.length - 1];
+    for (const iv of GRID_INTERVALS) {
+      if (iv * ppb >= MIN_GRID_PX) { minor = iv; break; }
+    }
+    const major = minor * 2;
+
+    const start = Math.floor(r.minStart / minor) * minor;
+    const end = Math.ceil(r.maxEnd / minor) * minor;
+
+    for (let b = start; b <= end + minor * 0.5; b += minor) {
+      const isMajor = Math.abs(((b % major) + major) % major) < 1e-9;
+      let label = "";
+      if (isMajor) {
+        label = String(parseFloat((b / 4).toFixed(2)));
+      }
+      markers.push({ pos: (b - r.minStart) * ppb, label, isMajor });
     }
     return markers;
   };
@@ -169,7 +183,7 @@ export default function ArrangementView() {
                       left: `${m.pos}px`,
                       top: "0",
                       height: "100%",
-                      "border-left": `1px solid ${m.isBar ? "var(--border-light)" : "var(--border)"}`,
+                      "border-left": `${m.isMajor ? "2px" : "1px"} solid ${m.isMajor ? "var(--border-light)" : "var(--border)"}`,
                       display: "flex",
                       "align-items": "flex-end",
                       "padding-left": "3px",
