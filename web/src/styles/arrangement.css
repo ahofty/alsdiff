@@ -69,6 +69,15 @@
   z-index: 1;
 }
 
+.timeline-ruler-bottom {
+  height: var(--ruler-height);
+  background: var(--bg-header);
+  border-top: 1px solid var(--border);
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
 .track-lanes {
   position: relative;
 }

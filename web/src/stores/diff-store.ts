@@ -1,12 +1,18 @@
 import { createSignal } from "solid-js";
 import type { DiffResult, TrackData } from "../types";
 import { computeTimelineRange } from "../lib/diff-parser";
+import type { TimeSignature } from "../lib/time-format";
 
 export const [diffResult, setDiffResult] = createSignal<DiffResult | null>(
   null,
 );
 export const [rawJson, setRawJson] = createSignal<string>("");
 export const [tracks, setTracks] = createSignal<TrackData[]>([]);
+export const [tempo, setTempo] = createSignal(120);
+export const [timeSignature, setTimeSignature] = createSignal<TimeSignature>({
+  numer: 4,
+  denom: 4,
+});
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [error, setError] = createSignal<string | null>(null);
 export const [selectedTrackIdx, setSelectedTrackIdx] = createSignal<

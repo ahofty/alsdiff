@@ -6,6 +6,7 @@ import type {
   ClipData,
   TimelineRange,
 } from "../types";
+import type { TimeSignature } from "./time-format";
 
 function isItem(node: ViewNode): node is ItemView {
   return node.type === "item";
@@ -13,12 +14,6 @@ function isItem(node: ViewNode): node is ItemView {
 
 function isCollection(node: ViewNode): node is CollectionView {
   return node.type === "collection";
-}
-
-function findChildItems(children: ViewNode[], domainType: string): ItemView[] {
-  return children.filter(
-    (c): c is ItemView => isItem(c) && c.domain_type === domainType,
-  );
 }
 
 function findCollection(
@@ -110,6 +105,46 @@ export function extractRoutings(track: TrackData): ItemView | undefined {
   return track.children.find(
     (c): c is ItemView => isItem(c) && c.name === "Routings",
   );
+}
+
+export function extractTempo(diffChildren: ViewNode[]): number {
+  for (const child of diffChildren) {
+    if (isItem(child) && child.domain_type === "Track") {
+      const mixer = child.children?.find(
+        (c): c is ItemView => isItem(c) && c.name === "Main Mixer",
+      );
+      if (!mixer?.children) continue;
+      const tempo = mixer.children.find(
+        (c): c is ItemView => isItem(c) && c.name === "Tempo",
+      );
+      if (!tempo?.children) continue;
+      const value = getNumericField(tempo.children, "Value");
+      if (value !== undefined) return value;
+    }
+  }
+  return 120;
+}
+
+export function extractTimeSignature(
+  diffChildren: ViewNode[],
+): TimeSignature {
+  for (const child of diffChildren) {
+    if (isItem(child) && child.domain_type === "Track") {
+      const mixer = child.children?.find(
+        (c): c is ItemView => isItem(c) && c.name === "Main Mixer",
+      );
+      if (!mixer?.children) continue;
+      const ts = mixer.children.find(
+        (c): c is ItemView => isItem(c) && c.name === "Time Signature",
+      );
+      if (!ts?.children) continue;
+      const numer = getNumericField(ts.children, "Numerator");
+      const denom = getNumericField(ts.children, "Denominator");
+      if (numer !== undefined && denom !== undefined)
+        return { numer, denom };
+    }
+  }
+  return { numer: 4, denom: 4 };
 }
 
 export function computeTimelineRange(tracks: TrackData[]): TimelineRange {

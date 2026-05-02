@@ -1,8 +1,8 @@
-import { type JSX, Show } from "solid-js";
-import { setIsLoading, setError, setDiffResult, setTracks, setRawJson, isLoading, error } from "../stores/diff-store";
+import { Show } from "solid-js";
+import { setIsLoading, setError, setDiffResult, setTracks, setRawJson, setTempo, setTimeSignature, isLoading, error } from "../stores/diff-store";
 import { diffFilesJson } from "../lib/alsdiff-api";
-import { extractTracks } from "../lib/diff-parser";
-import type { DiffResult, ViewNode } from "../types";
+import { extractTracks, extractTempo, extractTimeSignature } from "../lib/diff-parser";
+import type { ViewNode } from "../types";
 
 export default function FileUpload() {
   let file1: File | null = null;
@@ -48,6 +48,8 @@ export default function FileUpload() {
       const extractedTracks = extractTracks(children);
       console.log("[alsdiff] extracted tracks:", extractedTracks.length);
       setTracks(extractedTracks);
+      setTempo(extractTempo(children));
+      setTimeSignature(extractTimeSignature(children));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

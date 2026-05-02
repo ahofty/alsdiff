@@ -5,12 +5,19 @@ import {
   zoomFactor,
   setZoomFactor,
   setTimelineWidth,
-  selectedTrackIdx,
   setSelectedTrackIdx,
   setSelectedClipName,
   setDetailTab,
+  tempo,
+  timeSignature,
 } from "../stores/diff-store";
 import { computeTimelineRange } from "../lib/diff-parser";
+import {
+  quarterNoteToPosition,
+  formatPosition,
+  quarterNoteToRealtime,
+  formatRealtime,
+} from "../lib/time-format";
 import TrackHeader from "./TrackHeader";
 import TrackLane from "./TrackLane";
 
@@ -91,8 +98,8 @@ export default function ArrangementView() {
     const markers: { pos: number; label: string; isMajor: boolean }[] = [];
     const r = range();
     const ppb = pixelsPerBeat();
+    const ts = timeSignature();
 
-    // Pick finest interval that keeps markers >= MIN_GRID_PX apart
     let minor = GRID_INTERVALS[GRID_INTERVALS.length - 1];
     for (const iv of GRID_INTERVALS) {
       if (iv * ppb >= MIN_GRID_PX) { minor = iv; break; }
@@ -103,10 +110,38 @@ export default function ArrangementView() {
     const end = Math.ceil(r.maxEnd / minor) * minor;
 
     for (let b = start; b <= end + minor * 0.5; b += minor) {
-      const isMajor = Math.abs(((b % major) + major) % major) < 1e-9;
+      const isMajor = Math.abs(((b % major) + major) % major) < 1e-6;
       let label = "";
       if (isMajor) {
-        label = String(parseFloat((b / 4).toFixed(2)));
+        const p = quarterNoteToPosition(b, ts);
+        label = formatPosition(p.bar, p.beat, p.sixteenth);
+      }
+      markers.push({ pos: (b - r.minStart) * ppb, label, isMajor });
+    }
+    return markers;
+  };
+
+  const realtimeMarkers = () => {
+    const markers: { pos: number; label: string; isMajor: boolean }[] = [];
+    const r = range();
+    const ppb = pixelsPerBeat();
+    const bpm = tempo();
+
+    let minor = GRID_INTERVALS[GRID_INTERVALS.length - 1];
+    for (const iv of GRID_INTERVALS) {
+      if (iv * ppb >= MIN_GRID_PX) { minor = iv; break; }
+    }
+    const major = minor * 2;
+
+    const start = Math.floor(r.minStart / minor) * minor;
+    const end = Math.ceil(r.maxEnd / minor) * minor;
+
+    for (let b = start; b <= end + minor * 0.5; b += minor) {
+      const isMajor = Math.abs(((b % major) + major) % major) < 1e-6;
+      let label = "";
+      if (isMajor) {
+        const rt = quarterNoteToRealtime(b, bpm);
+        label = formatRealtime(rt.min, rt.sec, rt.ms);
       }
       markers.push({ pos: (b - r.minStart) * ppb, label, isMajor });
     }
@@ -207,6 +242,29 @@ export default function ArrangementView() {
                     totalWidth={totalWidth()}
                     onClipSelect={selectClip}
                   />
+                )}
+              </For>
+            </div>
+
+            <div class="timeline-ruler-bottom" style={{ width: `${totalWidth()}px` }}>
+              <For each={realtimeMarkers()}>
+                {(m) => (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: `${m.pos}px`,
+                      top: "0",
+                      height: "100%",
+                      "border-left": `${m.isMajor ? "2px" : "1px"} solid ${m.isMajor ? "var(--border-light)" : "var(--border)"}`,
+                      display: "flex",
+                      "align-items": "flex-start",
+                      "padding-left": "3px",
+                      "font-size": "10px",
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    {m.label}
+                  </div>
                 )}
               </For>
             </div>
