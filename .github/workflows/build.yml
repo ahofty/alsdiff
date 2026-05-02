@@ -26,7 +26,6 @@ jobs:
             arch: x86_64
 
     runs-on: ${{ matrix.os }}
-
     steps:
       - name: Checkout tree
         uses: actions/checkout@v6
@@ -44,12 +43,33 @@ jobs:
         with:
           ocaml-compiler: 5
 
-      - run: opam install . --deps-only --with-test
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam install . --deps-only --with-test; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam install . --deps-only --with-test
+          fi
 
       # Build only the native CLI target; full `dune build` would pull JS targets.
-      - run: opam exec -- dune build bin/alsdiff.exe
+      - name: Build native CLI
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam exec -- dune build bin/alsdiff.exe; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam exec -- dune build bin/alsdiff.exe
+          fi
 
-      - run: opam exec -- dune runtest
+      - name: Run tests
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam exec -- dune runtest; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam exec -- dune runtest
+          fi
 
   js:
     strategy:
@@ -91,9 +111,23 @@ jobs:
         with:
           ocaml-compiler: 5
 
-      - run: opam install . --deps-only --with-test
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam install . --deps-only --with-test; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam install . --deps-only --with-test
+          fi
 
-      - run: opam exec -- dune build @runtest-js
+      - name: Run JS tests
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam exec -- dune build @runtest-js; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam exec -- dune build @runtest-js
+          fi
 
   web:
     runs-on: ubuntu-latest

@@ -27,7 +27,7 @@ depends: [
   "jsonschema"
   "fmt"
   "ptime"
-  "camlzip"
+  "camlzip" {>= "1.11"}
   "eio"
   "eio_main"
   "lwt" {with_js}

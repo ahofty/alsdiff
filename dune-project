@@ -37,7 +37,7 @@
     ptime
 
    ; Native-specific dependencies
-   camlzip
+   (camlzip (>= 1.11))
    eio
    eio_main
 

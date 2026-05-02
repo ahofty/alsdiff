@@ -87,10 +87,22 @@ jobs:
           ocaml-compiler: 5
 
       - name: Install dependencies
-        run: opam install . --deps-only
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam install . --deps-only; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam install . --deps-only
+          fi
 
       - name: Build native CLI target
-        run: opam exec -- dune build bin/alsdiff.exe
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            until opam exec -- dune build bin/alsdiff.exe; do echo "::warning::Retrying in 10s..."; sleep 10; done
+          else
+            opam exec -- dune build bin/alsdiff.exe
+          fi
 
       - name: Prepare install tree
         shell: bash
