@@ -13,9 +13,9 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style ~(format_time : View_model.dual_time_formatter) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item ~note_name_style change in
+  let item = View_model.create_liveset_item ~note_name_style ~format_time change in
   [View_model.Item item]
 
 type output_mode = Tree | Stats | Json
@@ -32,6 +32,7 @@ type config = {
   prefix_modified: string option;
   prefix_unchanged: string option;
   note_name_style: note_display_style option;
+  time_format: time_format option;
   max_collection_items: int option;
   dump_schema: bool;
   validate_config: string option;
@@ -79,6 +80,7 @@ let stats_incompatible_flags_provided config =
   || config.prefix_modified <> None
   || config.prefix_unchanged <> None
   || config.note_name_style <> None
+  || config.time_format <> None
   || config.max_collection_items <> None
 
 
@@ -108,7 +110,7 @@ let diff_cmd ~config ~domain_mgr : int =
   if (config.output_mode = Stats || config.output_mode = Json)
   && stats_incompatible_flags_provided config then begin
     Fmt.epr "Error: --mode stats/json is incompatible with --prefix-*, \
-             --note-name-style, and --max-collection-items@.";
+             --note-name-style, --time-format, and --max-collection-items@.";
     if config.git_mode then 2 else 1
   end else begin
     let file1, file2, reference_path =
@@ -141,7 +143,26 @@ let diff_cmd ~config ~domain_mgr : int =
       | Some style -> style
       | None -> View_model.Sharp
     in
-    let views = create_views ~note_name_style liveset_change in
+    let time_format_val = match config.time_format with
+      | Some f -> f
+      | None ->
+        let resolved_config = build_base_renderer_config
+            ~default_config:Text_renderer.quiet ~reference_path config in
+        resolved_config.time_format
+    in
+    let format_time = match time_format_val with
+      | QuarterNotes -> View_model.default_dual_time_formatter
+      | _ ->
+        let main_old = match liveset1.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        let main_new = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        View_model.make_dual_format_time time_format_val
+          ~tempo_events_old:(Track.MainTrack.get_tempo_events main_old)
+          ~ts_events_old:(Track.MainTrack.get_time_signature_events main_old)
+          ~tempo_events_new:(Track.MainTrack.get_tempo_events main_new)
+          ~ts_events_new:(Track.MainTrack.get_time_signature_events main_new)
+          ()
+    in
+    let views = create_views ~note_name_style ~format_time liveset_change in
 
     let output = match config.output_mode with
       | Stats -> render_stats ~config ~reference_path views
@@ -201,13 +222,17 @@ let note_name_style =
   let doc = "Note name display style. $(b,Sharp)=C# D# etc., $(b,Flat)=Db Eb etc. (default from preset: Sharp)" in
   Arg.(value & opt (some (enum ["Sharp", Sharp; "Flat", Flat])) None & info ["note-name-style"] ~docv:"STYLE" ~doc)
 
+let time_format =
+  let doc = "Time format for time fields. $(b,QuarterNotes)=raw floats (default), $(b,BeatTime)=bars:beats:sixteenths, $(b,RealTime)=mm:ss.ms" in
+  Arg.(value & opt (some (enum ["QuarterNotes", QuarterNotes; "BeatTime", BeatTime; "RealTime", RealTime])) None & info ["time-format"] ~docv:"FORMAT" ~doc)
+
 let max_collection_items =
   let doc = "Maximum number of items to show in collections (default from preset: None/10/50 depending on preset)" in
   Arg.(value & opt (some int) None & info ["max-collection-items"] ~docv:"N" ~doc)
 
 let stats_mode_doc =
   "Stats mode supports --config and --preset for customizing which types appear in statistics. \
-   Incompatible with --prefix-*, --note-name-style, and --max-collection-items."
+   Incompatible with --prefix-*, --note-name-style, --time-format, and --max-collection-items."
 
 let output_mode =
   let doc = "Output mode. $(b,tree)=hierarchical tree view (default), $(b,stats)=summary statistics of changes by type, $(b,json)=structured JSON output. " ^ stats_mode_doc in
@@ -318,8 +343,8 @@ let cmd =
   Cmd.make (Cmd.info "alsdiff" ~version:(match version () with
       | None -> "dev"
       | Some v -> Version.to_string v) ~doc ~man ~exits) @@
-  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ max_collection_items and+ output_mode and+ dump_schema and+ validate_config in
-  let cfg = { positional_args; git_mode; output_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; max_collection_items; dump_schema; validate_config } in
+  let+ positional_args and+ git_mode and+ config_file and+ preset and+ dump_preset and+ prefix_added and+ prefix_removed and+ prefix_modified and+ prefix_unchanged and+ note_name_style and+ time_format and+ max_collection_items and+ output_mode and+ dump_schema and+ validate_config in
+  let cfg = { positional_args; git_mode; output_mode; config_file; preset; dump_preset; prefix_added; prefix_removed; prefix_modified; prefix_unchanged; note_name_style; time_format; max_collection_items; dump_schema; validate_config } in
   config_ref := Some cfg;
   ()
 

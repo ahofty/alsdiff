@@ -11,22 +11,23 @@ let load_liveset ~domain_mgr file =
   let xml = File.open_als file in
   Liveset.create xml file
 
-let create_views ~note_name_style (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
+let create_views ~note_name_style ~(format_time : View_model.dual_time_formatter) (change : (Liveset.t, Liveset.Patch.t) Diff.structured_change)
   : View_model.view list =
-  let item = View_model.create_liveset_item ~note_name_style change in
+  let item = View_model.create_liveset_item ~note_name_style ~format_time change in
   [View_model.Item item]
 
 type config = {
   positional_args: string list;
-  note_name_style: note_display_style option;
+  note_name_style: note_display_style;
+  time_format: time_format;
 }
-
-let config_ref : config option ref = ref None
 
 let tui_cmd ~config ~domain_mgr : int =
   match config.positional_args with
   | [] ->
-    Alsdiff_tui_lib.App.run_browser ~root:(Sys.getcwd ()) ();
+    Alsdiff_tui_lib.App.run_browser
+      ~root:(Sys.getcwd ())
+      ~note_name_style:config.note_name_style ();
     0
   | [f1; f2] ->
     let liveset1, liveset2 = Fiber.pair
@@ -44,14 +45,23 @@ let tui_cmd ~config ~domain_mgr : int =
         `Unchanged
     in
 
-    let note_name_style = match config.note_name_style with
-      | Some style -> style
-      | None -> View_model.Sharp
+    let format_time = match config.time_format with
+      | QuarterNotes -> View_model.default_dual_time_formatter
+      | _ ->
+        let main_old = match liveset1.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        let main_new = match liveset2.Liveset.main with Track.Main m -> m | _ -> failwith "Liveset.main must be Track.Main" in
+        View_model.make_dual_format_time config.time_format
+          ~tempo_events_old:(Track.MainTrack.get_tempo_events main_old)
+          ~ts_events_old:(Track.MainTrack.get_time_signature_events main_old)
+          ~tempo_events_new:(Track.MainTrack.get_tempo_events main_new)
+          ~ts_events_new:(Track.MainTrack.get_time_signature_events main_new)
+          ()
     in
-    let views = create_views ~note_name_style liveset_change in
+    let views = create_views ~note_name_style:config.note_name_style ~format_time liveset_change in
 
     (* Run the TUI *)
-    Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full ();
+    Alsdiff_tui_lib.App.run ~views ~detail_config:Config.full
+      ~time_format:config.time_format ();
 
     (* Print export output if any *)
     (match !Alsdiff_tui_lib.Update.export_output_ref with
@@ -60,8 +70,7 @@ let tui_cmd ~config ~domain_mgr : int =
 
     0
   | _ ->
-    Fmt.epr "Error: Usage: alsdiff-tui [FILE1.als FILE2.als]@.";
-    1
+    assert false (* validated by Term.ret *)
 
 let positional_args =
   let doc = "FILE1.als FILE2.als - the two Ableton Live Set files to compare" in
@@ -70,6 +79,10 @@ let positional_args =
 let note_name_style =
   let doc = "Note name display style (Sharp or Flat)" in
   Arg.(value & opt (some (enum ["Sharp", Sharp; "Flat", Flat])) None & info ["note-name-style"] ~docv:"STYLE" ~doc)
+
+let time_format =
+  let doc = "Time format for time fields (QuarterNotes, BeatTime, RealTime)" in
+  Arg.(value & opt (enum ["QuarterNotes", QuarterNotes; "BeatTime", BeatTime; "RealTime", RealTime]) QuarterNotes & info ["time-format"] ~docv:"FORMAT" ~doc)
 
 let cmd =
   let doc = "Compare two Ableton Live Set (.als) files in an interactive terminal UI" in
@@ -97,29 +110,31 @@ let cmd =
   ] in
   let exits = Cmd.Exit.info 0 ~doc:"success" :: List.filter (fun e -> Cmd.Exit.info_code e <> 0) Cmd.Exit.defaults in
   Cmd.make (Cmd.info "alsdiff-tui" ~doc ~man ~exits) @@
-  let+ positional_args and+ note_name_style in
-  let cfg = { positional_args; note_name_style } in
-  config_ref := Some cfg;
-  ()
+  Term.ret @@
+  let+ positional_args and+ note_name_style and+ time_format in
+  let note_name_style = match note_name_style with
+    | Some style -> style
+    | None -> View_model.Sharp
+  in
+  let cfg = { positional_args; note_name_style; time_format } in
+  let n = List.length positional_args in
+  if n <> 0 && n <> 2 then
+    `Error (true, "expected 0 or 2 file arguments")
+  else
+    `Ok cfg
 
 let main () =
   Printexc.record_backtrace true;
 
   try
-    let exit_code = Cmd.eval cmd in
-    if exit_code <> 0 then exit_code
-    else match !config_ref with
-      | None -> 0
-      | Some cfg ->
-        let n = List.length cfg.positional_args in
-        if n <> 0 && n <> 2 then begin
-          Fmt.epr "Error: Usage: alsdiff-tui [FILE1.als FILE2.als]@.";
-          1
-        end else begin
-          Eio_main.run @@ fun env ->
-          let domain_mgr = Eio.Stdenv.domain_mgr env in
-          tui_cmd ~config:cfg ~domain_mgr
-        end
+    match Cmd.eval_value ~catch:false cmd with
+    | Ok (`Ok cfg) ->
+      Eio_main.run @@ fun env ->
+      let domain_mgr = Eio.Stdenv.domain_mgr env in
+      tui_cmd ~config:cfg ~domain_mgr
+    | Ok (`Version | `Help) -> 0
+    | Error `Parse | Error `Term -> 1
+    | Error `Exn -> 1
   with
   | File.File_error (file, msg) ->
     let bt = Printexc.get_backtrace () in

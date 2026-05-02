@@ -2,7 +2,7 @@
 
 (name alsdiff)
 
-(version 0.2.0)
+(version 0.5.0)
 
 (source
  (github krfantasy/alsdiff))
@@ -37,7 +37,7 @@
     ptime
 
    ; Native-specific dependencies
-   (camlzip (>= 1.11))
+   camlzip
    eio
    eio_main
 

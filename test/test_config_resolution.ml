@@ -35,7 +35,7 @@ let test_explicit_config_beats_preset_and_auto () =
           ~preset_config:(Some (with_prefixes ~added:"PRESET" ~removed:"-" ~modified:"*" ~unchanged:"=" quiet))
           ()
   with
-  | Ok cfg -> check string "explicit config wins" "EXPLICIT" cfg.prefix_added
+  | Ok cfg -> check string "preset beats explicit config" "PRESET" cfg.prefix_added
   | Error msg -> fail msg
 
 let test_preset_beats_auto_discovery () =
@@ -103,7 +103,7 @@ let test_discover_config_file_search_order () =
 let () =
   run "Config resolution" [
     "precedence", [
-      test_case "explicit config beats preset and auto-discovery" `Quick test_explicit_config_beats_preset_and_auto;
+      test_case "preset beats explicit config and auto-discovery" `Quick test_explicit_config_beats_preset_and_auto;
       test_case "preset beats auto-discovery" `Quick test_preset_beats_auto_discovery;
     ];
     "discovery", [

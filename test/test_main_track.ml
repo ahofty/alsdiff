@@ -225,6 +225,126 @@ let test_main_track_edge_case_empty () =
   Alcotest.(check int) "empty main track automation count" 0 (List.length main_track.automations);
   Alcotest.(check int) "empty main track device count" 0 (List.length main_track.devices)
 
+let ts_eq = Alsdiff_live.Clip.TimeSignature.equal
+
+let test_decode_time_signature_44 () =
+  (* 44to114: values 200..208 map to 3/4 .. 11/4 *)
+  let checks = [
+    (200, 3, 4); (201, 4, 4); (202, 5, 4); (203, 6, 4);
+    (204, 7, 4); (205, 8, 4); (206, 9, 4); (207, 10, 4); (208, 11, 4);
+  ] in
+  List.iter (fun (code, numer, denom) ->
+      let ts = MainTrack.decode_time_signature code in
+      Alcotest.(check bool) (Printf.sprintf "%d -> %d/%d" code numer denom)
+        true (ts_eq ts { Alsdiff_live.Clip.TimeSignature.numer; denom })
+    ) checks
+
+let test_decode_time_signature_48 () =
+  (* 48to138: values 299..309 map to 3/8 .. 13/8 *)
+  let checks = [
+    (299, 3, 8); (300, 4, 8); (301, 5, 8); (302, 6, 8);
+    (303, 7, 8); (304, 8, 8); (305, 9, 8); (306, 10, 8);
+    (307, 11, 8); (308, 12, 8); (309, 13, 8);
+  ] in
+  List.iter (fun (code, numer, denom) ->
+      let ts = MainTrack.decode_time_signature code in
+      Alcotest.(check bool) (Printf.sprintf "%d -> %d/%d" code numer denom)
+        true (ts_eq ts { Alsdiff_live.Clip.TimeSignature.numer; denom })
+    ) checks
+
+let test_time_to_position_48to138 () =
+  (* 48to138 project: time signature automation from 4/8 through 13/8 *)
+  let open Alsdiff_live.Clip.TimeSignature in
+  let events = [
+    (-63072000.0, { numer = 4; denom = 8 });
+    (16.0, { numer = 3; denom = 8 });
+    (40.0, { numer = 4; denom = 8 });
+    (72.0, { numer = 5; denom = 8 });
+    (92.0, { numer = 6; denom = 8 });
+    (116.0, { numer = 7; denom = 8 });
+    (144.0, { numer = 8; denom = 8 });
+    (176.0, { numer = 9; denom = 8 });
+    (212.0, { numer = 10; denom = 8 });
+    (232.0, { numer = 11; denom = 8 });
+    (254.0, { numer = 12; denom = 8 });
+    (278.0, { numer = 13; denom = 8 });
+  ] in
+  let check_pos time (exp_bar, exp_beat, exp_sixteenth) =
+    let bar, beat, sixteenth = MainTrack.time_to_position events time in
+    let label = Printf.sprintf "Time=%.0f -> (%d,%d,%d)" time exp_bar exp_beat exp_sixteenth in
+    Alcotest.(check int) (label ^ " bar") exp_bar bar;
+    Alcotest.(check int) (label ^ " beat") exp_beat beat;
+    Alcotest.(check int) (label ^ " sixteenth") exp_sixteenth sixteenth
+  in
+  check_pos 16.0 (9, 1, 1);
+  check_pos 40.0 (25, 1, 1);
+  check_pos 72.0 (41, 1, 1);
+  check_pos 92.0 (49, 1, 1);
+  check_pos 116.0 (57, 1, 1);
+  check_pos 144.0 (65, 1, 1);
+  check_pos 176.0 (73, 1, 1);
+  check_pos 212.0 (81, 1, 1);
+  check_pos 232.0 (85, 1, 1);
+  check_pos 254.0 (89, 1, 1);
+  check_pos 278.0 (93, 1, 1)
+
+let test_time_to_realtime_constant_tempo () =
+  (* Constant 120 BPM: 1 quarter note = 0.5 seconds *)
+  let events : (float * float * Alsdiff_live.Automation.CurveControls.t option) list = [
+    (-63072000.0, 120.0, None);
+    (1000.0, 120.0, None);
+  ] in
+  let check_rt qn (exp_min, exp_sec, exp_ms) =
+    let min, sec, ms = MainTrack.time_to_realtime qn events in
+    let label = Printf.sprintf "qn=%.0f -> (%d,%d,%d)" qn exp_min exp_sec exp_ms in
+    Alcotest.(check int) (label ^ " min") exp_min min;
+    Alcotest.(check int) (label ^ " sec") exp_sec sec;
+    Alcotest.(check int) (label ^ " ms") exp_ms ms
+  in
+  check_rt 16.0 (0, 8, 0);
+  check_rt 120.0 (1, 0, 0);
+  check_rt 278.0 (2, 19, 0)
+
+let test_time_to_realtime_linear_ramp () =
+  (* Tempo ramps from 60 to 120 BPM over 120 quarter notes (no curves) *)
+  let events : (float * float * Alsdiff_live.Automation.CurveControls.t option) list = [
+    (-63072000.0, 60.0, None);
+    (120.0, 120.0, None);
+  ] in
+  (* seconds = 60 * 120 / (120-60) * ln(120/60) = 120 * ln(2) ≈ 83.178 *)
+  let min, sec, ms = MainTrack.time_to_realtime 120.0 events in
+  Alcotest.(check int) "min" 1 min;
+  Alcotest.(check int) "sec" 23 sec;
+  Alcotest.(check int) "ms" 178 ms
+
+let test_time_to_realtime_tempo () =
+  (* Actual tempo automation from a real project, with Bezier curve *)
+  let open Alsdiff_live.Automation in
+  let events : (float * float * CurveControls.t option) list = [
+    (-63072000.0, 120.0, None);
+    (16.0, 120.0, None);
+    (16.0, 100.0, None);
+    (34.0, 100.0, None);
+    (40.0, 110.0, None);
+    (56.0, 110.0, Some { CurveControls.curve1_x = 0.0390625;
+                         curve1_y = 0.8828125;
+                         curve2_x = 0.1171875;
+                         curve2_y = 0.9609375 });
+    (72.0, 120.0, None);
+  ] in
+  let check_rt qn (exp_min, exp_sec, exp_ms) =
+    let min, sec, ms = MainTrack.time_to_realtime qn events in
+    let label = Printf.sprintf "qn=%.0f -> (%d,%d,%d)" qn exp_min exp_sec exp_ms in
+    Alcotest.(check int) (label ^ " min") exp_min min;
+    Alcotest.(check int) (label ^ " sec") exp_sec sec;
+    Alcotest.(check int) (label ^ " ms") exp_ms ms
+  in
+  check_rt 16.0 (0, 8, 0);
+  check_rt 34.0 (0, 18, 800);
+  check_rt 40.0 (0, 22, 231);
+  check_rt 56.0 (0, 30, 958);
+  check_rt 72.0 (0, 39, 34) (* DAW shows 35ms; 1ms numerical precision difference *)
+
 let () =
   Alcotest.run "MainTrack" [
     "track_creation", [
@@ -235,5 +355,17 @@ let () =
       Alcotest.test_case "parse MainTrack routing configuration" `Quick test_main_track_routing;
       Alcotest.test_case "comprehensive MainTrack parsing" `Quick test_main_track_comprehensive;
       Alcotest.test_case "handle empty track edge case" `Quick test_main_track_edge_case_empty;
+    ];
+    "decode_time_signature", [
+      Alcotest.test_case "decode /4 time signatures (200..208)" `Quick test_decode_time_signature_44;
+      Alcotest.test_case "decode /8 time signatures (299..309)" `Quick test_decode_time_signature_48;
+    ];
+    "time_to_position", [
+      Alcotest.test_case "48to138 bar-boundary mappings" `Quick test_time_to_position_48to138;
+    ];
+    "time_to_realtime", [
+      Alcotest.test_case "constant 120 BPM" `Quick test_time_to_realtime_constant_tempo;
+      Alcotest.test_case "linear ramp 60->120 BPM" `Quick test_time_to_realtime_linear_ramp;
+      Alcotest.test_case "tempo automation" `Quick test_time_to_realtime_tempo;
     ]
   ]

@@ -209,6 +209,16 @@ alsdiff-windows-x86_64-master-ca82745.zip
 
 `alsdiff` uses a flexible configuration system to control output detail levels. You can use built-in presets, custom JSON configuration files, or individual command-line options.
 
+### Configuration Priority
+
+When multiple configuration sources are provided, `alsdiff` resolves conflicts using this priority order (highest wins):
+
+1. **Individual CLI flags** (e.g., `--time-format`, `--note-name-style`) — per-field overrides
+2. **`--preset`** — named workflow preset
+3. **`--config`** — explicit configuration file
+4. **Auto-discovered `.alsdiff.json`** — found in project directory, git root, or home directory
+5. **Built-in default** — fallback preset
+
 ### Quick Start with Presets
 
 The easiest way to get started is using one of the built-in presets:
@@ -323,6 +333,7 @@ alsdiff v1.als v2.als --mode stats --config myconfig.json
 - `--prefix-unchanged PREFIX` - Custom prefix for unchanged items (default: "=")
 - `--note-name-style STYLE` - MIDI note display: Sharp or Flat (default: Sharp)
 - `--max-collection-items N` - Limit items shown in collections
+- `--time-format FORMAT` - Time display format: `QuarterNotes` (raw floats, default), `BeatTime` (bars:beats:sixteenths), or `RealTime` (mm:ss.ms)
 
 #### Git Integration
 
@@ -536,7 +547,7 @@ alsflow project.als --format dot        # output DOT graph
    + [x] Curve
  * Global settings
    - [x] Tempo
-   - [ ] Time signature
+   - [x] Time signature
    - [ ] Scale
  * Utils
    - [x] Mixer

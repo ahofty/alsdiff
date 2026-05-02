@@ -60,6 +60,9 @@ type detail_config = {
   (* Note name display style for MIDI notes *)
   note_name_style : note_display_style; [@ref "note_display_style"] [@default Sharp]
 
+  (* Time format for time fields *)
+  time_format : time_format; [@ref "time_format"] [@default QuarterNotes]
+
   (* Indentation width for rendered output (number of spaces) *)
   indent_width : int [@default 2];
 }
@@ -341,6 +344,8 @@ let compact = {
   (* Sharp note names - using default *)
   note_name_style = Sharp;
 
+  time_format = QuarterNotes;
+
   (* Indentation width - using default *)
   indent_width = 2;
 }
@@ -369,6 +374,8 @@ let full = {
 
   (* Sharp note names - using default *)
   note_name_style = Sharp;
+
+  time_format = QuarterNotes;
 
   (* Indentation width - using default *)
   indent_width = 2;
@@ -408,6 +415,8 @@ let inline = {
   (* Sharp note names - using default *)
   note_name_style = Sharp;
 
+  time_format = QuarterNotes;
+
   (* Indentation width - using default *)
   indent_width = 2;
 }
@@ -438,6 +447,8 @@ let quiet = {
 
   (* Sharp note names - using default *)
   note_name_style = Sharp;
+
+  time_format = QuarterNotes;
 
   (* Indentation width - using default *)
   indent_width = 2;
@@ -491,6 +502,8 @@ let stats_default = {
   (* Sharp note names *)
   note_name_style = Sharp;
 
+  time_format = QuarterNotes;
+
   (* Indent width *)
   indent_width = 2;
 }
@@ -519,6 +532,8 @@ let verbose = {
 
   (* Sharp note names - using default *)
   note_name_style = Sharp;
+
+  time_format = QuarterNotes;
 
   (* Indentation width - using default *)
   indent_width = 2;
@@ -596,6 +611,8 @@ let mixing = {
 
   (* Sharp note names (though notes are ignored in this preset) - using default *)
   note_name_style = Sharp;
+
+  time_format = QuarterNotes;
 
   (* Indentation width - using default *)
   indent_width = 2;
@@ -678,6 +695,8 @@ let composer = {
 
   (* Sharp note names (standard for DAW MIDI editing) - using default *)
   note_name_style = Sharp;
+
+  time_format = QuarterNotes;
 
   (* Indentation width - using default *)
   indent_width = 2;
@@ -836,6 +855,7 @@ let detail_config_json_schema () : Yojson.Basic.t =
         ("per_change_override", per_change_override_jsonschema);
         ("type_override_entry", type_override_entry_jsonschema);
         ("note_display_style", View_model.note_display_style_jsonschema);
+        ("time_format", View_model.time_format_jsonschema);
       ]
       detail_config_jsonschema
   in
@@ -846,6 +866,7 @@ let detail_config_json_schema () : Yojson.Basic.t =
     "prefix_modified";
     "prefix_unchanged";
     "note_name_style";
+    "time_format";
     "indent_width";
   ] in
   (* Add $id to schema root and $schema property for config files *)
@@ -1034,12 +1055,12 @@ let resolve_detail_config
     ~preset_config
     ()
   =
-  match config_file with
-  | Some config_path ->
-    load_and_validate_config config_path
+  match preset_config with
+  | Some preset -> Ok preset
   | None ->
-    match preset_config with
-    | Some preset -> Ok preset
+    match config_file with
+    | Some config_path ->
+      load_and_validate_config config_path
     | None ->
       match discover_config_file ~cwd ?home_dir ~reference_path () with
       | Some auto_config -> load_and_validate_config auto_config

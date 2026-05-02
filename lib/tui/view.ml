@@ -232,7 +232,7 @@ let render_help (model : Model.t) : Msg.t Mosaic.t =
     Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column (header :: bindings_list)
   in
   let sections = List.map render_section help_sections in
-  let footer = Mosaic.text ~style:(fg Mosaic.Ansi.Color.blue default) "\nPress any key to close" in
+  let footer = Mosaic.text ~style:(fg Mosaic.Ansi.Color.blue default) "\nPress Esc to close" in
   Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column (title :: sections @ [footer])
 
 let render_export_selector (model : Model.t) : Msg.t Mosaic.t =
@@ -298,7 +298,7 @@ let render_stats (model : Model.t) : Msg.t Mosaic.t =
     Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column (header :: lines)
   in
   let domain_lines = List.map render_domain domain_stats in
-  let footer = Mosaic.text ~style:(fg Mosaic.Ansi.Color.blue default) "\nPress any key to close" in
+  let footer = Mosaic.text ~style:(fg Mosaic.Ansi.Color.blue default) "\nPress Esc to close" in
   Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column
     ([title; total_section] @ total_lines @ [domain_section] @ domain_lines @ [footer])
 
