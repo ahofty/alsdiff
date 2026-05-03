@@ -1,5 +1,5 @@
 import { Show, createSignal } from "solid-js";
-import { diffResult, rawJson } from "./stores/diff-store";
+import { diffResult, rawJson, isLoading } from "./stores/diff-store";
 import FileUpload from "./components/FileUpload";
 import ArrangementView from "./components/ArrangementView";
 import ResizeHandle from "./components/ResizeHandle";
@@ -17,20 +17,28 @@ export default function App() {
       }}
     >
       <FileUpload />
+      <Show when={isLoading()}>
+        <div class="loading-container">
+          <div class="loading-spinner" />
+          Comparing files...
+        </div>
+      </Show>
       <Show
         when={diffResult()}
         fallback={
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              "align-items": "center",
-              "justify-content": "center",
-              color: "var(--text-dim)",
-            }}
-          >
-            Upload two .als files to compare
-          </div>
+          <Show when={!isLoading()}>
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                "align-items": "center",
+                "justify-content": "center",
+                color: "var(--text-dim)",
+              }}
+            >
+              Upload two .als files to compare
+            </div>
+          </Show>
         }
       >
         <ArrangementView />
