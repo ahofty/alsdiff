@@ -1,47 +1,59 @@
 import type { DiffResult } from "../types";
 
-declare global {
-  interface Window {
-    alsdiff: {
-      diffFilesById: (
-        id1: number,
-        id2: number,
-        name1: string,
-        name2: string,
-        options: { mode: string; preset: string },
-      ) => Promise<string>;
-      setDebug: (enabled: boolean) => void;
+let worker: Worker | null = null;
+let requestIdCounter = 0;
+const pendingRequests = new Map<
+  number,
+  { resolve: (result: DiffResult) => void; reject: (error: Error) => void }
+>();
+
+function getWorker(): Worker {
+  if (!worker) {
+    worker = new Worker("/alsdiff-worker.js", { type: "classic" });
+    worker.onmessage = (e: MessageEvent) => {
+      const msg = e.data;
+      const entry = pendingRequests.get(msg.requestId);
+      if (!entry) return;
+      pendingRequests.delete(msg.requestId);
+      if (msg.type === "result") {
+        try {
+          const result: DiffResult = JSON.parse(msg.result);
+          console.log("[alsdiff] parsed diff:", result.diff.length, "top-level nodes");
+          entry.resolve(result);
+        } catch (err) {
+          entry.reject(new Error(`Failed to parse diff result: ${err}`));
+        }
+      } else if (msg.type === "error") {
+        entry.reject(new Error(msg.error));
+      }
     };
-    __alsdiff_files: Record<number, File>;
+    worker.onerror = (e: ErrorEvent) => {
+      console.error("[alsdiff] worker error:", e.message);
+      for (const [id, entry] of pendingRequests) {
+        entry.reject(new Error(`Worker error: ${e.message}`));
+        pendingRequests.delete(id);
+      }
+      worker = null;
+    };
   }
-}
-
-let fileIdCounter = 0;
-const fileStore: Record<number, File> = {};
-
-function storeFile(file: File): number {
-  const id = fileIdCounter++;
-  fileStore[id] = file;
-  window.__alsdiff_files = { ...window.__alsdiff_files, ...fileStore };
-  return id;
+  return worker;
 }
 
 export function diffFilesJson(
   file1: File,
   file2: File,
 ): Promise<DiffResult> {
-  const id1 = storeFile(file1);
-  const id2 = storeFile(file2);
+  const w = getWorker();
+  const requestId = requestIdCounter++;
 
-  return window.alsdiff
-    .diffFilesById(id1, id2, file1.name, file2.name, {
-      mode: "json",
-      preset: "verbose",
-    })
-    .then((jsonStr: string) => {
-      console.log("[alsdiff] raw JSON response:", jsonStr);
-      const result: DiffResult = JSON.parse(jsonStr);
-      console.log("[alsdiff] parsed diff:", result.diff.length, "top-level nodes");
-      return result;
+  return new Promise<DiffResult>((resolve, reject) => {
+    pendingRequests.set(requestId, { resolve, reject });
+    w.postMessage({
+      type: "diff",
+      requestId,
+      file1,
+      file2,
+      options: { mode: "json", preset: "verbose" },
     });
+  });
 }

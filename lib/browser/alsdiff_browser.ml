@@ -81,7 +81,7 @@ let promise_string_to_lwt (js_promise : Js.Unsafe.any) : string Lwt.t =
 let decompress_file_to_string (file_obj : Js.Unsafe.any) : string Lwt.t =
   let js_code =
     {js|(async function(f) {
-      const dlog = (...args) => { if (window.__alsdiff_debug) console.log(...args); };
+      const dlog = (...args) => { if (globalThis.__alsdiff_debug) console.log(...args); };
       try {
         dlog('[alsdiff] Starting decompression with pako.js...');
         const buffer = await f.arrayBuffer();
@@ -109,10 +109,10 @@ let decompress_file_to_string (file_obj : Js.Unsafe.any) : string Lwt.t =
 let decompress_file_id_to_string (file_id : int) (file_name : string) : string Lwt.t =
   let js_code =
     {js|(async function(fileId, fileName) {
-      const dlog = (...args) => { if (window.__alsdiff_debug) console.log(...args); };
+      const dlog = (...args) => { if (globalThis.__alsdiff_debug) console.log(...args); };
       try {
         dlog('[alsdiff] Starting decompression with pako.js for:', fileName, 'ID:', fileId);
-        const file = window.__alsdiff_files && window.__alsdiff_files[fileId];
+        const file = globalThis.__alsdiff_files && globalThis.__alsdiff_files[fileId];
         if (!file) {
           throw new Error('File not found in storage: ID ' + fileId);
         }
@@ -687,10 +687,10 @@ let create_js_promise_for_request (request_id : int) : Js.Unsafe.any =
     Js.Unsafe.js_expr
       {js|((id) => new Promise((resolve, reject) => {
         const key = String(id);
-        if (!window.__alsdiff_promises) {
-          window.__alsdiff_promises = Object.create(null);
+        if (!globalThis.__alsdiff_promises) {
+          globalThis.__alsdiff_promises = Object.create(null);
         }
-        window.__alsdiff_promises[key] = {
+        globalThis.__alsdiff_promises[key] = {
           resolve,
           reject,
           settled: false,
@@ -704,7 +704,7 @@ let settle_js_promise ~(request_id : int) ~(method_name : string) (payload : str
     Js.Unsafe.js_expr
       {js|((id, methodName, payload) => {
         const key = String(id);
-        const table = window.__alsdiff_promises;
+        const table = globalThis.__alsdiff_promises;
         if (!table || !table[key]) {
           return false;
         }
