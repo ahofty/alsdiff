@@ -297,11 +297,9 @@ let build_automation_item_from_event_patch event_patch =
   } in
   create_automation_item ~get_pointee_name:(fun _ -> "Target") (`Modified automation_patch)
 
-let get_single_event_summary item =
+let get_single_event_item item =
   check int "single event item" 1 (List.length item.children);
-  let event_item = get_item (List.hd item.children) in
-  (* The summary should be in the item's name *)
-  event_item.name
+  get_item (List.hd item.children)
 
 let test_create_automation_item_curve_added_summary () =
   let event_patch = {
@@ -315,10 +313,28 @@ let test_create_automation_item_curve_added_summary () =
       };
   } in
   let item = build_automation_item_from_event_patch event_patch in
-  let summary = get_single_event_summary item in
-  check string "combined summary with curve add"
-    "Event[0]: Time: 1.00->2.00, Value: 10.00->11.00, Curve Added: Curve1=(0.10,0.20) Curve2=(0.30,0.40)"
-    summary
+  let event_item = get_single_event_item item in
+  check string "event name" "Event[0]" event_item.name;
+  check bool "event change" true (event_item.change = Modified);
+  (* Check Time field *)
+  let time_field = get_field (find_view_by_name "Time" event_item.children) in
+  check bool "time field change" true (time_field.change = Modified);
+  (match time_field.oldval, time_field.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "time old" 1.0 o;
+     check (float 0.001) "time new" 2.0 n
+   | _ -> fail "Expected Ffloat for Time");
+  (* Check Value field *)
+  let value_field = get_field (find_view_by_name "Value" event_item.children) in
+  check bool "value field change" true (value_field.change = Modified);
+  (match value_field.oldval, value_field.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "value old" 10.0 o;
+     check (float 0.001) "value new" 11.0 n
+   | _ -> fail "Expected Ffloat for Value");
+  (* Check Curve child item with Added curve *)
+  let curve_item = get_item (find_view_by_name "Curve" event_item.children) in
+  check bool "curve item change" true (curve_item.change = Modified)
 
 let test_create_automation_item_curve_removed_summary () =
   let event_patch = {
@@ -332,10 +348,19 @@ let test_create_automation_item_curve_removed_summary () =
       };
   } in
   let item = build_automation_item_from_event_patch event_patch in
-  let summary = get_single_event_summary item in
-  check string "combined summary with curve remove"
-    "Event[0]: Time: 1.00->2.00, Curve Removed: Curve1=(0.50,0.60) Curve2=(0.70,0.80)"
-    summary
+  let event_item = get_single_event_item item in
+  check string "event name" "Event[0]" event_item.name;
+  check bool "event change" true (event_item.change = Modified);
+  (* Check Time field *)
+  let time_field = get_field (find_view_by_name "Time" event_item.children) in
+  (match time_field.oldval, time_field.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "time old" 1.0 o;
+     check (float 0.001) "time new" 2.0 n
+   | _ -> fail "Expected Ffloat for Time");
+  (* Check Curve child item with Removed curve *)
+  let curve_item = get_item (find_view_by_name "Curve" event_item.children) in
+  check bool "curve item change" true (curve_item.change = Modified)
 
 let test_create_automation_item_curve_modified_summary () =
   let event_patch = {
@@ -349,10 +374,32 @@ let test_create_automation_item_curve_modified_summary () =
       };
   } in
   let item = build_automation_item_from_event_patch event_patch in
-  let summary = get_single_event_summary item in
-  check string "combined summary with curve modify"
-    "Event[0]: Time: 1.00->2.00, Value: 10.00->11.00, C1X: 0.10->0.20, C1Y: 0.20->0.30, C2X: 0.30->0.40, C2Y: 0.40->0.50"
-    summary
+  let event_item = get_single_event_item item in
+  check string "event name" "Event[0]" event_item.name;
+  check bool "event change" true (event_item.change = Modified);
+  (* Check Time field *)
+  let time_field = get_field (find_view_by_name "Time" event_item.children) in
+  (match time_field.oldval, time_field.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "time old" 1.0 o;
+     check (float 0.001) "time new" 2.0 n
+   | _ -> fail "Expected Ffloat for Time");
+  (* Check Value field *)
+  let value_field = get_field (find_view_by_name "Value" event_item.children) in
+  (match value_field.oldval, value_field.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "value old" 10.0 o;
+     check (float 0.001) "value new" 11.0 n
+   | _ -> fail "Expected Ffloat for Value");
+  (* Check Curve child item with Modified curve sub-fields *)
+  let curve_item = get_item (find_view_by_name "Curve" event_item.children) in
+  check bool "curve item change" true (curve_item.change = Modified);
+  let c1x = get_field (find_view_by_name "Curve1 X" curve_item.children) in
+  (match c1x.oldval, c1x.newval with
+   | Some (Ffloat o), Some (Ffloat n) ->
+     check (float 0.001) "c1x old" 0.1 o;
+     check (float 0.001) "c1x new" 0.2 n
+   | _ -> fail "Expected Ffloat for Curve1 X")
 
 let test_create_liveset_item_with_main_only_change () =
   let path = Utils.resolve_test_data_path "t4.xml" in

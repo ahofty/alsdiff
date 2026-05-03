@@ -1662,16 +1662,6 @@ let create_send_item
     @param get_pointee_name function to resolve pointee IDs to names
     @param c the automation structured change
 *)
-let format_event_value v =
-  match v with
-  | Automation.FloatEvent f -> Printf.sprintf "%.2f" f
-  | Automation.IntEvent i -> string_of_int i
-  | Automation.EnumEvent e -> Printf.sprintf "%d" e
-
-let format_curve_controls (curve : Automation.CurveControls.t) : string =
-  Printf.sprintf "Curve1=(%.2f,%.2f) Curve2=(%.2f,%.2f)"
-    curve.curve1_x curve.curve1_y curve.curve2_x curve.curve2_y
-
 let create_automation_item
     ~(get_pointee_name : int -> string)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
@@ -1686,80 +1676,20 @@ let create_automation_item
     | `Unchanged -> "Automation"
   in
 
-  let format_time_new t = format_time_str format_time.format_new t in
-  let format_time_old t = format_time_str format_time.format_old t in
-
-  (* Build event field views for Modified automation *)
   let event_children : view list = match c with
     | `Modified patch ->
-      (* Build a map of event_id to event_change for Modified events (which don't have id directly) *)
-      (* We'll use index since events are ordered by id *)
       patch.events |> List.mapi (fun i event_change ->
           let event_id = match event_change with
             | `Added e -> e.Automation.EnvelopeEvent.id
             | `Removed e -> e.Automation.EnvelopeEvent.id
-            | `Modified _ -> i (* Use index as placeholder, will show as "Event[i]" *)
+            | `Modified _ -> i
             | `Unchanged -> -1
           in
-          let prefix = Printf.sprintf "Event[%d]" event_id in
-
-          (match event_change with
-           | `Added e ->
-             let curve_str = match e.Automation.EnvelopeEvent.curve with
-               | None -> ""
-               | Some c -> ", " ^ format_curve_controls c
-             in
-             Some (Item { name = Printf.sprintf "%s Added: Time=%s, Value=%s%s"
-                              prefix (format_time_new e.Automation.EnvelopeEvent.time)
-                              (format_event_value e.Automation.EnvelopeEvent.value) curve_str;
-                          change = Added; domain_type = DTEvent; children = [] })
-           | `Removed e ->
-             let curve_str = match e.Automation.EnvelopeEvent.curve with
-               | None -> ""
-               | Some c -> ", " ^ format_curve_controls c
-             in
-             Some (Item { name = Printf.sprintf "%s Removed: Time=%s, Value=%s%s"
-                              prefix (format_time_old e.Automation.EnvelopeEvent.time)
-                              (format_event_value e.Automation.EnvelopeEvent.value) curve_str;
-                          change = Removed; domain_type = DTEvent; children = [] })
-           | `Modified ep ->
-             let time_change = match ep.Automation.EnvelopeEvent.Patch.time with
-               | `Unchanged -> None
-               | `Modified { oldval; newval } -> Some (oldval, newval)
-             in
-             let value_change = match ep.Automation.EnvelopeEvent.Patch.value with
-               | `Unchanged -> None
-               | `Modified { oldval; newval } -> Some (oldval, newval)
-             in
-             let curve_change_str = match ep.Automation.EnvelopeEvent.Patch.curve with
-               | `Unchanged -> None
-               | `Added c -> Some ("Curve Added: " ^ format_curve_controls c)
-               | `Removed c -> Some ("Curve Removed: " ^ format_curve_controls c)
-               | `Modified cp ->
-                 let changed_parts = [
-                   (match cp.curve1_x with `Modified { oldval; newval } -> Some (Printf.sprintf "C1X: %.2f->%.2f" oldval newval) | _ -> None);
-                   (match cp.curve1_y with `Modified { oldval; newval } -> Some (Printf.sprintf "C1Y: %.2f->%.2f" oldval newval) | _ -> None);
-                   (match cp.curve2_x with `Modified { oldval; newval } -> Some (Printf.sprintf "C2X: %.2f->%.2f" oldval newval) | _ -> None);
-                   (match cp.curve2_y with `Modified { oldval; newval } -> Some (Printf.sprintf "C2Y: %.2f->%.2f" oldval newval) | _ -> None);
-                 ] |> List.filter_map Fun.id |> String.concat ", " in
-                 Some changed_parts
-             in
-             let parts = List.filter_map Fun.id [
-                 (match time_change with
-                  | Some (oldval, newval) -> Some (Printf.sprintf "Time: %s->%s" (format_time_old oldval) (format_time_new newval))
-                  | None -> None);
-                 (match value_change with
-                  | Some (oldval, newval) ->
-                    Some (Printf.sprintf "Value: %s->%s"
-                            (format_event_value oldval) (format_event_value newval))
-                  | None -> None);
-                 curve_change_str;
-               ] in
-             (match parts with
-              | [] -> None
-              | _ -> Some (Item { name = Printf.sprintf "%s: %s" prefix (String.concat ", " parts);
-                                  change = Modified; domain_type = DTEvent; children = [] }))
-           | `Unchanged -> None)
+          match event_change with
+          | `Unchanged -> None
+          | _ ->
+            let event_item = create_events_item ~format_time event_change in
+            Some (Item { event_item with name = Printf.sprintf "Event[%d]" event_id })
         ) |> List.filter_map Fun.id
     | `Added _ | `Removed _ | `Unchanged -> []
   in
