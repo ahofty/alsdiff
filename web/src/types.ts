@@ -74,8 +74,51 @@ export interface ClipData {
   clipType: "midi" | "audio";
 }
 
+export interface MidiNoteData {
+  pitch: number;
+  time: number;
+  duration: number;
+  velocity: number;
+  offVelocity: number;
+  change: ChangeType;
+  oldPitch?: number;
+  oldTime?: number;
+  oldDuration?: number;
+  oldVelocity?: number;
+}
+
+export interface NoteRange {
+  minPitch: number;
+  maxPitch: number;
+  minTime: number;
+  maxTime: number;
+}
+
 export interface TimelineRange {
   minStart: number;
   maxEnd: number;
   totalBeats: number;
+}
+
+export interface CurveControls {
+  curve1X: number;
+  curve1Y: number;
+  curve2X: number;
+  curve2Y: number;
+}
+
+export interface AutomationEvent {
+  time: number;
+  value: number;
+  change: ChangeType;
+  oldTime?: number;
+  oldValue?: number;
+  curve?: CurveControls;
+}
+
+export interface AutomationRange {
+  minValue: number;
+  maxValue: number;
+  minTime: number;
+  maxTime: number;
 }

@@ -8,7 +8,7 @@ export function quarterNoteToPosition(
   ts: TimeSignature,
 ): { bar: number; beat: number; sixteenth: number } {
   if (qn <= 0) return { bar: 1, beat: 1, sixteenth: 1 };
-  if (ts.denom === 0) return { bar: 1, beat: 1, sixteenth: 1 };
+  if (ts.denom === 0 || ts.numer === 0) return { bar: 1, beat: 1, sixteenth: 1 };
   const qnPerBar = (ts.numer * 4) / ts.denom;
   const qnPerBeat = 4 / ts.denom;
   const barCount = Math.floor(qn / qnPerBar);

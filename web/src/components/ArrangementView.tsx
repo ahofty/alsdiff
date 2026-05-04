@@ -20,6 +20,8 @@ import {
 } from "../lib/time-format";
 import TrackHeader from "./TrackHeader";
 import TrackLane from "./TrackLane";
+import { extractClips, extractAutomations } from "../lib/diff-parser";
+import { extractMidiNotes } from "../lib/midi-notes";
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 20;
@@ -87,6 +89,18 @@ export default function ArrangementView() {
   const selectClip = (trackIdx: number, clipName: string) => {
     setSelectedTrackIdx(trackIdx);
     setSelectedClipName(clipName);
+    const track = tracks()[trackIdx];
+    if (track) {
+      const clip = extractClips(track).find((c) => c.name === clipName);
+      if (clip && clip.clipType === "midi" && extractMidiNotes(clip.children).length > 0) {
+        setDetailTab("pianoRoll");
+        return;
+      }
+      if (extractAutomations(track).length > 0) {
+        setDetailTab("automation");
+        return;
+      }
+    }
     setDetailTab("clip");
   };
 

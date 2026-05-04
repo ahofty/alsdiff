@@ -33,9 +33,14 @@ export const pixelsPerBeat = (): number => {
 
 export const [detailHeight, setDetailHeight] = createSignal(300);
 export const [detailCollapsed, setDetailCollapsed] = createSignal(false);
-export const [detailTab, setDetailTab] = createSignal<"devices" | "clip">(
-  "devices",
-);
+export const [detailTab, setDetailTab] = createSignal<
+  "devices" | "clip" | "pianoRoll" | "automation"
+>("devices");
+
+export const [pianoRollZoomFactor, setPianoRollZoomFactor] = createSignal(1.0);
+
+export const [selectedAutomationIdx, setSelectedAutomationIdx] = createSignal(0);
+export const [automationZoomFactor, setAutomationZoomFactor] = createSignal(1.0);
 
 export function resetSelection(): void {
   setSelectedTrackIdx(null);
@@ -43,4 +48,5 @@ export function resetSelection(): void {
   setDetailTab("devices");
   setDetailHeight(300);
   setDetailCollapsed(false);
+  setSelectedAutomationIdx(0);
 }

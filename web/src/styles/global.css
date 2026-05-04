@@ -14,6 +14,10 @@
   --color-unchanged: #666;
   --color-clip-midi: #6a9fb5;
   --color-clip-audio: #d4a574;
+  --piano-white-key: #e8e8e8;
+  --piano-black-key: #3a3a3a;
+  --piano-grid-line: #333;
+  --piano-grid-beat: #555;
   --border: #444;
   --border-light: #555;
   --track-height: 48px;

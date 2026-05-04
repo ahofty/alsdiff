@@ -1,4 +1,4 @@
-import { Show, For } from "solid-js";
+import { Show } from "solid-js";
 import {
   tracks,
   selectedTrackIdx,
@@ -10,9 +10,13 @@ import {
 import {
   extractDevices,
   extractClips,
+  extractAutomations,
 } from "../lib/diff-parser";
+import { extractMidiNotes } from "../lib/midi-notes";
 import DeviceChain from "./DeviceChain";
 import ClipDetail from "./ClipDetail";
+import PianoRollView from "./PianoRollView";
+import AutomationView from "./AutomationView";
 import type { ClipData } from "../types";
 
 export default function DetailView() {
@@ -37,6 +41,17 @@ export default function DetailView() {
 
   const hasDevices = () => devices().length > 0;
   const hasClip = () => selectedClip() !== null;
+  const hasNotes = () => {
+    const clip = selectedClip();
+    if (!clip || clip.clipType !== "midi") return false;
+    return extractMidiNotes(clip.children).length > 0;
+  };
+
+  const automations = () => {
+    const track = selectedTrack();
+    return track ? extractAutomations(track) : [];
+  };
+  const hasAutomations = () => automations().length > 0;
 
   return (
     <div class="detail-pane" style={{ height: `${detailHeight()}px` }}>
@@ -73,6 +88,22 @@ export default function DetailView() {
               Clip: {selectedClip()?.name}
             </div>
           </Show>
+          <Show when={hasNotes()}>
+            <div
+              class={`detail-tab ${detailTab() === "pianoRoll" ? "active" : ""}`}
+              onClick={() => setDetailTab("pianoRoll")}
+            >
+              Piano Roll
+            </div>
+          </Show>
+          <Show when={hasAutomations()}>
+            <div
+              class={`detail-tab ${detailTab() === "automation" ? "active" : ""}`}
+              onClick={() => setDetailTab("automation")}
+            >
+              Automation ({automations().length})
+            </div>
+          </Show>
         </div>
         <div class="detail-content">
           <Show when={detailTab() === "devices" && hasDevices()}>
@@ -80,6 +111,12 @@ export default function DetailView() {
           </Show>
           <Show when={detailTab() === "clip" && hasClip()}>
             <ClipDetail clipChildren={selectedClip()?.children ?? []} />
+          </Show>
+          <Show when={detailTab() === "pianoRoll" && hasNotes()}>
+            <PianoRollView clipChildren={selectedClip()?.children ?? []} />
+          </Show>
+          <Show when={detailTab() === "automation" && hasAutomations()}>
+            <AutomationView automationItems={automations()} />
           </Show>
         </div>
       </Show>

@@ -3,6 +3,8 @@ import { render } from "solid-js/web";
 import "./styles/global.css";
 import "./styles/arrangement.css";
 import "./styles/detail.css";
+import "./styles/piano-roll.css";
+import "./styles/automation.css";
 import App from "./App";
 
 const root = document.getElementById("app");

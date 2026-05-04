@@ -175,7 +175,7 @@ export function computeTimelineRange(tracks: TrackData[]): TimelineRange {
   return {
     minStart: Math.max(0, minStart - padding),
     maxEnd: maxEnd + padding,
-    totalBeats: (maxEnd + padding) - Math.max(0, minStart - padding),
+    totalBeats: Math.max(1, (maxEnd + padding) - Math.max(0, minStart - padding)),
   };
 }
 
