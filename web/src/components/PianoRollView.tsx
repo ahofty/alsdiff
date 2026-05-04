@@ -11,6 +11,7 @@ import {
   isBlackKey,
 } from "../lib/midi-notes";
 import { quarterNoteToPosition, formatPosition } from "../lib/time-format";
+import { zoomToSlider, sliderToZoom, handleWheelZoom } from "../lib/zoom";
 import type { ViewNode, MidiNoteData, NoteRange } from "../types";
 
 const ROW_HEIGHT = 14;
@@ -19,18 +20,6 @@ const VELOCITY_LANE_HEIGHT = 56;
 
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 10;
-const LOG_RATIO = ZOOM_MAX / ZOOM_MIN;
-
-function zoomToSlider(zoom: number): number {
-  return Math.round(
-    (Math.log(zoom / ZOOM_MIN) / Math.log(LOG_RATIO)) * 100,
-  );
-}
-
-function sliderToZoom(val: number): number {
-  const t = val / 100;
-  return ZOOM_MIN * Math.pow(LOG_RATIO, t);
-}
 
 const GRID_INTERVALS = [0.25, 0.5, 1, 2, 4];
 const MIN_GRID_PX = 25;
@@ -208,9 +197,9 @@ export default function PianoRollView(props: Props) {
           type="range"
           min="0"
           max="100"
-          value={zoomToSlider(pianoRollZoomFactor())}
+          value={zoomToSlider(pianoRollZoomFactor(), ZOOM_MIN, ZOOM_MAX)}
           onInput={(e) =>
-            setPianoRollZoomFactor(sliderToZoom(Number(e.currentTarget.value)))
+            setPianoRollZoomFactor(sliderToZoom(Number(e.currentTarget.value), ZOOM_MIN, ZOOM_MAX))
           }
           style={{ width: "100px" }}
         />
@@ -240,7 +229,13 @@ export default function PianoRollView(props: Props) {
           </div>
         </div>
 
-        <div class="piano-scroll-area" ref={scrollRef}>
+        <div
+          class="piano-scroll-area"
+          ref={scrollRef}
+          onWheel={(e) =>
+            handleWheelZoom(e, pianoRollZoomFactor(), setPianoRollZoomFactor, ZOOM_MIN, ZOOM_MAX)
+          }
+        >
           <div style={{ width: `${gridWidth()}px` }}>
             <div class="piano-ruler" style={{ width: `${gridWidth()}px` }}>
               <For each={beatMarkers()}>

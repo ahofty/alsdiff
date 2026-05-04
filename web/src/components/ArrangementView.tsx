@@ -22,21 +22,10 @@ import TrackHeader from "./TrackHeader";
 import TrackLane from "./TrackLane";
 import { extractClips, extractAutomations } from "../lib/diff-parser";
 import { extractMidiNotes } from "../lib/midi-notes";
+import { zoomToSlider, sliderToZoom, handleWheelZoom } from "../lib/zoom";
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 20;
-const LOG_RATIO = ZOOM_MAX / ZOOM_MIN;
-
-function zoomToSlider(zoom: number): number {
-  return Math.round(
-    (Math.log(zoom / ZOOM_MIN) / Math.log(LOG_RATIO)) * 100,
-  );
-}
-
-function sliderToZoom(val: number): number {
-  const t = val / 100;
-  return ZOOM_MIN * Math.pow(LOG_RATIO, t);
-}
 
 export default function ArrangementView() {
   let headersRef: HTMLDivElement | undefined;
@@ -199,8 +188,8 @@ export default function ArrangementView() {
             type="range"
             min="0"
             max="100"
-            value={zoomToSlider(zoomFactor())}
-            onInput={(e) => setZoomFactor(sliderToZoom(Number(e.currentTarget.value)))}
+            value={zoomToSlider(zoomFactor(), ZOOM_MIN, ZOOM_MAX)}
+            onInput={(e) => setZoomFactor(sliderToZoom(Number(e.currentTarget.value), ZOOM_MIN, ZOOM_MAX))}
             style={{ width: "120px" }}
           />
           <span style={{ color: "var(--text-dim)", "font-size": "11px" }}>
@@ -222,7 +211,13 @@ export default function ArrangementView() {
             </For>
           </div>
 
-          <div class="timeline-area" ref={timelineRef}>
+          <div
+            class="timeline-area"
+            ref={timelineRef}
+            onWheel={(e) =>
+              handleWheelZoom(e, zoomFactor(), setZoomFactor, ZOOM_MIN, ZOOM_MAX)
+            }
+          >
             <div class="timeline-ruler" style={{ width: `${totalWidth()}px` }}>
               <For each={beatMarkers()}>
                 {(m) => (
