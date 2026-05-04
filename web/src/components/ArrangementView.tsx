@@ -10,32 +10,43 @@ import {
   setDetailTab,
   tempo,
   timeSignature,
+  selectedTrackIdx,
+  selectedClipName,
 } from "../stores/diff-store";
-import { computeTimelineRange } from "../lib/diff-parser";
-import {
-  quarterNoteToPosition,
-  formatPosition,
-  quarterNoteToRealtime,
-  formatRealtime,
-} from "../lib/time-format";
-import TrackHeader from "./TrackHeader";
-import TrackLane from "./TrackLane";
-import { extractClips, extractAutomations } from "../lib/diff-parser";
+import { computeTimelineRange, extractClips, extractAutomations } from "../lib/diff-parser";
 import { extractMidiNotes } from "../lib/midi-notes";
+import { quarterNoteToPosition, formatPosition, quarterNoteToRealtime, formatRealtime } from "../lib/time-format";
 import { zoomToSlider, sliderToZoom, handleWheelZoom } from "../lib/zoom";
+import { setupCanvas, clearCSSColorCache, computeGridInterval } from "../lib/canvas-utils";
+import TrackHeader from "./TrackHeader";
+import {
+  renderArrangement,
+  hitTestTracks,
+  getTrackIndexFromY,
+  type ArrangementRenderParams,
+} from "../lib/renderers/arrangement-renderer";
+import type { HitRect } from "../lib/hit-testing";
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 20;
+const TRACK_HEIGHT = 48;
+const RULER_HEIGHT = 28;
+const GRID_INTERVALS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+const MIN_GRID_PX = 30;
 
 export default function ArrangementView() {
   let headersRef: HTMLDivElement | undefined;
   let timelineRef: HTMLDivElement | undefined;
+  let canvasRef: HTMLCanvasElement | undefined;
+  let hitRects: HitRect[] = [];
+  let rafId = 0;
 
   const range = () => computeTimelineRange(tracks());
   const totalWidth = () => {
     const ppb = pixelsPerBeat();
     return range().totalBeats * ppb;
   };
+  const tracksHeight = () => tracks().length * TRACK_HEIGHT;
 
   const measureWidth = () => {
     const el = document.querySelector(".timeline-area");
@@ -52,7 +63,7 @@ export default function ArrangementView() {
   });
 
   createEffect(() => {
-    tracks(); // reactive dependency — re-run when tracks load and refs become available
+    tracks();
     const timeline = timelineRef;
     const headers = headersRef;
     if (!timeline || !headers) return;
@@ -93,9 +104,71 @@ export default function ArrangementView() {
     setDetailTab("clip");
   };
 
-  // Ordered finest-to-coarsest; walk until interval * ppb >= threshold
-  const GRID_INTERVALS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
-  const MIN_GRID_PX = 30;
+  const draw = () => {
+    const canvas = canvasRef;
+    const timeline = timelineRef;
+    if (!canvas || !timeline) return;
+
+    const w = totalWidth();
+    const h = tracksHeight();
+    if (w <= 0 || h <= 0) return;
+
+    clearCSSColorCache();
+    const ctx = setupCanvas(canvas, w, h);
+
+    const params: ArrangementRenderParams = {
+      tracks: tracks(),
+      range: range(),
+      ppb: pixelsPerBeat(),
+      selectedTrackIdx: selectedTrackIdx(),
+      selectedClipName: selectedClipName(),
+      totalWidth: w,
+      extractClips,
+    };
+
+    hitRects = renderArrangement(ctx, params, {
+      scrollLeft: timeline.scrollLeft,
+      visibleWidth: timeline.clientWidth,
+    });
+  };
+
+  const scheduleDraw = () => {
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(draw);
+  };
+
+  createEffect(() => {
+    tracks();
+    pixelsPerBeat();
+    selectedTrackIdx();
+    selectedClipName();
+    scheduleDraw();
+  });
+
+  createEffect(() => {
+    const timeline = timelineRef;
+    if (!timeline) return;
+    timeline.addEventListener("scroll", scheduleDraw, { passive: true });
+    onCleanup(() => timeline.removeEventListener("scroll", scheduleDraw));
+  });
+
+  const handleCanvasClick = (e: MouseEvent) => {
+    const canvas = canvasRef;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const worldX = e.clientX - rect.left;
+    const worldY = e.clientY - rect.top;
+
+    const hit = hitTestTracks(hitRects, worldX, worldY);
+    if (hit) {
+      selectClip(hit.trackIdx, hit.clipName);
+      return;
+    }
+    const trackIdx = getTrackIndexFromY(worldY);
+    if (trackIdx !== null && trackIdx < tracks().length) {
+      selectTrack(trackIdx);
+    }
+  };
 
   const beatMarkers = () => {
     const markers: { pos: number; label: string; isMajor: boolean }[] = [];
@@ -103,10 +176,7 @@ export default function ArrangementView() {
     const ppb = pixelsPerBeat();
     const ts = timeSignature();
 
-    let minor = GRID_INTERVALS[GRID_INTERVALS.length - 1];
-    for (const iv of GRID_INTERVALS) {
-      if (iv * ppb >= MIN_GRID_PX) { minor = iv; break; }
-    }
+    const minor = computeGridInterval(ppb, GRID_INTERVALS, MIN_GRID_PX);
     const major = minor * 2;
 
     const start = Math.floor(r.minStart / minor) * minor;
@@ -130,10 +200,7 @@ export default function ArrangementView() {
     const ppb = pixelsPerBeat();
     const bpm = tempo();
 
-    let minor = GRID_INTERVALS[GRID_INTERVALS.length - 1];
-    for (const iv of GRID_INTERVALS) {
-      if (iv * ppb >= MIN_GRID_PX) { minor = iv; break; }
-    }
+    const minor = computeGridInterval(ppb, GRID_INTERVALS, MIN_GRID_PX);
     const major = minor * 2;
 
     const start = Math.floor(r.minStart / minor) * minor;
@@ -199,7 +266,7 @@ export default function ArrangementView() {
 
         <div class="arrangement-content">
           <div class="track-headers" ref={headersRef}>
-            <div style={{ height: `${28}px` }} />
+            <div style={{ height: `${RULER_HEIGHT}px` }} />
             <For each={tracks()}>
               {(track, idx) => (
                 <TrackHeader
@@ -241,18 +308,12 @@ export default function ArrangementView() {
               </For>
             </div>
 
-            <div class="track-lanes" style={{ width: `${totalWidth()}px` }}>
-              <For each={tracks()}>
-                {(track, idx) => (
-                  <TrackLane
-                    track={track}
-                    index={idx()}
-                    offset={range().minStart}
-                    totalWidth={totalWidth()}
-                    onClipSelect={selectClip}
-                  />
-                )}
-              </For>
+            <div style={{ width: `${totalWidth()}px`, height: `${tracksHeight()}px`, position: "relative" }}>
+              <canvas
+                ref={canvasRef}
+                onClick={handleCanvasClick}
+                style={{ display: "block" }}
+              />
             </div>
 
             <div class="timeline-ruler-bottom" style={{ width: `${totalWidth()}px` }}>
