@@ -30,7 +30,7 @@ import type { HitRect } from "../lib/hit-testing";
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 20;
-const TRACK_HEIGHT = 48;
+const TRACK_HEIGHT = 64;
 const RULER_HEIGHT = 28;
 const GRID_INTERVALS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
 const MIN_GRID_PX = 30;

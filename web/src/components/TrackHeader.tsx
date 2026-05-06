@@ -1,5 +1,7 @@
 import type { TrackData } from "../types";
 import DiffIndicator from "./DiffIndicator";
+import MixerStrip from "./Mixer";
+import { extractMixer } from "../lib/diff-parser";
 import { selectedTrackIdx, collapsedGroups, setCollapsedGroups } from "../stores/diff-store";
 
 interface Props {
@@ -24,6 +26,7 @@ export default function TrackHeader(props: Props) {
     return "";
   };
   const expanded = () => !collapsedGroups().has(props.track.trackId);
+  const mixer = () => extractMixer(props.track);
 
   const toggleGroup = (e: MouseEvent) => {
     e.stopPropagation();
@@ -81,6 +84,7 @@ export default function TrackHeader(props: Props) {
         {trackType()}
       </span>
       <span class="track-name">{trackLabel()}</span>
+      {mixer() && <MixerStrip mixer={mixer()!} />}
       {props.track.change !== "Unchanged" && (
         <DiffIndicator change={props.track.change} showLabel={false} />
       )}

@@ -162,7 +162,7 @@ export function extractDevices(track: TrackData): ItemView[] {
 
 export function extractMixer(track: TrackData): ItemView | undefined {
   return track.children.find(
-    (c): c is ItemView => isItem(c) && c.name === "Mixer",
+    (c): c is ItemView => isItem(c) && (c.name === "Mixer" || c.name === "Main Mixer"),
   );
 }
 
