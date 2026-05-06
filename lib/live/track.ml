@@ -123,6 +123,7 @@ module MidiTrack = struct
     id : int;                     [@id.id] [@patch.identity]
     name : string;
     current_name : string;        [@patch.identity]
+    group_id : int;               (* -1 = no parent *)
     clips : Clip.MidiClip.t list;
     automations : Automation.t list;
     devices : Device.t list;
@@ -133,6 +134,7 @@ module MidiTrack = struct
   let create (xml : Xml.t) : t =
     let id = Xml.get_int_attr "Id" xml in
     let name = Upath.get_attr "/Name/EffectiveName" "Value" xml in
+    let group_id = Option.value (Upath.get_int_attr_opt "/TrackGroupId" "Value" xml) ~default:(-1) in
     let automations =
       Upath.find_all_seq "/AutomationEnvelopes/*/AutomationEnvelope" xml
       |> Seq.map (fun x -> x |> snd |> Automation.create)
@@ -148,7 +150,7 @@ module MidiTrack = struct
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> Mixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
 
-    { id; name; current_name = name; clips; automations; devices; mixer; routings }
+    { id; name; current_name = name; group_id; clips; automations; devices; mixer; routings }
 
 end
 
@@ -158,6 +160,7 @@ module AudioTrack = struct
     id : int;                     [@id.id] [@patch.identity]
     name : string;
     current_name : string;        [@patch.identity]
+    group_id : int;               (* -1 = no parent *)
     clips : Clip.AudioClip.t list;
     automations : Automation.t list;
     devices : Device.t list;
@@ -168,6 +171,7 @@ module AudioTrack = struct
   let create (xml : Xml.t) : t =
     let id = Xml.get_int_attr "Id" xml in
     let name = Upath.get_attr "/Name/EffectiveName" "Value" xml in
+    let group_id = Option.value (Upath.get_int_attr_opt "/TrackGroupId" "Value" xml) ~default:(-1) in
     let automations =
       Upath.find_all_seq "/AutomationEnvelopes/*/AutomationEnvelope" xml
       |> Seq.map (fun x -> x |> snd |> Automation.create)
@@ -182,7 +186,7 @@ module AudioTrack = struct
       |> List.of_seq in
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> Mixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
-    { id; name; current_name = name; clips; automations; devices; mixer; routings }
+    { id; name; current_name = name; group_id; clips; automations; devices; mixer; routings }
 
 end
 

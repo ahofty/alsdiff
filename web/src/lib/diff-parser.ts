@@ -3,6 +3,7 @@ import type {
   ItemView,
   CollectionView,
   TrackData,
+  TrackNode,
   ClipData,
   TimelineRange,
 } from "../types";
@@ -38,21 +39,91 @@ function getNumericField(
   return undefined;
 }
 
+function getTrackIntField(children: ViewNode[], fieldName: string, defaultVal: number): number {
+  const field = children.find(c => c.type === "field" && c.name === fieldName);
+  if (field && field.type === "field") return ((field.new_value ?? field.old_value) as number) ?? defaultVal;
+  return defaultVal;
+}
+
+/** Extract track ID from item name like "AudioTrack (#17): Bell" → 17 */
+function extractTrackIdFromName(name: string): number {
+  const m = name.match(/\(#(\d+)\)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 export function extractTracks(livesetChildren: ViewNode[]): TrackData[] {
   const tracks: TrackData[] = [];
 
   for (const child of livesetChildren) {
     if (isItem(child) && child.domain_type === "Track") {
+      const tc = child.children ?? [];
+      const fieldTrackId = getTrackIntField(tc, "TrackId", 0);
       tracks.push({
         name: child.name,
         change: child.change,
         domainType: child.domain_type,
-        children: child.children ?? [],
+        trackId: fieldTrackId || extractTrackIdFromName(child.name),
+        groupId: getTrackIntField(tc, "GroupId", -1),
+        children: tc,
       });
     }
   }
 
   return tracks;
+}
+
+export function buildTrackHierarchy(tracks: TrackData[]): TrackNode[] {
+  const nodes: TrackNode[] = tracks.map((track, i) => ({
+    track,
+    trackIndex: i,
+    depth: 0,
+    children: [],
+  }));
+
+  // Build index from trackId to node (first occurrence wins for lookups)
+  const idToNode = new Map<number, TrackNode>();
+  for (const node of nodes) {
+    if (!idToNode.has(node.track.trackId)) {
+      idToNode.set(node.track.trackId, node);
+    }
+  }
+
+  const topNodes: TrackNode[] = [];
+  for (const node of nodes) {
+    if (node.track.groupId !== -1 && idToNode.has(node.track.groupId)) {
+      idToNode.get(node.track.groupId)!.children.push(node);
+    } else {
+      topNodes.push(node);
+    }
+  }
+
+  const setDepth = (ns: TrackNode[], depth: number) => {
+    for (const n of ns) {
+      n.depth = depth;
+      setDepth(n.children, depth + 1);
+    }
+  };
+  setDepth(topNodes, 0);
+
+  return topNodes;
+}
+
+export function flattenVisibleTracks(
+  rootNodes: TrackNode[],
+  collapsedGroups: Set<number>,
+): TrackNode[] {
+  const result: TrackNode[] = [];
+  const walk = (nodes: TrackNode[]) => {
+    for (const node of nodes) {
+      result.push(node);
+      const isGroup = node.children.length > 0;
+      if (isGroup && !collapsedGroups.has(node.track.trackId)) {
+        walk(node.children);
+      }
+    }
+  };
+  walk(rootNodes);
+  return result;
 }
 
 export function extractClips(track: TrackData): ClipData[] {

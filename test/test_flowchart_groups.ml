@@ -286,6 +286,7 @@ let test_external_input_node_created_for_audioin_external () =
       id = 68;
       name = "Test Track";
       current_name = "Test Track";
+      group_id = -1;
       routings = {
         audio_in = {
           route_type = Track.Routing.AudioIn;

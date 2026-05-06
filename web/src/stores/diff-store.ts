@@ -42,6 +42,8 @@ export const [pianoRollZoomFactor, setPianoRollZoomFactor] = createSignal(1.0);
 export const [selectedAutomationIdx, setSelectedAutomationIdx] = createSignal(0);
 export const [automationZoomFactor, setAutomationZoomFactor] = createSignal(1.0);
 
+export const [collapsedGroups, setCollapsedGroups] = createSignal<Set<number>>(new Set());
+
 export function resetSelection(): void {
   setSelectedTrackIdx(null);
   setSelectedClipName(null);
@@ -49,4 +51,5 @@ export function resetSelection(): void {
   setDetailHeight(300);
   setDetailCollapsed(false);
   setSelectedAutomationIdx(0);
+  setCollapsedGroups(new Set<number>());
 }

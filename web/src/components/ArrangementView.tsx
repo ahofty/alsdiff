@@ -12,8 +12,9 @@ import {
   timeSignature,
   selectedTrackIdx,
   selectedClipName,
+  collapsedGroups,
 } from "../stores/diff-store";
-import { computeTimelineRange, extractClips, extractAutomations } from "../lib/diff-parser";
+import { computeTimelineRange, extractClips, extractAutomations, buildTrackHierarchy, flattenVisibleTracks } from "../lib/diff-parser";
 import { extractMidiNotes } from "../lib/midi-notes";
 import { quarterNoteToPosition, formatPosition, quarterNoteToRealtime, formatRealtime } from "../lib/time-format";
 import { zoomToSlider, sliderToZoom, handleWheelZoom } from "../lib/zoom";
@@ -46,7 +47,10 @@ export default function ArrangementView() {
     const ppb = pixelsPerBeat();
     return range().totalBeats * ppb;
   };
-  const tracksHeight = () => tracks().length * TRACK_HEIGHT;
+
+  const trackNodes = () => buildTrackHierarchy(tracks());
+  const visibleNodes = () => flattenVisibleTracks(trackNodes(), collapsedGroups());
+  const tracksHeight = () => visibleNodes().length * TRACK_HEIGHT;
 
   const measureWidth = () => {
     const el = document.querySelector(".timeline-area");
@@ -109,21 +113,26 @@ export default function ArrangementView() {
     const timeline = timelineRef;
     if (!canvas || !timeline) return;
 
+    const vn = visibleNodes();
     const w = totalWidth();
-    const h = tracksHeight();
+    const h = vn.length * TRACK_HEIGHT;
     if (w <= 0 || h <= 0) return;
 
     clearCSSColorCache();
     const ctx = setupCanvas(canvas, w, h);
 
+    const visibleTrackData = vn.map((n) => n.track);
+    const indentLevels = vn.map((n) => n.depth);
+
     const params: ArrangementRenderParams = {
-      tracks: tracks(),
+      tracks: visibleTrackData,
       range: range(),
       ppb: pixelsPerBeat(),
       selectedTrackIdx: selectedTrackIdx(),
       selectedClipName: selectedClipName(),
       totalWidth: w,
       extractClips,
+      indentLevels,
     };
 
     hitRects = renderArrangement(ctx, params, {
@@ -142,6 +151,7 @@ export default function ArrangementView() {
     pixelsPerBeat();
     selectedTrackIdx();
     selectedClipName();
+    collapsedGroups();
     scheduleDraw();
   });
 
@@ -159,14 +169,16 @@ export default function ArrangementView() {
     const worldX = e.clientX - rect.left;
     const worldY = e.clientY - rect.top;
 
+    const vn = visibleNodes();
     const hit = hitTestTracks(hitRects, worldX, worldY);
     if (hit) {
-      selectClip(hit.trackIdx, hit.clipName);
+      const node = vn[hit.trackIdx];
+      if (node) selectClip(node.trackIndex, hit.clipName);
       return;
     }
     const trackIdx = getTrackIndexFromY(worldY);
-    if (trackIdx !== null && trackIdx < tracks().length) {
-      selectTrack(trackIdx);
+    if (trackIdx !== null && trackIdx < vn.length) {
+      selectTrack(vn[trackIdx].trackIndex);
     }
   };
 
@@ -265,14 +277,24 @@ export default function ArrangementView() {
         </div>
 
         <div class="arrangement-content">
-          <div class="track-headers" ref={headersRef}>
+          <div
+            class="track-headers"
+            ref={headersRef}
+            onWheel={(e) => {
+              const timeline = timelineRef;
+              if (!timeline) return;
+              timeline.scrollTop += e.deltaY;
+            }}
+          >
             <div style={{ height: `${RULER_HEIGHT}px` }} />
-            <For each={tracks()}>
-              {(track, idx) => (
+            <For each={visibleNodes()}>
+              {(node) => (
                 <TrackHeader
-                  track={track}
-                  index={idx()}
-                  onSelect={() => selectTrack(idx())}
+                  track={node.track}
+                  index={node.trackIndex}
+                  depth={node.depth}
+                  isGroup={node.children.length > 0}
+                  onSelect={() => selectTrack(node.trackIndex)}
                 />
               )}
             </For>

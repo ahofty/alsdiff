@@ -655,6 +655,24 @@ let make_spec_const
     get_patch = (fun _ -> `Unchanged);
   }
 
+(** [make_spec_identity wrapper name get_v get_p] creates a field spec for identity fields
+    (e.g. TrackId) that always emit in the output, even when unchanged.
+    [get_p] should extract the raw value from the patch (not atomic_update). *)
+let make_spec_identity
+    (wrapper : 'a -> field_value)
+    (name : string)
+    (get_v : 'v -> 'a)
+    (get_p : 'p -> 'a)
+  : ('v, 'p) unified_field_spec =
+  {
+    name;
+    get_value = (fun v -> wrapper (get_v v));
+    get_old_value = (fun _ -> None);
+    get_patch = (fun p ->
+        let val_ = wrapper (get_p p) in
+        `Modified { oldval = val_; newval = val_ });
+  }
+
 let make_int n v p = make_spec int_value n v p
 let make_float n v p = make_spec float_value n v p
 let make_string n v p = make_spec string_value n v p
@@ -2082,9 +2100,17 @@ let create_midi_track_item
   in
   let specs : (Track.MidiTrack.t, Track.MidiTrack.Patch.t) section_spec list = [
     Spec.inline_fields
-      ~specs:[ make_string "Name"
-                 (fun (t : Track.MidiTrack.t) -> t.name)
-                 (fun (p : Track.MidiTrack.Patch.t) -> p.name) ]
+      ~specs:[
+        make_spec_identity int_value "TrackId"
+          (fun (t : Track.MidiTrack.t) -> t.id)
+          (fun (p : Track.MidiTrack.Patch.t) -> p.id);
+        make_string "Name"
+          (fun (t : Track.MidiTrack.t) -> t.name)
+          (fun (p : Track.MidiTrack.Patch.t) -> p.name);
+        make_int "GroupId"
+          (fun (t : Track.MidiTrack.t) -> t.group_id)
+          (fun (p : Track.MidiTrack.Patch.t) -> p.group_id);
+      ]
       ~domain_type:DTTrack;
     Spec.collection ~name:"Clips"
       ~of_value:(fun (t : Track.MidiTrack.t) -> t.clips)
@@ -2139,9 +2165,17 @@ let create_audio_like_track_item
   in
   let specs : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) section_spec list = [
     Spec.inline_fields
-      ~specs:[ make_string "Name"
-                 (fun (t : Track.AudioTrack.t) -> t.name)
-                 (fun (p : Track.AudioTrack.Patch.t) -> p.name) ]
+      ~specs:[
+        make_spec_identity int_value "TrackId"
+          (fun (t : Track.AudioTrack.t) -> t.id)
+          (fun (p : Track.AudioTrack.Patch.t) -> p.id);
+        make_string "Name"
+          (fun (t : Track.AudioTrack.t) -> t.name)
+          (fun (p : Track.AudioTrack.Patch.t) -> p.name);
+        make_int "GroupId"
+          (fun (t : Track.AudioTrack.t) -> t.group_id)
+          (fun (p : Track.AudioTrack.Patch.t) -> p.group_id);
+      ]
       ~domain_type:DTTrack;
     Spec.collection ~name:"Clips"
       ~of_value:(fun (t : Track.AudioTrack.t) -> t.clips)

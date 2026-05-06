@@ -8,6 +8,7 @@ let test_get_name_midi_track () =
       MidiTrack.id = 1;
       name = "Midi Track Name";
       current_name = "Midi Track Name";
+      group_id = -1;
       clips = [];
       automations = [];
       devices = [];
@@ -23,6 +24,7 @@ let test_get_name_audio_track () =
       AudioTrack.id = 2;
       name = "Audio Track Name";
       current_name = "Audio Track Name";
+      group_id = -1;
       clips = [];
       automations = [];
       devices = [];
@@ -38,6 +40,7 @@ let test_get_name_group_track () =
       AudioTrack.id = 3;
       name = "Group Track Name";
       current_name = "Group Track Name";
+      group_id = -1;
       clips = [];
       automations = [];
       devices = [];
@@ -53,6 +56,7 @@ let test_get_name_return_track () =
       AudioTrack.id = 4;
       name = "Return Track Name";
       current_name = "Return Track Name";
+      group_id = -1;
       clips = [];
       automations = [];
       devices = [];
@@ -83,6 +87,7 @@ let test_type_name_all_track_types () =
       MidiTrack.id = 1;
       name = "Midi";
       current_name = "Midi";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -91,6 +96,7 @@ let test_type_name_all_track_types () =
       AudioTrack.id = 2;
       name = "Audio";
       current_name = "Audio";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -99,6 +105,7 @@ let test_type_name_all_track_types () =
       AudioTrack.id = 3;
       name = "Group";
       current_name = "Group";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -107,6 +114,7 @@ let test_type_name_all_track_types () =
       AudioTrack.id = 4;
       name = "Return";
       current_name = "Return";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -131,6 +139,7 @@ let test_has_same_id_midi_track () =
       MidiTrack.id = 1;
       name = "Track 1";
       current_name = "Track 1";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -138,6 +147,7 @@ let test_has_same_id_midi_track () =
       MidiTrack.id = 1;
       name = "Track 2";
       current_name = "Track 2";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -145,6 +155,7 @@ let test_has_same_id_midi_track () =
       MidiTrack.id = 2;
       name = "Track 3";
       current_name = "Track 3";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -159,6 +170,7 @@ let test_has_same_id_audio_track () =
       AudioTrack.id = 10;
       name = "Audio 1";
       current_name = "Audio 1";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -166,6 +178,7 @@ let test_has_same_id_audio_track () =
       AudioTrack.id = 10;
       name = "Audio 2";
       current_name = "Audio 2";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -179,6 +192,7 @@ let test_has_same_id_group_track () =
       AudioTrack.id = 20;
       name = "Group 1";
       current_name = "Group 1";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -186,6 +200,7 @@ let test_has_same_id_group_track () =
       AudioTrack.id = 20;
       name = "Group 2";
       current_name = "Group 2";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -199,6 +214,7 @@ let test_has_same_id_return_track () =
       AudioTrack.id = 30;
       name = "Return 1";
       current_name = "Return 1";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -206,6 +222,7 @@ let test_has_same_id_return_track () =
       AudioTrack.id = 30;
       name = "Return 2";
       current_name = "Return 2";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -238,6 +255,7 @@ let test_has_same_id_cross_type () =
       MidiTrack.id = 1;
       name = "Midi";
       current_name = "Midi";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -245,6 +263,7 @@ let test_has_same_id_cross_type () =
       AudioTrack.id = 1;
       name = "Audio";
       current_name = "Audio";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -259,6 +278,7 @@ let test_id_hash_midi_track () =
       MidiTrack.id = 42;
       name = "Track";
       current_name = "Track";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -266,6 +286,7 @@ let test_id_hash_midi_track () =
       MidiTrack.id = 42;
       name = "Other Track";
       current_name = "Other Track";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -304,6 +325,7 @@ let test_patch_is_empty_midi_patch () =
       MidiTrack.id = 1;
       name = "Test";
       current_name = "Test";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -320,6 +342,7 @@ let test_patch_is_empty_audio_patch () =
       AudioTrack.id = 2;
       name = "Test";
       current_name = "Test";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
@@ -352,6 +375,7 @@ let test_patch_is_not_empty () =
       MidiTrack.id = 1;
       name = "Old Name";
       current_name = "Old Name";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer = mixer1; routings = make_empty_routing_set ();
     } in
@@ -359,6 +383,7 @@ let test_patch_is_not_empty () =
       MidiTrack.id = 1;
       name = "New Name";
       current_name = "New Name";
+      group_id = -1;
       clips = []; automations = []; devices = [];
       mixer = mixer2; routings = make_empty_routing_set ();
     } in

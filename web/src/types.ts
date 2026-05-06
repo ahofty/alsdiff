@@ -62,7 +62,16 @@ export interface TrackData {
   name: string;
   change: ChangeType;
   domainType: DomainType;
+  trackId: number;
+  groupId: number;
   children: ViewNode[];
+}
+
+export interface TrackNode {
+  track: TrackData;
+  trackIndex: number;
+  depth: number;
+  children: TrackNode[];
 }
 
 export interface ClipData {

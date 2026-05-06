@@ -1,10 +1,12 @@
 import type { TrackData } from "../types";
 import DiffIndicator from "./DiffIndicator";
-import { selectedTrackIdx, selectedClipName } from "../stores/diff-store";
+import { selectedTrackIdx, collapsedGroups, setCollapsedGroups } from "../stores/diff-store";
 
 interface Props {
   track: TrackData;
   index: number;
+  depth: number;
+  isGroup: boolean;
   onSelect: () => void;
 }
 
@@ -21,11 +23,26 @@ export default function TrackHeader(props: Props) {
     if (props.track.name.startsWith("MainTrack")) return "Master";
     return "";
   };
+  const expanded = () => !collapsedGroups().has(props.track.trackId);
+
+  const toggleGroup = (e: MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(props.track.trackId)) {
+        next.delete(props.track.trackId);
+      } else {
+        next.add(props.track.trackId);
+      }
+      return next;
+    });
+  };
 
   return (
     <div
       class={`track-header ${isSelected() ? "selected" : ""}`}
       onClick={() => props.onSelect()}
+      style={{ "padding-left": `${10 + props.depth * 20}px` }}
     >
       <div
         class="change-indicator"
@@ -40,6 +57,20 @@ export default function TrackHeader(props: Props) {
                   : "var(--color-unchanged)",
         }}
       />
+      {props.isGroup && (
+        <span
+          style={{
+            cursor: "pointer",
+            "font-size": "10px",
+            "min-width": "14px",
+            "user-select": "none",
+            color: "var(--text-dim)",
+          }}
+          onClick={toggleGroup}
+        >
+          {expanded() ? "▼" : "▶"}
+        </span>
+      )}
       <span
         style={{
           color: "var(--text-dim)",
