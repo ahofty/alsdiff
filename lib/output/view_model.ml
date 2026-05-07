@@ -2096,6 +2096,29 @@ let build_track_section_name
 
 (* ==================== Full Track Views ==================== *)
 
+(** Populate Unchanged mixer sub-items (Volume, Pan, Mute, Solo) from reference data.
+    When the Mixer is Modified but only some params changed, the unchanged params appear
+    as placeholder items with empty children. This fills them in from the reference track. *)
+let populate_mixer_unchanged_children
+    (mixer_children : view list)
+    (mixer_val : Track.Mixer.t)
+  : view list =
+  (* Build all mixer children from the reference value, then look up by name *)
+  let ref_children = match create_mixer_item (`Added mixer_val) with
+    | Some { children; _ } -> children
+    | None -> []
+  in
+  List.map (fun child ->
+      match child with
+      | Item ({ name = n; change = Unchanged; children = []; _ } as mi)
+        when n = "Volume" || n = "Pan" || n = "Mute" || n = "Solo" ->
+        (match List.find_opt (function Item { name = n2; _ } -> n2 = n | _ -> false) ref_children with
+            | Some (Item { children = mc; _ }) ->
+              Item { mi with children = List.map view_to_unchanged mc }
+            | _ -> child)
+      | _ -> child
+    ) mixer_children
+
 
 (** [create_midi_track_item] creates a [item] from a MidiTrack structured change (new type system).
     @param get_pointee_name function to resolve pointee IDs to names
@@ -2172,6 +2195,8 @@ let create_midi_track_item
            | Some { children = mc; _ } ->
              Item { mi with children = List.map view_to_unchanged mc }
            | None -> child)
+        | Item ({ name = "Mixer"; change = Modified; children = mc; _ } as mi) ->
+          Item { mi with children = populate_mixer_unchanged_children mc mixer_val }
         | _ -> child
       ) item.children in
     { item with children }
@@ -2254,6 +2279,8 @@ let create_audio_like_track_item
            | Some { children = mc; _ } ->
              Item { mi with children = List.map view_to_unchanged mc }
            | None -> child)
+        | Item ({ name = "Mixer"; change = Modified; children = mc; _ } as mi) ->
+          Item { mi with children = populate_mixer_unchanged_children mc mixer_val }
         | _ -> child
       ) item.children in
     { item with children }

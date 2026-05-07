@@ -1,4 +1,4 @@
-import { For, Show, createEffect, onMount, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onMount, onCleanup } from "solid-js";
 import {
   tracks,
   pixelsPerBeat,
@@ -52,6 +52,15 @@ export default function ArrangementView() {
   const visibleNodes = () => flattenVisibleTracks(trackNodes(), collapsedGroups());
   const tracksHeight = () => visibleNodes().length * TRACK_HEIGHT;
 
+  const [bottomSpacer, setBottomSpacer] = createSignal(RULER_HEIGHT);
+
+  const measureBottomSpacer = () => {
+    if (timelineRef && headersRef) {
+      const diff = headersRef.clientHeight - timelineRef.clientHeight;
+      setBottomSpacer(RULER_HEIGHT + Math.max(0, diff));
+    }
+  };
+
   const measureWidth = () => {
     const el = document.querySelector(".timeline-area");
     if (el) setTimelineWidth(el.clientWidth);
@@ -59,7 +68,10 @@ export default function ArrangementView() {
 
   createEffect(() => {
     tracks();
-    requestAnimationFrame(measureWidth);
+    requestAnimationFrame(() => {
+      measureWidth();
+      measureBottomSpacer();
+    });
   });
 
   createEffect(() => {
@@ -77,7 +89,10 @@ export default function ArrangementView() {
   });
 
   onMount(() => {
-    window.addEventListener("resize", measureWidth);
+    window.addEventListener("resize", () => {
+      measureWidth();
+      measureBottomSpacer();
+    });
   });
 
   onCleanup(() => {
@@ -122,7 +137,6 @@ export default function ArrangementView() {
     const ctx = setupCanvas(canvas, w, h);
 
     const visibleTrackData = vn.map((n) => n.track);
-    const indentLevels = vn.map((n) => n.depth);
 
     const trackIndices = vn.map((n) => n.trackIndex);
 
@@ -135,7 +149,6 @@ export default function ArrangementView() {
       selectedClipName: selectedClipName(),
       totalWidth: w,
       extractClips,
-      indentLevels,
     };
 
     hitRects = renderArrangement(ctx, params, {
@@ -301,6 +314,7 @@ export default function ArrangementView() {
                 />
               )}
             </For>
+            <div style={{ height: `${bottomSpacer()}px` }} />
           </div>
 
           <div

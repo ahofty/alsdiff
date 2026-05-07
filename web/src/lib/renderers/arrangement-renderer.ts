@@ -19,7 +19,6 @@ export interface ArrangementRenderParams {
   selectedClipName: string | null;
   totalWidth: number;
   extractClips: (track: TrackData) => ClipData[];
-  indentLevels: number[];
 }
 
 export function renderArrangement(
@@ -27,7 +26,7 @@ export function renderArrangement(
   params: ArrangementRenderParams,
   vp: { scrollLeft: number; visibleWidth: number },
 ): HitRect[] {
-  const { tracks, trackIndices, range, ppb, selectedTrackIdx, selectedClipName, totalWidth, extractClips, indentLevels } = params;
+  const { tracks, trackIndices, range, ppb, selectedTrackIdx, selectedClipName, totalWidth, extractClips } = params;
   const trackCount = tracks.length;
   const tracksHeight = trackCount * TRACK_HEIGHT;
 
@@ -38,7 +37,6 @@ export function renderArrangement(
   for (let i = 0; i < trackCount; i++) {
     const y = i * TRACK_HEIGHT;
     const isSelected = selectedTrackIdx === trackIndices[i];
-    const indent = (indentLevels[i] ?? 0) * 20;
     const isGroup = tracks[i].name.startsWith("Group");
 
     ctx.fillStyle = isSelected
@@ -48,10 +46,6 @@ export function renderArrangement(
         : getCSSColor("--bg-primary");
     ctx.fillRect(0, y, totalWidth, TRACK_HEIGHT);
 
-    if (indent > 0) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-      ctx.fillRect(0, y, indent, TRACK_HEIGHT);
-    }
 
     if (isGroup) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
@@ -66,13 +60,13 @@ export function renderArrangement(
     ctx.stroke();
 
     const clips = extractClips(tracks[i]);
-    const firstVisibleBeat = range.minStart + (vp.scrollLeft - indent) / ppb;
+    const firstVisibleBeat = range.minStart + vp.scrollLeft / ppb;
     const lastVisibleBeat = range.minStart + (vp.scrollLeft + vp.visibleWidth) / ppb;
 
     for (const clip of clips) {
       if (clip.endTime < firstVisibleBeat || clip.startTime > lastVisibleBeat) continue;
 
-      const clipX = indent + (clip.startTime - range.minStart) * ppb;
+      const clipX = (clip.startTime - range.minStart) * ppb;
       const clipW = Math.max(4, (clip.endTime - clip.startTime) * ppb);
       const clipY = y + 4;
       const clipH = TRACK_HEIGHT - 8;
