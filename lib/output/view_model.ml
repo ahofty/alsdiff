@@ -558,6 +558,20 @@ module Spec = struct
 
 end
 
+(** Recursively convert a view tree to Unchanged, setting oldval = newval for fields. *)
+let rec view_to_unchanged (v : view) : view =
+  match v with
+  | Field f ->
+    Field { f with change = Unchanged; oldval = f.newval }
+  | Item i ->
+    Item { i with
+           change = Unchanged;
+           children = List.map view_to_unchanged i.children }
+  | Collection c ->
+    Collection { c with
+                 change = Unchanged;
+                 items = List.map view_to_unchanged c.items }
+
 
 (** [build_item_from_specs ~name ~domain_type ~specs c] builds an item from a list of section specs.
     This is the main entry point for declaratively building complex items.
@@ -2092,6 +2106,7 @@ let create_midi_track_item
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    ?reference_track:(reference_midi : Track.MidiTrack.t option)
     (c : (Track.MidiTrack.t, Track.MidiTrack.Patch.t) structured_change)
   : item =
   let section_name = build_track_section_name
@@ -2144,7 +2159,23 @@ let create_midi_track_item
       ~build_patch_children:create_routing_set_patch_fields
       ~domain_type:DTRouting;
   ] in
-  build_item_from_specs ~name:section_name ~domain_type:DTTrack ~specs c
+  let item = build_item_from_specs ~name:section_name ~domain_type:DTTrack ~specs c in
+  (* Populate Unchanged Mixer from reference track *)
+  match reference_midi with
+  | None -> item
+  | Some rt ->
+    let mixer_val = rt.mixer in
+    let children = List.map (fun child ->
+        match child with
+        | Item ({ name = "Mixer"; change = Unchanged; children = []; _ } as mi) ->
+          (match create_mixer_item (`Added mixer_val) with
+           | Some { children = mc; _ } ->
+             Item { mi with children = List.map view_to_unchanged mc }
+           | None -> child)
+        | _ -> child
+      ) item.children in
+    { item with children }
+
 
 (** [create_audio_like_track_item] creates a [item] for AudioTrack-like structured changes.
     Shared implementation for AudioTrack and GroupTrack (which share the same internal structure).
@@ -2157,6 +2188,7 @@ let create_audio_like_track_item
     ~(get_pointee_name : int -> string)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
     ~track_type_name
+    ?reference_track:(reference_audio : Track.AudioTrack.t option)
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
   let section_name = build_track_section_name
@@ -2209,17 +2241,33 @@ let create_audio_like_track_item
       ~build_patch_children:create_routing_set_patch_fields
       ~domain_type:DTRouting;
   ] in
-  build_item_from_specs ~name:section_name ~domain_type:DTTrack ~specs c
+  let item = build_item_from_specs ~name:section_name ~domain_type:DTTrack ~specs c in
+  (* Populate Unchanged Mixer from reference track *)
+  match reference_audio with
+  | None -> item
+  | Some rt ->
+    let mixer_val = rt.mixer in
+    let children = List.map (fun child ->
+        match child with
+        | Item ({ name = "Mixer"; change = Unchanged; children = []; _ } as mi) ->
+          (match create_mixer_item (`Added mixer_val) with
+           | Some { children = mc; _ } ->
+             Item { mi with children = List.map view_to_unchanged mc }
+           | None -> child)
+        | _ -> child
+      ) item.children in
+    { item with children }
 
 
 let create_audio_track_item
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    ?reference_track:(reference_audio : Track.AudioTrack.t option)
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
   ignore (note_name_style : note_display_style);
-  create_audio_like_track_item ~get_pointee_name ~format_time ~track_type_name:"AudioTrack" c
+  create_audio_like_track_item ~get_pointee_name ~format_time ~track_type_name:"AudioTrack" ?reference_track:reference_audio c
 
 
 let create_group_track_item
@@ -2387,17 +2435,25 @@ let dispatch_track_change
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    ?reference_track:(ref_t : Track.t option)
     (tc : (Track.t, Track.Patch.t) structured_change)
   : view option =
   match tc with
   (* Midi tracks *)
   | `Added (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
   | `Removed (Track.Midi t) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
-  | `Modified (Track.Patch.MidiPatch pt) -> Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time (`Modified pt)))
+  | `Modified (Track.Patch.MidiPatch pt) ->
+    let midi_ref = match ref_t with Some (Track.Midi t) -> Some t | _ -> None in
+    Some (Item (create_midi_track_item ~get_pointee_name ~note_name_style ~format_time ?reference_track:midi_ref (`Modified pt)))
   (* Audio tracks *)
   | `Added (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
   | `Removed (Track.Audio t) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
-  | `Modified (Track.Patch.AudioPatch pt) -> Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time (`Modified pt)))
+  | `Modified (Track.Patch.AudioPatch pt) ->
+    let audio_ref = match ref_t with
+      | Some (Track.Audio t | Track.Group t | Track.Return t) -> Some t
+      | _ -> None
+    in
+    Some (Item (create_audio_track_item ~get_pointee_name ~note_name_style ~format_time ?reference_track:audio_ref (`Modified pt)))
   (* Group tracks *)
   | `Added (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style ~format_time (`Added t)))
   | `Removed (Track.Group t) -> Some (Item (create_group_track_item ~get_pointee_name ~note_name_style ~format_time (`Removed t)))
@@ -2416,6 +2472,7 @@ let build_liveset_tracks_items
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    ?reference_tracks:(ref_tracks : Track.t list option)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : view list =
   let is_regular_track = function
@@ -2440,7 +2497,36 @@ let build_liveset_tracks_items
       patch.tracks |> List.filter is_regular_track_change
     | `Unchanged -> []
   in
-  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style ~format_time) track_changes
+  let get_track_id = function
+    | Track.Midi t -> t.Track.MidiTrack.id
+    | Track.Audio t -> t.Track.AudioTrack.id
+    | Track.Group t -> t.Track.AudioTrack.id
+    | Track.Return t -> t.Track.AudioTrack.id
+    | Track.Main _ -> 0
+  in
+  let get_patch_track_id = function
+    | Track.Patch.MidiPatch p -> p.Track.MidiTrack.Patch.id
+    | Track.Patch.AudioPatch p -> p.Track.AudioTrack.Patch.id
+    | Track.Patch.MainPatch _ -> 0
+  in
+  let ref_by_id = match ref_tracks with
+    | None -> fun (_ : int) -> None
+    | Some tracks ->
+      let tbl = Hashtbl.create 16 in
+      List.iter (fun t -> Hashtbl.add tbl (get_track_id t) t) tracks;
+      fun id -> Hashtbl.find_opt tbl id
+  in
+  let find_ref tc =
+    let id = match tc with
+      | `Modified patch -> get_patch_track_id patch
+      | _ -> 0
+    in
+    if id = 0 then None else ref_by_id id
+  in
+  List.filter_map (fun tc ->
+      dispatch_track_change ~get_pointee_name ~note_name_style ~format_time
+        ?reference_track:(find_ref tc) tc
+    ) track_changes
 
 
 (** [build_liveset_returns_items ~get_pointee_name ~note_name_style c] builds view items for all return tracks
@@ -2450,6 +2536,7 @@ let build_liveset_returns_items
     ~(get_pointee_name : int -> string)
     ?(note_name_style : note_display_style = default_note_name_style)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    ?reference_returns:(ref_returns : Track.t list option)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : view list =
   let return_changes = match c with
@@ -2460,10 +2547,32 @@ let build_liveset_returns_items
     | `Modified patch -> patch.returns
     | `Unchanged -> []
   in
-  List.filter_map (dispatch_track_change ~get_pointee_name ~note_name_style ~format_time) return_changes
-
-
-(** Liveset field specifications for atomic fields (Name, Creator) *)
+  let get_return_id = function
+    | Track.Return t -> t.Track.AudioTrack.id
+    | _ -> 0
+  in
+  let get_patch_track_id = function
+    | Track.Patch.AudioPatch p -> p.Track.AudioTrack.Patch.id
+    | _ -> 0
+  in
+  let ref_by_id = match ref_returns with
+    | None -> fun (_ : int) -> None
+    | Some returns ->
+      let tbl = Hashtbl.create 8 in
+      List.iter (fun t -> Hashtbl.add tbl (get_return_id t) t) returns;
+      fun id -> Hashtbl.find_opt tbl id
+  in
+  let find_ref tc =
+    let id = match tc with
+      | `Modified patch -> get_patch_track_id patch
+      | _ -> 0
+    in
+    if id = 0 then None else ref_by_id id
+  in
+  List.filter_map (fun tc ->
+      dispatch_track_change ~get_pointee_name ~note_name_style ~format_time
+        ?reference_track:(find_ref tc) tc
+    ) return_changes
 let liveset_field_specs : (Liveset.t, Liveset.Patch.t) unified_field_spec list = [
   { name = "Name";
     get_value = (fun ls -> string_value ls.Liveset.name);
@@ -2483,6 +2592,7 @@ let liveset_field_specs : (Liveset.t, Liveset.Patch.t) unified_field_spec list =
 let create_liveset_item
     ?(note_name_style : note_display_style = default_note_name_style)
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    ?reference_liveset:(ref_ls : Liveset.t option)
     (c : (Liveset.t, Liveset.Patch.t) structured_change)
   : item =
 
@@ -2553,8 +2663,10 @@ let create_liveset_item
     atomic_children
     @ (version_item |> Option.map (fun i -> Item i) |> option_to_list)
     @ (main_track_item |> Option.map (fun i -> Item i) |> option_to_list)
-    @ build_liveset_tracks_items ~get_pointee_name ~note_name_style ~format_time c
-    @ build_liveset_returns_items ~get_pointee_name ~note_name_style ~format_time c
+    @ build_liveset_tracks_items ~get_pointee_name ~note_name_style ~format_time
+      ?reference_tracks:(Option.map (fun (ls : Liveset.t) -> ls.Liveset.tracks) ref_ls) c
+    @ build_liveset_returns_items ~get_pointee_name ~note_name_style ~format_time
+      ?reference_returns:(Option.map (fun (ls : Liveset.t) -> ls.Liveset.returns) ref_ls) c
     @ (locators_collection |> Option.map (fun c -> Collection c) |> option_to_list)
   in
 

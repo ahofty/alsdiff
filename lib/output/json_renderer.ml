@@ -17,7 +17,8 @@ let change_type_to_string = function
 
 let rec item_to_yojson (cfg : detail_config) (item : item) : Yojson.Safe.t option =
   let level = get_effective_detail cfg item.change item.domain_type in
-  if not (should_render_level level) then None
+  (* Always render Unchanged items that have children (populated from reference) *)
+  if not (should_render_level level) && not (item.change = Unchanged && item.children <> []) then None
   else
     let children =
       List.filter_map (view_to_yojson cfg) item.children

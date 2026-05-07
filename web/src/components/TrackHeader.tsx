@@ -83,7 +83,7 @@ export default function TrackHeader(props: Props) {
       >
         {trackType()}
       </span>
-      <span class="track-name">{trackLabel()}</span>
+      <span class="track-name" title={trackLabel()}>{trackLabel()}</span>
       {mixer() && <MixerStrip mixer={mixer()!} />}
       {props.track.change !== "Unchanged" && (
         <DiffIndicator change={props.track.change} showLabel={false} />
