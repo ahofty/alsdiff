@@ -39,9 +39,16 @@ function getWorker(): Worker {
   return worker;
 }
 
+export interface DiffOptions {
+  mode: string;
+  preset?: string;
+  config?: string;
+}
+
 export function diffFilesJson(
   file1: File,
   file2: File,
+  options: DiffOptions = { mode: "json", preset: "verbose" },
 ): Promise<DiffResult> {
   const w = getWorker();
   const requestId = requestIdCounter++;
@@ -53,7 +60,7 @@ export function diffFilesJson(
       requestId,
       file1,
       file2,
-      options: { mode: "json", preset: "verbose" },
+      options,
     });
   });
 }

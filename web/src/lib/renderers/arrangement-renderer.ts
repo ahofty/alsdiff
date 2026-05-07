@@ -12,6 +12,7 @@ const MIN_GRID_PX = 30;
 
 export interface ArrangementRenderParams {
   tracks: TrackData[];
+  trackIndices: number[];
   range: TimelineRange;
   ppb: number;
   selectedTrackIdx: number | null;
@@ -26,7 +27,7 @@ export function renderArrangement(
   params: ArrangementRenderParams,
   vp: { scrollLeft: number; visibleWidth: number },
 ): HitRect[] {
-  const { tracks, range, ppb, selectedTrackIdx, selectedClipName, totalWidth, extractClips, indentLevels } = params;
+  const { tracks, trackIndices, range, ppb, selectedTrackIdx, selectedClipName, totalWidth, extractClips, indentLevels } = params;
   const trackCount = tracks.length;
   const tracksHeight = trackCount * TRACK_HEIGHT;
 
@@ -36,7 +37,7 @@ export function renderArrangement(
 
   for (let i = 0; i < trackCount; i++) {
     const y = i * TRACK_HEIGHT;
-    const isSelected = selectedTrackIdx === i;
+    const isSelected = selectedTrackIdx === trackIndices[i];
     const indent = (indentLevels[i] ?? 0) * 20;
     const isGroup = tracks[i].name.startsWith("Group");
 
@@ -78,7 +79,7 @@ export function renderArrangement(
 
       const color = getChangeColor(clip.change);
       const clipName = clip.name.match(/:\s*(.+)/)?.[1] ?? clip.name;
-      const isClipSelected = selectedTrackIdx === i && selectedClipName === clip.name;
+      const isClipSelected = selectedTrackIdx === trackIndices[i] && selectedClipName === clip.name;
 
       if (clip.change === "Removed") {
         ctx.strokeStyle = color;

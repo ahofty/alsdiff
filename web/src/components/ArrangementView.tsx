@@ -124,8 +124,11 @@ export default function ArrangementView() {
     const visibleTrackData = vn.map((n) => n.track);
     const indentLevels = vn.map((n) => n.depth);
 
+    const trackIndices = vn.map((n) => n.trackIndex);
+
     const params: ArrangementRenderParams = {
       tracks: visibleTrackData,
+      trackIndices,
       range: range(),
       ppb: pixelsPerBeat(),
       selectedTrackIdx: selectedTrackIdx(),
