@@ -34,6 +34,32 @@ function valueToY(value: number, r: AutomationRange): number {
   return (1 - fraction) * GRID_HEIGHT;
 }
 
+function drawSegment(
+  ctx: CanvasRenderingContext2D,
+  x0: number, y0: number, curve: CurveControls | undefined,
+  x1: number, y1: number, color: string,
+) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  if (curve) {
+    const dt = x1 - x0;
+    const dv = y1 - y0;
+    ctx.bezierCurveTo(
+      x0 + curve.curve1X * dt,
+      y0 + curve.curve1Y * dv,
+      x0 + curve.curve2X * dt,
+      y0 + curve.curve2Y * dv,
+      x1,
+      y1,
+    );
+  } else {
+    ctx.lineTo(x1, y1);
+  }
+  ctx.stroke();
+}
+
 export function renderAutomation(
   ctx: CanvasRenderingContext2D,
   params: AutomationRenderParams,
@@ -98,68 +124,44 @@ export function renderAutomation(
     ctx.stroke();
   }
 
-  // Ghost path (old values for modified events)
-  const ghosts: { time: number; value: number }[] = [];
+  // Ghost path (old values for modified/removed events)
+  const ghosts: { time: number; value: number; curve?: CurveControls }[] = [];
   for (const e of events) {
     if (e.change === "Removed") {
-      ghosts.push({ time: e.time, value: e.value });
-    } else if (e.oldTime !== undefined || e.oldValue !== undefined) {
+      ghosts.push({ time: e.time, value: e.value, curve: e.curve });
+    } else if (
+      e.oldTime !== undefined ||
+      e.oldValue !== undefined ||
+      e.oldCurve
+    ) {
       ghosts.push({
         time: e.oldTime ?? e.time,
         value: e.oldValue ?? e.value,
+        curve: e.oldCurve ?? e.curve,
       });
     }
   }
 
   if (ghosts.length >= 2) {
     ghosts.sort((a, b) => a.time - b.time);
-    ctx.strokeStyle = getCSSColor("--color-removed");
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.6;
     ctx.setLineDash([6, 3]);
-    ctx.beginPath();
-    ctx.moveTo(
-      (ghosts[0].time - range.minTime) * ppb,
-      gridTop + valueToY(ghosts[0].value, range),
-    );
-    for (let i = 1; i < ghosts.length; i++) {
-      ctx.lineTo(
-        (ghosts[i].time - range.minTime) * ppb,
-        gridTop + valueToY(ghosts[i].value, range),
-      );
+    const ghostColor = getCSSColor("--color-removed");
+    for (let i = 0; i < ghosts.length - 1; i++) {
+      const g0 = ghosts[i];
+      const g1 = ghosts[i + 1];
+      const x0 = (g0.time - range.minTime) * ppb;
+      const y0 = gridTop + valueToY(g0.value, range);
+      const x1 = (g1.time - range.minTime) * ppb;
+      const y1 = gridTop + valueToY(g1.value, range);
+      drawSegment(ctx, x0, y0, g0.curve, x1, y1, ghostColor);
     }
-    ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
 
   // Envelope segments
   const sorted = [...events].sort((a, b) => a.time - b.time);
-
-  function drawSegment(
-    x0: number, y0: number, curve: CurveControls | undefined,
-    x1: number, y1: number, color: string,
-  ) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    if (curve) {
-      const dt = x1 - x0;
-      const dv = y1 - y0;
-      ctx.bezierCurveTo(
-        x0 + curve.curve1X * dt,
-        y0 + curve.curve1Y * dv,
-        x1 + curve.curve2X * dt,
-        y1 + curve.curve2Y * dv,
-        x1,
-        y1,
-      );
-    } else {
-      ctx.lineTo(x1, y1);
-    }
-    ctx.stroke();
-  }
 
   for (let i = 0; i < sorted.length - 1; i++) {
     const cur = sorted[i];
@@ -168,10 +170,10 @@ export function renderAutomation(
     const y0 = gridTop + valueToY(cur.value, range);
     const x1 = (nxt.time - range.minTime) * ppb;
     const y1 = gridTop + valueToY(nxt.value, range);
-    const color = getChangeColor(cur.change);
+    const color = cur.change === "Modified" ? getCSSColor("--color-added") : getChangeColor(cur.change);
 
     ctx.globalAlpha = cur.change === "Unchanged" ? 0.5 : 1;
-    drawSegment(x0, y0, cur.curve, x1, y1, color);
+    drawSegment(ctx, x0, y0, cur.curve, x1, y1, color);
     ctx.globalAlpha = 1;
   }
 
@@ -179,14 +181,14 @@ export function renderAutomation(
   for (const event of events) {
     const x = (event.time - range.minTime) * ppb;
     const y = gridTop + valueToY(event.value, range);
-    const color = getChangeColor(event.change);
+    const color = event.change === "Modified" ? getCSSColor("--color-added") : getChangeColor(event.change);
 
     // Ghost marker for modified events
     if (event.oldTime !== undefined || event.oldValue !== undefined) {
       const gx = ((event.oldTime ?? event.time) - range.minTime) * ppb;
       const gy = gridTop + valueToY(event.oldValue ?? event.value, range);
       ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = getCSSColor("--color-modified");
+      ctx.strokeStyle = getCSSColor("--color-removed");
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 2]);
       ctx.beginPath();

@@ -123,6 +123,7 @@ export interface AutomationEvent {
   oldTime?: number;
   oldValue?: number;
   curve?: CurveControls;
+  oldCurve?: CurveControls;
 }
 
 export interface AutomationRange {
