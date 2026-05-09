@@ -20,6 +20,7 @@ interface CanvasSurfaceProps {
   onClick?: (worldX: number, worldY: number) => void;
   onHover?: (worldX: number, worldY: number, tooltip: (text: string) => void) => void;
   class?: string;
+  testId?: string;
 }
 
 export default function CanvasSurface(props: CanvasSurfaceProps) {
@@ -114,6 +115,7 @@ export default function CanvasSurface(props: CanvasSurfaceProps) {
     >
       <canvas
         ref={canvasRef}
+        data-testid={props.testId}
         style={{ display: "block" }}
       />
       <Show when={props.onHover}>

@@ -54,7 +54,7 @@ export default function DetailView() {
   const hasAutomations = () => automations().length > 0;
 
   return (
-    <div class="detail-pane" style={{ height: `${detailHeight()}px` }}>
+    <div class="detail-pane" data-testid="detail-pane" style={{ height: `${detailHeight()}px` }}>
       <Show
         when={selectedTrack()}
         fallback={
@@ -75,6 +75,7 @@ export default function DetailView() {
           <Show when={hasDevices()}>
             <div
               class={`detail-tab ${detailTab() === "devices" ? "active" : ""}`}
+              data-testid="detail-tab-devices"
               onClick={() => setDetailTab("devices")}
             >
               Devices ({devices().length})
@@ -83,6 +84,7 @@ export default function DetailView() {
           <Show when={hasClip()}>
             <div
               class={`detail-tab ${detailTab() === "clip" ? "active" : ""}`}
+              data-testid="detail-tab-clip"
               onClick={() => setDetailTab("clip")}
             >
               Clip: {selectedClip()?.name}
@@ -91,6 +93,7 @@ export default function DetailView() {
           <Show when={hasNotes()}>
             <div
               class={`detail-tab ${detailTab() === "pianoRoll" ? "active" : ""}`}
+              data-testid="detail-tab-pianoRoll"
               onClick={() => setDetailTab("pianoRoll")}
             >
               Piano Roll
@@ -99,6 +102,7 @@ export default function DetailView() {
           <Show when={hasAutomations()}>
             <div
               class={`detail-tab ${detailTab() === "automation" ? "active" : ""}`}
+              data-testid="detail-tab-automation"
               onClick={() => setDetailTab("automation")}
             >
               Automation ({automations().length})

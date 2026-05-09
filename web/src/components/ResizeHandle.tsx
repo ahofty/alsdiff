@@ -54,6 +54,7 @@ export default function ResizeHandle() {
   return (
     <div
       class="resize-handle"
+      data-testid="resize-handle"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

@@ -44,6 +44,8 @@ export default function TrackHeader(props: Props) {
   return (
     <div
       class={`track-header ${isSelected() ? "selected" : ""}`}
+      data-testid="track-header"
+      data-track-index={props.index}
       onClick={() => props.onSelect()}
       style={{ "padding-left": `${10 + props.depth * 20}px` }}
     >
@@ -62,6 +64,7 @@ export default function TrackHeader(props: Props) {
       />
       {props.isGroup && (
         <span
+          data-testid="group-toggle"
           style={{
             cursor: "pointer",
             "font-size": "10px",

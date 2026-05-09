@@ -87,6 +87,7 @@ export default function FileUpload() {
         <input
           type="file"
           accept=".als"
+          data-testid="file-input-a"
           onChange={(e) => handleFile(e, 1)}
           disabled={isLoading()}
         />
@@ -96,6 +97,7 @@ export default function FileUpload() {
         <input
           type="file"
           accept=".als"
+          data-testid="file-input-b"
           onChange={(e) => handleFile(e, 2)}
           disabled={isLoading()}
         />
@@ -105,6 +107,7 @@ export default function FileUpload() {
         <label class="upload-label">Preset</label>
         <select
           class="preset-select"
+          data-testid="preset-select"
           value={preset()}
           onChange={(e) => setPreset(e.currentTarget.value as PresetName)}
           disabled={isLoading()}
@@ -125,6 +128,7 @@ export default function FileUpload() {
         />
         <button
           class="config-btn"
+          data-testid="config-btn"
           onClick={() => configInput.click()}
           disabled={isLoading()}
           title="Upload custom config JSON"
@@ -132,9 +136,9 @@ export default function FileUpload() {
           Config
         </button>
         <Show when={customConfigName()}>
-          <span class="config-badge">
+          <span class="config-badge" data-testid="config-badge">
             {customConfigName()}
-            <button class="config-clear" onClick={clearCustomConfig}>
+            <button class="config-clear" data-testid="config-clear-btn" onClick={clearCustomConfig}>
               ×
             </button>
           </span>
@@ -143,6 +147,7 @@ export default function FileUpload() {
 
       <button
         class="compare-btn"
+        data-testid="compare-btn"
         onClick={handleCompare}
         disabled={isLoading()}
       >
@@ -151,7 +156,7 @@ export default function FileUpload() {
         </Show>
       </button>
       <Show when={error()}>
-        <span class="error-msg">{error()}</span>
+        <span class="error-msg" data-testid="error-msg">{error()}</span>
       </Show>
 
       <style>{`

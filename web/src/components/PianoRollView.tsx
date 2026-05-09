@@ -145,6 +145,7 @@ export default function PianoRollView(props: Props) {
             contentHeight={totalHeight}
             render={render}
             onHover={handleHover}
+            testId="piano-roll-canvas"
           />
         </div>
       </div>

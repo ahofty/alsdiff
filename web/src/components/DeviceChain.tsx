@@ -8,7 +8,7 @@ interface Props {
 
 export default function DeviceChain(props: Props) {
   return (
-    <div class="device-chain">
+    <div class="device-chain" data-testid="device-chain">
       <For each={props.devices}>
         {(device) => <DeviceCard device={device} />}
       </For>

@@ -81,7 +81,7 @@ export default function DeviceCard(props: Props) {
   };
 
   return (
-    <div class={`device-card${isGroupDevice() ? " group-device" : ""}`}>
+    <div class={`device-card${isGroupDevice() ? " group-device" : ""}`} data-testid="device-card">
       <div class="device-name">
         {deviceName()}
         <DiffIndicator change={props.device.change} showLabel={false} />

@@ -18,7 +18,7 @@ export default function App() {
     >
       <FileUpload />
       <Show when={isLoading()}>
-        <div class="loading-container">
+        <div class="loading-container" data-testid="loading-spinner">
           <div class="loading-spinner" />
           Comparing files...
         </div>
@@ -52,6 +52,7 @@ export default function App() {
             }}
           >
             <button
+              data-testid="raw-json-toggle"
               onClick={() => setShowRawJson(!showRawJson())}
               style={{
                 background: "var(--bg-secondary)",

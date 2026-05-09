@@ -171,6 +171,7 @@ export default function AutomationView(props: Props) {
             contentHeight={totalHeight}
             render={render}
             onHover={handleHover}
+            testId="automation-canvas"
           />
         </div>
       </div>

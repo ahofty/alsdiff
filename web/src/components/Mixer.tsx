@@ -86,7 +86,7 @@ function Slider(props: SliderProps) {
   };
 
   return (
-    <div class="mixer-bar" style={{ width: `${width}px` }}>
+    <div class="mixer-bar" data-testid="mixer-bar" style={{ width: `${width}px` }}>
       <Show when={change === "Removed" && oldPct() !== undefined}>
         <div
           class="mixer-bar-fill ghost"
@@ -144,6 +144,7 @@ function MixerToggle(props: { label: string; value: ReturnType<typeof getParamVa
 
   return (
     <div
+      data-testid={`mixer-toggle-${props.label}`}
       class={`mixer-toggle ${isOn() ? "active" : ""} ${change !== "Unchanged" ? "changed" : ""}`}
       style={change !== "Unchanged" ? { "box-shadow": `0 0 4px ${glowColor()}` } : {}}
     >
@@ -178,7 +179,7 @@ export default function MixerStrip(props: MixerProps) {
 
   return (
     <Show when={hasChanges()}>
-      <div class="mixer-strip">
+      <div class="mixer-strip" data-testid="mixer-strip">
         <div class="mixer-toggles">
           <Show when={mute()}>
             {(m) => <MixerToggle label="M" value={m()} />}

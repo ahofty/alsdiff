@@ -281,13 +281,14 @@ export default function ArrangementView() {
           </span>
           <input
             type="range"
+            data-testid="zoom-slider"
             min="0"
             max="100"
             value={zoomToSlider(zoomFactor(), ZOOM_MIN, ZOOM_MAX)}
             onInput={(e) => setZoomFactor(sliderToZoom(Number(e.currentTarget.value), ZOOM_MIN, ZOOM_MAX))}
             style={{ width: "120px" }}
           />
-          <span style={{ color: "var(--text-dim)", "font-size": "11px" }}>
+          <span data-testid="zoom-label" style={{ color: "var(--text-dim)", "font-size": "11px" }}>
             {zoomFactor().toFixed(1)}x
           </span>
         </div>
@@ -295,6 +296,7 @@ export default function ArrangementView() {
         <div class="arrangement-content">
           <div
             class="track-headers"
+            data-testid="track-headers"
             ref={headersRef}
             onWheel={(e) => {
               const timeline = timelineRef;
@@ -319,12 +321,13 @@ export default function ArrangementView() {
 
           <div
             class="timeline-area"
+            data-testid="timeline-area"
             ref={timelineRef}
             onWheel={(e) =>
               handleWheelZoom(e, zoomFactor(), setZoomFactor, ZOOM_MIN, ZOOM_MAX)
             }
           >
-            <div class="timeline-ruler" style={{ width: `${totalWidth()}px` }}>
+            <div class="timeline-ruler" data-testid="timeline-ruler-top" style={{ width: `${totalWidth()}px` }}>
               <For each={beatMarkers()}>
                 {(m) => (
                   <div
@@ -350,12 +353,13 @@ export default function ArrangementView() {
             <div style={{ width: `${totalWidth()}px`, height: `${tracksHeight()}px`, position: "relative" }}>
               <canvas
                 ref={canvasRef}
+                data-testid="arrangement-canvas"
                 onClick={handleCanvasClick}
                 style={{ display: "block" }}
               />
             </div>
 
-            <div class="timeline-ruler-bottom" style={{ width: `${totalWidth()}px` }}>
+            <div class="timeline-ruler-bottom" data-testid="timeline-ruler-bottom" style={{ width: `${totalWidth()}px` }}>
               <For each={realtimeMarkers()}>
                 {(m) => (
                   <div

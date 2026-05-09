@@ -35,7 +35,7 @@ export default function ClipDetail(props: Props) {
   const notes = () => findCollection(props.clipChildren, "Notes");
 
   return (
-    <div class="clip-detail">
+    <div class="clip-detail" data-testid="clip-detail">
       <div class="clip-detail-section">
         <h4>Properties</h4>
         <For each={fields()}>
