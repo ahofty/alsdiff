@@ -26,4 +26,4 @@
    (glob_files ../*.{ml,mli}))
   (target dune.ocp-indent)
   (action
-   (run ocp-indent-gen-rules -o %{target}))))
+   (run ocp-indent-gen-rules --ignore=automation.pp.ml,clip.pp.ml,device.pp.ml,track.pp.ml,liveset.pp.ml -o %{target}))))

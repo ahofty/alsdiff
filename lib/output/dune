@@ -33,4 +33,4 @@
    (glob_files ../*.{ml,mli}))
   (target dune.ocp-indent)
   (action
-   (run ocp-indent-gen-rules -o %{target}))))
+   (run ocp-indent-gen-rules --ignore=view_model.pp.ml,config.pp.ml,text_renderer.pp.ml,stats_renderer.pp.ml,json_renderer.pp.ml,flowchart.pp.ml,mermaid_renderer.pp.ml,dot_renderer.pp.ml -o %{target}))))

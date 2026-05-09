@@ -255,4 +255,4 @@
    (glob_files ../*.{ml,mli}))
   (target dune.ocp-indent)
   (action
-   (run ocp-indent-gen-rules -o %{target}))))
+   (run ocp-indent-gen-rules --ignore=test_variant_patch.pp.ml -o %{target}))))
