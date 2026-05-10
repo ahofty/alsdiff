@@ -1,4 +1,5 @@
-open View_model
+open Output_types
+open Presentation_model
 open Config
 
 let display_name (dt : domain_type) : string =

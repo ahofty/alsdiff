@@ -1,4 +1,5 @@
-open View_model
+open Output_types
+open Presentation_model
 
 (** How much detail to show for a particular diff item. *)
 type detail_level =
@@ -850,12 +851,12 @@ let detail_config_json_schema () : Yojson.Basic.t =
       ~title:"alsdiff configuration schema"
       ~description:"Configuration schema for alsdiff output rendering"
       ~definitions:[
-        ("domain_type", View_model.domain_type_jsonschema);
+        ("domain_type", Output_types.domain_type_jsonschema);
         ("detail_level", detail_level_jsonschema);
         ("per_change_override", per_change_override_jsonschema);
         ("type_override_entry", type_override_entry_jsonschema);
-        ("note_display_style", View_model.note_display_style_jsonschema);
-        ("time_format", View_model.time_format_jsonschema);
+        ("note_display_style", Output_types.note_display_style_jsonschema);
+        ("time_format", Output_types.time_format_jsonschema);
       ]
       detail_config_jsonschema
   in
