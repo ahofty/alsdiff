@@ -1698,7 +1698,11 @@ let create_automation_item
     | `Added _ | `Removed _ | `Unchanged -> []
   in
 
-  { name = automation_name; change = change_type; domain_type = DTAutomation; children = event_children }
+  let children = match event_children with
+    | [] -> []
+    | _ -> [Collection { name = "Events"; change = change_type; domain_type = DTEvent; items = event_children }]
+  in
+  { name = automation_name; change = change_type; domain_type = DTAutomation; children }
 
 
 (** [create_device_item] builds a [item] for a device change (new type system).

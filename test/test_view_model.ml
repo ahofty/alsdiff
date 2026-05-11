@@ -299,7 +299,9 @@ let build_automation_item_from_event_patch event_patch =
 
 let get_single_event_item item =
   check int "single event item" 1 (List.length item.children);
-  get_item (List.hd item.children)
+  let events_collection = get_collection (List.hd item.children) in
+  check int "events in collection" 1 (List.length events_collection.items);
+  get_item (List.hd events_collection.items)
 
 let test_create_automation_item_curve_added_summary () =
   let event_patch = {
