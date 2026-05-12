@@ -3,7 +3,10 @@ open Alsdiff_base.Diff
 
 
 module TimeSignature = struct
-  type t = { numer : int; denom : int } [@@deriving eq, patch] [@@patch.generate_diff]
+  type t = {
+    numer : int;
+    denom : int;
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
   let create (xml : Xml.t) : t =
     match xml with
     | Xml.Element { name = "RemoteableTimeSignature"; _ } ->
@@ -16,13 +19,13 @@ end
 
 module MidiNote = struct
   type t = {
-    id : int; [@id.id] [@patch.skip]
+    id : int; [@id.id] [@patch.skip] [@view.skip]
     note : int;
-    time : float;
+    time : float; [@view.scalar time]
     duration : float;
     velocity : float;
     off_velocity : float;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (note: int) (xml : Xml.t) : t =
     match xml with
@@ -38,10 +41,10 @@ end
 
 module Loop = struct
   type t = {
-    start_time : float;
-    end_time : float;
+    start_time : float; [@view.scalar time]
+    end_time : float; [@view.scalar time]
     on : bool;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
 
   let create (xml : Xml.t) : t =
@@ -57,14 +60,14 @@ end
 
 module MidiClip = struct
   type t = {
-    id : int; [@id.id] [@patch.identity]
+    id : int; [@id.id] [@patch.identity] [@view.skip]
     name : string;
-    start_time : float;
-    end_time : float;
-    loop : Loop.t;
-    signature : TimeSignature.t;
-    notes : MidiNote.t list;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    start_time : float; [@view.scalar time]
+    end_time : float; [@view.scalar time]
+    loop : Loop.t; [@view.skip]
+    signature : TimeSignature.t; [@view.child "DTSignature"] [@view.label "TimeSignature"]
+    notes : MidiNote.t list; [@view.collection "DTNote"] [@view.builder "build_notes"]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -102,8 +105,8 @@ module SampleRef = struct
   type t = {
     file_path : string;
     crc : string;
-    last_modified_date : int; (* unix timestamp *)
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    last_modified_date : int; [@view.scalar unix_timestamp]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -129,7 +132,7 @@ module Fade = struct
     fade_out_curve_slope : float;
     is_default_fade_in : bool;
     is_default_fade_out : bool;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -158,15 +161,15 @@ end
 module AudioClip = struct
   (* TODO: support warp related settings *)
   type t = {
-    id : int; [@id.id] [@patch.identity]
+    id : int; [@id.id] [@patch.identity] [@view.skip]
     name : string;
-    start_time : float;
-    end_time : float;
-    loop : Loop.t;
-    signature : TimeSignature.t;
-    sample_ref : SampleRef.t;
-    fade : Fade.t option;
-  } [@@deriving eq, id, patch]
+    start_time : float; [@view.scalar time]
+    end_time : float; [@view.scalar time]
+    loop : Loop.t; [@view.skip]
+    signature : TimeSignature.t; [@view.child "DTSignature"] [@view.label "TimeSignature"]
+    sample_ref : SampleRef.t; [@view.child "DTSampleRef"] [@view.label "SampleRef"]
+    fade : Fade.t option; [@view.optional_child "DTClip"]
+  } [@@deriving eq, id, patch, view_spec]
 
   let create (xml : Xml.t) : t =
     match xml with

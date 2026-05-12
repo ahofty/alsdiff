@@ -9,6 +9,7 @@
    liveset)
  (libraries
    alsdiff_base
+   alsdiff_view_spec_types
    ppx_deriving
    ppx_deriving_yojson
    yojson)

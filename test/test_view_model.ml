@@ -210,15 +210,15 @@ let test_create_midi_clip_item () =
 
   (* Check TimeSignature item *)
   let sig_item = get_item (find_view_by_name "TimeSignature" item.children) in
-  let numer_view = get_field (find_view_by_name "Numerator" sig_item.children) in
+  let numer_view = get_field (find_view_by_name "Numer" sig_item.children) in
   (match numer_view.change with
    | Modified ->
      (match numer_view.oldval, numer_view.newval with
       | Some (Fint o), Some (Fint n) ->
         check int "Old numer" 4 o;
         check int "New numer" 3 n
-      | _ -> fail "Invalid values for Numerator field")
-   | _ -> fail "Expected Numerator to be Modified");
+      | _ -> fail "Invalid values for Numer field")
+   | _ -> fail "Expected Numer to be Modified");
 
   (* Check Loop item *)
   let loop_item = get_item (find_view_by_name "Loop" item.children) in
