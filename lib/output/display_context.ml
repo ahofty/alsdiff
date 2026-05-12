@@ -7,7 +7,7 @@ let get_note_name_from_int ?(style : Output_types.note_display_style = Output_ty
   let note_names_sharp = [| "C"; "C#"; "D"; "D#"; "E"; "F"; "F#"; "G"; "G#"; "A"; "A#"; "B" |] in
   let note_names_flat = [| "C"; "Db"; "D"; "Eb"; "E"; "F"; "Gb"; "G"; "Ab"; "A"; "Bb"; "B" |] in
 
-  let note_class = note_int mod 12 in
+  let note_class = (note_int mod 12 + 12) mod 12 in
   let octave_num = note_int / 12 - 1 in
 
   let note_name = match style with

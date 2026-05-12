@@ -513,31 +513,6 @@ let make_time_field (fmt : dual_time_formatter) name get_v get_p = {
 }
 
 
-(** Loop field specifications *)
-let loop_field_specs ?(format_time = default_dual_time_formatter) () : (Clip.Loop.t, Clip.Loop.Patch.t) unified_field_spec list = [
-  make_time_field format_time "Start Time" (fun (l : Clip.Loop.t) -> l.start_time) (fun (p : Clip.Loop.Patch.t) -> p.start_time);
-  make_time_field format_time "End Time" (fun (l : Clip.Loop.t) -> l.end_time) (fun (p : Clip.Loop.Patch.t) -> p.end_time);
-  make_bool "On" (fun (l : Clip.Loop.t) -> l.on) (fun (p : Clip.Loop.Patch.t) -> p.on);
-]
-
-let create_loop_fields ?(format_time = default_dual_time_formatter) =
-  build_value_field_views (loop_field_specs ~format_time ()) ~domain_type:DTLoop
-let create_loop_patch_fields ?(format_time = default_dual_time_formatter) =
-  build_patch_field_views (loop_field_specs ~format_time ()) ~domain_type:DTLoop
-
-
-
-(** CurveControls field specifications *)
-let curve_controls_field_specs : (Automation.CurveControls.t, Automation.CurveControls.Patch.t) unified_field_spec list = [
-  make_float "Curve1 X" (fun (c : Automation.CurveControls.t) -> c.curve1_x) (fun (p : Automation.CurveControls.Patch.t) -> p.curve1_x);
-  make_float "Curve1 Y" (fun (c : Automation.CurveControls.t) -> c.curve1_y) (fun (p : Automation.CurveControls.Patch.t) -> p.curve1_y);
-  make_float "Curve2 X" (fun (c : Automation.CurveControls.t) -> c.curve2_x) (fun (p : Automation.CurveControls.Patch.t) -> p.curve2_x);
-  make_float "Curve2 Y" (fun (c : Automation.CurveControls.t) -> c.curve2_y) (fun (p : Automation.CurveControls.Patch.t) -> p.curve2_y);
-]
-
-let create_curve_controls_fields = build_value_field_views curve_controls_field_specs ~domain_type:DTEvent
-let create_curve_controls_patch_fields = build_patch_field_views curve_controls_field_specs ~domain_type:DTEvent
-
 (* Default note name style for MIDI notes *)
 let default_note_name_style = Sharp
 
@@ -573,7 +548,6 @@ let create_note_item
   build_item_from_specs ~name:note_name ~domain_type:DTNote ~specs:[section_spec] c
 
 
-
 (** [event_value_to_field_value] converts an Automation.event_value to a field_value *)
 let event_value_to_field_value v =
   match v with
@@ -581,41 +555,13 @@ let event_value_to_field_value v =
   | Automation.IntEvent i -> Fint i
   | Automation.EnumEvent e -> Fint e
 
+
 (** [event_value_atomic_to_field_value] converts an event_value atomic_update to field_value atomic_update *)
 let event_value_atomic_to_field_value (update : Automation.event_value atomic_update) : field_value atomic_update =
   match update with
   | `Modified { oldval; newval } ->
     `Modified { oldval = event_value_to_field_value oldval; newval = event_value_to_field_value newval }
   | `Unchanged -> `Unchanged
-
-
-(** [create_events_item] builds a [item] for an envelope event change (new type system).
-    @param c the envelope event structured change
-*)
-let create_events_item
-    ?(format_time : dual_time_formatter = default_dual_time_formatter)
-    (c : (Automation.EnvelopeEvent.t, Automation.EnvelopeEvent.Patch.t) structured_change)
-  : item =
-  let open Automation in
-  let base_specs = [
-    make_time_field format_time "Time" (fun (x : EnvelopeEvent.t) -> x.time) (fun (x : EnvelopeEvent.Patch.t) -> x.time);
-    make_spec event_value_to_field_value "Value"
-      (fun (x : EnvelopeEvent.t) -> x.value) (fun (x : EnvelopeEvent.Patch.t) -> x.value);
-  ]
-  in
-  let curve_section_spec = Spec.child_optional
-      ~name:"Curve"
-      ~of_value:(fun (e : EnvelopeEvent.t) -> e.curve)
-      ~of_patch:(fun (p : EnvelopeEvent.Patch.t) -> p.curve)
-      ~build_value_children:create_curve_controls_fields
-      ~build_patch_children:create_curve_controls_patch_fields
-      ~domain_type:DTEvent
-  in
-  let base_section_spec = Spec.inline_fields ~specs:base_specs ~domain_type:DTEvent in
-  build_item_from_specs ~name:"EnvelopeEvent" ~domain_type:DTEvent ~specs:[base_section_spec; curve_section_spec] c
-
-
-(* ================== Device View Functions ==================== *)
 
 
 (* ==================== MidiClip Specs (using PPX + manual Loop) ==================== *)
@@ -655,6 +601,7 @@ let build_midi_clip_section_name =
     ~get_patch_id:(fun p -> p.Clip.MidiClip.Patch.id)
     ~get_patch_name:(fun p -> p.Clip.MidiClip.Patch.name)
 
+
 (* ==================== AudioClip name helper ==================== *)
 
 (** [build_audio_clip_section_name] builds the section name for an AudioClip. *)
@@ -665,8 +612,6 @@ let build_audio_clip_section_name =
     ~get_name:(fun c -> c.Clip.AudioClip.name)
     ~get_patch_id:(fun p -> p.Clip.AudioClip.Patch.id)
     ~get_patch_name:(fun p -> p.Clip.AudioClip.Patch.name)
-
-
 
 
 (* ==================== Device ViewSpec Instantiations ==================== *)
@@ -769,6 +714,33 @@ module MainMixerVS = Track.MainMixer.ViewSpec(DeviceViewSpecB)
 module RoutingSetVS = Track.RoutingSet.ViewSpec(DeviceViewSpecB)
 module MidiClipVS = Clip.MidiClip.ViewSpec(DeviceViewSpecB)
 module AudioClipVS = Clip.AudioClip.ViewSpec(DeviceViewSpecB)
+module LoopVS = Clip.Loop.ViewSpec(DeviceViewSpecB)
+module CurveControlsVS = Automation.CurveControls.ViewSpec(DeviceViewSpecB)
+module VersionVS = Liveset.Version.ViewSpec(DeviceViewSpecB)
+
+
+(** [create_events_item] builds a [item] for an envelope event change (new type system). *)
+let create_events_item
+    ?(format_time : dual_time_formatter = default_dual_time_formatter)
+    (c : (Automation.EnvelopeEvent.t, Automation.EnvelopeEvent.Patch.t) structured_change)
+  : item =
+  let open Automation in
+  let base_specs = [
+    make_time_field format_time "Time" (fun (x : EnvelopeEvent.t) -> x.time) (fun (x : EnvelopeEvent.Patch.t) -> x.time);
+    make_spec event_value_to_field_value "Value"
+      (fun (x : EnvelopeEvent.t) -> x.value) (fun (x : EnvelopeEvent.Patch.t) -> x.value);
+  ]
+  in
+  let curve_section_spec = Spec.child_optional
+      ~name:"Curve"
+      ~of_value:(fun (e : EnvelopeEvent.t) -> e.curve)
+      ~of_patch:(fun (p : EnvelopeEvent.Patch.t) -> p.curve)
+      ~build_value_children:(CurveControlsVS.build_value_fields ~domain_type:DTEvent)
+      ~build_patch_children:(CurveControlsVS.build_patch_fields ~domain_type:DTEvent)
+      ~domain_type:DTEvent
+  in
+  let base_section_spec = Spec.inline_fields ~specs:base_specs ~domain_type:DTEvent in
+  build_item_from_specs ~name:"EnvelopeEvent" ~domain_type:DTEvent ~specs:[base_section_spec; curve_section_spec] c
 
 
 (* ==================== Clip Item Builders (after VS instantiations) ==================== *)
@@ -786,8 +758,8 @@ let create_midi_clip_item
   let loop_child = Spec.child ~name:"Loop"
       ~of_value:(fun (c : Clip.MidiClip.t) -> c.loop)
       ~of_patch:(fun (p : Clip.MidiClip.Patch.t) -> p.loop)
-      ~build_value_children:(create_loop_fields ~format_time)
-      ~build_patch_children:(create_loop_patch_fields ~format_time)
+      ~build_value_children:(LoopVS.build_value_fields ~format_time ~domain_type:DTLoop)
+      ~build_patch_children:(LoopVS.build_patch_fields ~format_time ~domain_type:DTLoop)
       ~domain_type:DTLoop in
   let ppx_specs = MidiClipVS.section_specs ~format_time
       ~build_notes:(create_note_item ~note_name_style ~format_time) in
@@ -809,8 +781,8 @@ let create_audio_clip_item
   let loop_child = Spec.child ~name:"Loop"
       ~of_value:(fun (c : Clip.AudioClip.t) -> c.loop)
       ~of_patch:(fun (p : Clip.AudioClip.Patch.t) -> p.loop)
-      ~build_value_children:(create_loop_fields ~format_time)
-      ~build_patch_children:(create_loop_patch_fields ~format_time)
+      ~build_value_children:(LoopVS.build_value_fields ~format_time ~domain_type:DTLoop)
+      ~build_patch_children:(LoopVS.build_patch_fields ~format_time ~domain_type:DTLoop)
       ~domain_type:DTLoop in
   let ppx_specs = AudioClipVS.section_specs ~format_time in
   let specs = match ppx_specs with
@@ -1019,25 +991,6 @@ let create_locator_item
   build_item_from_specs ~name:locator_name ~domain_type:DTLocator ~specs:(locator_section_specs ~format_time ()) c
 
 
-(** Version field specifications *)
-let version_field_specs : (Liveset.Version.t, Liveset.Version.Patch.t) unified_field_spec list = [
-  { name = "Major";
-    get_value = (fun v -> string_value v.major);
-    get_old_value = (fun _ -> None);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update string_value p.major) };
-  { name = "Minor";
-    get_value = (fun v -> string_value v.minor);
-    get_old_value = (fun _ -> None);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update string_value p.minor) };
-  { name = "Revision";
-    get_value = (fun v -> string_value v.revision);
-    get_old_value = (fun _ -> None);
-    get_patch = (fun p -> ViewBuilder.map_atomic_update string_value p.revision) };
-]
-
-let create_version_fields = build_value_field_views version_field_specs ~domain_type:DTVersion
-let create_version_patch_fields = build_patch_field_views version_field_specs ~domain_type:DTVersion
-
 
 (* ==================== Liveset Helper Functions ==================== *)
 
@@ -1225,8 +1178,8 @@ let create_liveset_item
       ~name:"Version"
       ~of_value:(fun (ls : Liveset.t) -> ls.version)
       ~of_patch:(fun (p : Liveset.Patch.t) -> p.version)
-      ~build_value_children:create_version_fields
-      ~build_patch_children:create_version_patch_fields
+      ~build_value_children:(VersionVS.build_value_fields ~domain_type:DTVersion)
+      ~build_patch_children:(VersionVS.build_patch_fields ~domain_type:DTVersion)
       ~domain_type:DTVersion
   in
 
