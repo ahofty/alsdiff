@@ -5,9 +5,7 @@
    output_types
    presentation_model
    display_context
-   change_tree
    change_projector
-   view_specs
    view_model
    config
    text_renderer
@@ -40,4 +38,4 @@
    (glob_files ../*.{ml,mli}))
   (target dune.ocp-indent)
   (action
-   (run ocp-indent-gen-rules --ignore=output_types.pp.ml,presentation_model.pp.ml,display_context.pp.ml,change_tree.pp.ml,change_projector.pp.ml,view_model.pp.ml,view_specs.pp.ml,config.pp.ml,text_renderer.pp.ml,stats_renderer.pp.ml,json_renderer.pp.ml,flowchart.pp.ml,mermaid_renderer.pp.ml,dot_renderer.pp.ml -o %{target}))))
+   (run ocp-indent-gen-rules --ignore=output_types.pp.ml,presentation_model.pp.ml,display_context.pp.ml,change_projector.pp.ml,view_model.pp.ml,config.pp.ml,text_renderer.pp.ml,stats_renderer.pp.ml,json_renderer.pp.ml,flowchart.pp.ml,mermaid_renderer.pp.ml,dot_renderer.pp.ml -o %{target}))))
