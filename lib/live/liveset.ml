@@ -4,10 +4,10 @@ open Alsdiff_base.Diff
 
 module Locator = struct
   type t = {
-    id : int; [@id.id] [@patch.skip]
+    id : int; [@id.id] [@patch.skip] [@view.const]
     name : string;
-    time : float;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    time : float; [@view.scalar time]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) (_file_path : string) : t =
     match xml with
@@ -24,7 +24,7 @@ module Version = struct
     major : string;
     minor : string;
     revision : string;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 end
 
 

@@ -632,7 +632,6 @@ module Liveset_diff = struct
     let views =
       [View_model.Item
          (View_model.create_liveset_item
-            ~reference_liveset:liveset1
             (if Liveset.Patch.is_empty patch then `Unchanged else `Modified patch))]
     in
     let output =
@@ -671,7 +670,6 @@ module Liveset_diff_id = struct
     let views =
       [View_model.Item
          (View_model.create_liveset_item
-            ~reference_liveset:liveset1
             (if Liveset.Patch.is_empty patch then `Unchanged else `Modified patch))]
     in
     let output =

@@ -8,7 +8,7 @@ module CurveControls = struct
     curve1_y : float;
     curve2_x : float;
     curve2_y : float;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 end
 
 
@@ -22,9 +22,9 @@ module EnvelopeEvent = struct
   type t = {
     id : int; [@id.id] [@patch.skip]
     time : float;
-    value : event_value;
-    curve : CurveControls.t option;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    value : event_value;       [@view.skip]
+    curve : CurveControls.t option;  [@view.skip]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     let tag_name = Xml.get_name xml in
@@ -51,10 +51,10 @@ end
 
 
 type t = {
-  id : int; [@id.id] [@patch.identity]
-  target : int; [@id.id] [@patch.identity]
-  events : EnvelopeEvent.t list;
-} [@@deriving eq, id, patch] [@@patch.generate_diff]
+  id : int; [@id.id] [@patch.identity] [@view.skip]
+  target : int; [@id.id] [@patch.identity] [@view.skip]
+  events : EnvelopeEvent.t list;  [@view.collection "DTEvent"] [@view.label "Events"]
+} [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
 (* Automation contains a list of EnvelopeEvents and is therefore
    a structured type at a higher level of abstraction. *)

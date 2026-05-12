@@ -1,4 +1,5 @@
-open View_model
+open Output_types
+open Presentation_model
 open Config
 (* Config types and functions are re-exported at the end of this file for backward compatibility *)
 
@@ -231,7 +232,7 @@ let pp cfg fmt view =
 let render_to_string cfg view =
   Fmt.str "%a" (pp_view cfg) view
 
-let render config (views : View_model.view list) : string =
+let render config (views : view list) : string =
   let buffer = Buffer.create 4096 in
   let ppf = Format.formatter_of_buffer buffer in
   Fmt.set_style_renderer ppf `None;

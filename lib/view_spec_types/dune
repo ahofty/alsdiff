@@ -1,0 +1,5 @@
+(library
+ (name alsdiff_view_spec_types)
+ (public_name alsdiff.view_spec_types)
+ (modules view_spec_types)
+ (libraries alsdiff_base))

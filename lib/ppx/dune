@@ -1,6 +1,6 @@
 (library
  (name ppx_patch)
- (modules ppx_shared ppx_patch ppx_id)
+ (modules ppx_shared ppx_patch ppx_id ppx_view_spec)
  (kind ppx_rewriter)
  (libraries ppxlib)
  (preprocess (pps ppxlib.metaquot)))

@@ -176,6 +176,34 @@ module GenericParam = struct
 
   let create_bool_manual xml =
     create xml ~parse_value:(fun x -> Bool (Upath.get_bool_attr "/Manual" "Value" x))
+
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    let pv_to_fv = function
+      | Float f -> B.float_value f
+      | Int i -> B.int_value i
+      | Bool b -> B.bool_value b
+      | Enum (e, _) -> B.int_value e
+
+    let field_specs = [
+      B.make_spec pv_to_fv "Value"
+        (fun (v : t) -> v.value) (fun (p : Patch.t) -> p.value);
+      B.make_int "Automation"
+        (fun (v : t) -> v.automation) (fun (p : Patch.t) -> p.automation);
+      B.make_int "Modulation"
+        (fun (v : t) -> v.modulation) (fun (p : Patch.t) -> p.modulation);
+    ]
+
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs
+        ~domain_type:(B.domain_type_of_name "DTDefault")
+    ]
+
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDefault") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDefault") p =
+      B.build_patch_field_views field_specs p ~domain_type
+  end
 end
 
 
@@ -189,8 +217,8 @@ end
 
 module DeviceParam = struct
   type t = {
-    base : GenericParam.t;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    base : GenericParam.t;  [@view.inline_child]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let has_same_id a b = a.base.name = b.base.name
   let id_hash t = Hashtbl.hash t.base.name
@@ -230,15 +258,15 @@ module PresetRef = struct
 
   type t = {
     id : int;                   (* not unique *) [@id.id] [@patch.skip]
-    name : string;              [@patch.skip]
+    name : string;              [@patch.skip] [@view.const]
     preset_type : preset_type;  [@patch.skip]
     relative_path : string;
-    path : string;
+    path : string;              [@view.skip]
     pack_name : string;
-    pack_id : int;
-    file_size : int;
-    crc : int;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    pack_id : int;              [@view.skip]
+    file_size : int;            [@view.skip]
+    crc : int;                  [@view.skip]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -285,16 +313,16 @@ end
 module PatchRef = struct
   type t = {
     id : int;                              [@id.id] [@patch.skip]
-    name : string;                         [@patch.skip]
+    name : string;                         [@patch.skip] [@view.const]
     preset_type : PresetRef.preset_type;   [@patch.skip]
     relative_path : string;
-    path : string;
+    path : string;                         [@view.skip]
     pack_name : string;
-    pack_id : int;
-    file_size : int;
-    crc : int;
-    last_mod_date : int;  (* LastModDate Value attribute - UNIX timestamp *)
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    pack_id : int;                         [@view.skip]
+    file_size : int;                       [@view.skip]
+    crc : int;                             [@view.skip]
+    last_mod_date : int;  (* LastModDate Value attribute - UNIX timestamp *) [@view.scalar unix_timestamp] [@view.label "Last Modified"]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -389,6 +417,22 @@ module PluginParam = struct
 
       let base_change = diff_complex_value_id (module PluginSpecializedGenericParam) old_param.base new_param.base in
       { id = new_param.id; base = base_change }
+
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    let __inline_base =
+      let module Vs = (GenericParam.ViewSpec)(B) in
+      B.map_specs (fun (v : t) -> v.base) (fun (p : Patch.t) -> p.base) Vs.field_specs
+    let field_specs = List.append [] __inline_base
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs ~domain_type:(B.domain_type_of_name "DTDefault")
+    ]
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDefault") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDefault") p =
+      B.build_patch_field_views field_specs p ~domain_type
+    let build_item ?(name = "") ?(domain_type = B.domain_type_of_name "DTDefault") c =
+      B.build_item_from_specs ~name ~domain_type ~specs:section_specs c
+  end
 end
 
 
@@ -574,6 +618,25 @@ module PluginDesc = struct
 
   let id_hash t = Hashtbl.hash t.uid
 
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    let field_specs = [
+      B.make_string "Name" (fun (d : t) -> d.name) (fun (p : Patch.t) -> p.name);
+      B.make_string "UID" (fun (d : t) -> d.uid) (fun (p : Patch.t) -> p.uid);
+      B.make_spec (fun (pt : plugin_type) -> B.string_value (plugin_type_to_string pt))
+        "Type" (fun (d : t) -> d.plugin_type) (fun (p : Patch.t) -> p.plugin_type);
+      B.make_spec (fun (_ : string) -> B.string_value "<state>")
+        "Processor State" (fun (d : t) -> d.processor_state) (fun (p : Patch.t) -> p.state);
+    ]
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs ~domain_type:(B.domain_type_of_name "DTDevice")
+    ]
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDevice") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDevice") p =
+      B.build_patch_field_views field_specs p ~domain_type
+    let build_item ?(name = "") ?(domain_type = B.domain_type_of_name "DTDevice") c =
+      B.build_item_from_specs ~name ~domain_type ~specs:section_specs c
+  end
 end
 
 
@@ -582,8 +645,8 @@ module Max4LiveParam = struct
   type t = {
     id : int;                   (* ParameterId *) [@id.id] [@patch.skip]
     index : int;                (* VisualIndex *)
-    base : GenericParam.t;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    base : GenericParam.t;  [@view.inline_child]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   (** Extract enum description from Names/Name/Name structure - specific to M4L *)
   let extract_enum_desc (xml : Xml.t) : enum_desc option =
@@ -639,11 +702,11 @@ end
 (* The rack chain's mixer is different to track's mixer *)
 module MixerDevice = struct
   type t = {
-    on : DeviceParam.t;
-    speaker : DeviceParam.t;     (* mute or not *)
-    volume : DeviceParam.t;      (* volume *)
-    pan : DeviceParam.t;         (* panorama/panning *)
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    on : DeviceParam.t;         [@view.child "DTParam"] [@view.label "On"]
+    speaker : DeviceParam.t;    [@view.child "DTParam"] [@view.label "Speaker"]
+    volume : DeviceParam.t;     [@view.child "DTParam"] [@view.label "Volume"]
+    pan : DeviceParam.t;        [@view.child "DTParam"] [@view.label "Pan"]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -671,21 +734,12 @@ let extract_index_from_name (element_name : string) : int =
   | index :: _ -> int_of_string index
   | [] -> failwith ("Invalid element name: " ^ element_name)
 
-(* Helper function for diffing lists of atomic values *)
-let diff_atomic_list (old_list : float list) (new_list : float list) : float atomic_change list =
-  if List.length old_list <> List.length new_list then
-    failwith "diff_atomic_list requires lists of same length"
-  else
-    List.map2 (fun old_elem new_elem ->
-        (diff_atomic_value (module Float) old_elem new_elem :> float atomic_change)
-      ) old_list new_list
-
 
 module Macro = struct
   type t = {
     id : int;               [@id.id] [@patch.skip]
-    base : GenericParam.t;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    base : GenericParam.t;  [@view.inline_child]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   let create (name_xml : Xml.t) (control_xml : Xml.t) : t =
     (* Extract the macro name from MacroDisplayNames element *)
@@ -701,10 +755,10 @@ end
 
 module Snapshot = struct
   type t = {
-    id : int;               [@id.id] [@patch.skip]
+    id : int;               [@id.id] [@patch.skip] [@view.skip]
     name : string;
-    values : float list;
-  } [@@deriving eq, id, patch]
+    values : float list;    [@view.skip]
+  } [@@deriving eq, id, patch, view_spec]
 
   let create (xml : Xml.t) : t =
     match xml with
@@ -738,12 +792,15 @@ module Snapshot = struct
       failwith "cannot diff two Snapshots with different Ids"
     else
       let name_change = diff_atomic_value (module String) old_snapshot.name new_snapshot.name in
-      let values_changes = diff_atomic_list old_snapshot.values new_snapshot.values in
-
-      {
-        name = name_change;
-        values = values_changes;
-      }
+      let values_changes =
+        if List.length old_snapshot.values <> List.length new_snapshot.values then
+          failwith "diff_atomic_list requires lists of same length"
+        else
+          List.map2 (fun old_elem new_elem ->
+              (diff_atomic_value (module Stdlib.Float) old_elem new_elem :> float atomic_change)
+            ) old_snapshot.values new_snapshot.values
+      in
+      { name = name_change; values = values_changes }
 end
 
 
@@ -1117,6 +1174,47 @@ module RegularDevice = struct
 
   let diff (old_device : t) (new_device : t) : Patch.t =
     regular_device_diff old_device new_device
+
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    module DP = DeviceParam.ViewSpec(B)
+
+    let build_section_name (c : (t, Patch.t) structured_change) : string =
+      match c with
+      | `Added v | `Removed v ->
+        Printf.sprintf "%s (#%d): %s" v.device_name v.id v.display_name
+      | `Modified p ->
+        let display = match p.display_name with
+          | `Modified { newval; _ } -> newval
+          | `Unchanged -> p.device_name
+        in Printf.sprintf "%s (#%d): %s" p.device_name p.id display
+      | `Unchanged -> ""
+
+    let build_param_item (c : (DeviceParam.t, DeviceParam.Patch.t) structured_change) =
+      let name = match c with
+        | `Added dp -> dp.base.name
+        | `Removed dp -> dp.base.name
+        | `Modified p -> (match p.base with `Modified gp -> gp.name | `Unchanged -> "Parameter")
+        | `Unchanged -> "Parameter"
+      in DP.build_item ~name c
+
+    let field_specs = [
+      B.make_string "Display Name" (fun (d : t) -> d.display_name) (fun (p : Patch.t) -> p.display_name);
+    ]
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs ~domain_type:(B.domain_type_of_name "DTDevice");
+      B.Spec.collection ~name:"Parameters"
+        ~of_value:(fun (d : t) -> d.params)
+        ~of_patch:(fun (p : Patch.t) -> p.params)
+        ~build_item:build_param_item
+        ~domain_type:(B.domain_type_of_name "DTParam");
+    ]
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDevice") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDevice") p =
+      B.build_patch_field_views field_specs p ~domain_type
+    let build_item ?(name = "") ?(domain_type = B.domain_type_of_name "DTDevice") c =
+      B.build_item_from_specs ~name ~domain_type ~specs:section_specs c
+  end
 end
 
 
@@ -1165,6 +1263,68 @@ module PluginDevice = struct
   let has_same_id (a : t) (b : t) = a.id = b.id
 
   let diff = plugin_device_diff
+
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    module DP = DeviceParam.ViewSpec(B)
+    module PP = PluginParam.ViewSpec(B)
+    module PD = PluginDesc.ViewSpec(B)
+    module PR = PresetRef.ViewSpec(B)
+
+    let build_section_name (c : (t, Patch.t) structured_change) : string =
+      match c with
+      | `Added v | `Removed v ->
+        Printf.sprintf "%s (#%d): %s" v.device_name v.id v.display_name
+      | `Modified p ->
+        let display = match p.display_name with
+          | `Modified { newval; _ } -> newval
+          | `Unchanged -> p.device_name
+        in Printf.sprintf "%s (#%d): %s" p.device_name p.id display
+      | `Unchanged -> ""
+
+    let build_param_item (c : (PluginParam.t, PluginParam.Patch.t) structured_change) =
+      let name = match c with
+        | `Added pp -> pp.base.name
+        | `Removed pp -> pp.base.name
+        | `Modified p -> (match p.base with `Modified gp -> gp.name | `Unchanged -> "PluginParam")
+        | `Unchanged -> "PluginParam"
+      in PP.build_item ~name c
+
+    let field_specs = [
+      B.make_string "Display Name" (fun (d : t) -> d.display_name) (fun (p : Patch.t) -> p.display_name);
+    ]
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs ~domain_type:(B.domain_type_of_name "DTDevice");
+      B.Spec.child_optional ~name:"Preset"
+        ~of_value:(fun (d : t) -> d.preset)
+        ~of_patch:(fun (p : Patch.t) -> p.preset)
+        ~build_value_children:(fun ct pr -> PR.build_value_fields ct pr)
+        ~build_patch_children:(fun p -> PR.build_patch_fields p)
+        ~domain_type:(B.domain_type_of_name "DTPreset");
+      B.Spec.child ~name:"Enabled"
+        ~of_value:(fun (d : t) -> d.enabled)
+        ~of_patch:(fun (p : Patch.t) -> p.enabled)
+        ~build_value_children:(fun ct dp -> DP.build_value_fields ct dp)
+        ~build_patch_children:(fun p -> DP.build_patch_fields p)
+        ~domain_type:(B.domain_type_of_name "DTParam");
+      B.Spec.collection ~name:"Parameters"
+        ~of_value:(fun (d : t) -> d.params)
+        ~of_patch:(fun (p : Patch.t) -> p.params)
+        ~build_item:build_param_item
+        ~domain_type:(B.domain_type_of_name "DTParam");
+      B.Spec.child ~name:"PluginDesc"
+        ~of_value:(fun (d : t) -> d.desc)
+        ~of_patch:(fun (p : Patch.t) -> p.desc)
+        ~build_value_children:(fun ct desc -> PD.build_value_fields ct desc)
+        ~build_patch_children:(fun p -> PD.build_patch_fields p)
+        ~domain_type:(B.domain_type_of_name "DTDevice");
+    ]
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDevice") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDevice") p =
+      B.build_patch_field_views field_specs p ~domain_type
+    let build_item ?(name = "") ?(domain_type = B.domain_type_of_name "DTDevice") c =
+      B.build_item_from_specs ~name ~domain_type ~specs:section_specs c
+  end
 end
 
 
@@ -1258,6 +1418,61 @@ module GroupDevice = struct
   end
 
   let diff = group_device_diff
+
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    module MVS = Macro.ViewSpec(B)
+    module SVS = Snapshot.ViewSpec(B)
+    module PR = PresetRef.ViewSpec(B)
+
+    let build_section_name (c : (t, Patch.t) structured_change) : string =
+      match c with
+      | `Added v | `Removed v ->
+        Printf.sprintf "%s (#%d): %s" v.device_name v.id v.display_name
+      | `Modified p ->
+        let display = match p.display_name with
+          | `Modified { newval; _ } -> newval
+          | `Unchanged -> p.device_name
+        in Printf.sprintf "%s (#%d): %s" p.device_name p.id display
+      | `Unchanged -> ""
+
+    let build_macro_item (c : (Macro.t, Macro.Patch.t) structured_change) =
+      MVS.build_item ~name:"Macro" c
+
+    let build_snapshot_item (c : (Snapshot.t, Snapshot.Patch.t) structured_change) =
+      let name = match c with
+        | `Added s -> s.name | `Removed s -> s.name
+        | `Modified _ | `Unchanged -> "Snapshot"
+      in SVS.build_item ~name c
+
+    let field_specs = [
+      B.make_string "Display Name" (fun (d : t) -> d.display_name) (fun (p : Patch.t) -> p.display_name);
+    ]
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs ~domain_type:(B.domain_type_of_name "DTDevice");
+      B.Spec.child_optional ~name:"Preset"
+        ~of_value:(fun (d : t) -> d.preset)
+        ~of_patch:(fun (p : Patch.t) -> p.preset)
+        ~build_value_children:(fun ct pr -> PR.build_value_fields ct pr)
+        ~build_patch_children:(fun p -> PR.build_patch_fields p)
+        ~domain_type:(B.domain_type_of_name "DTPreset");
+      B.Spec.collection ~name:"Macros"
+        ~of_value:(fun (d : t) -> d.macros)
+        ~of_patch:(fun (p : Patch.t) -> p.macros)
+        ~build_item:build_macro_item
+        ~domain_type:(B.domain_type_of_name "DTMacro");
+      B.Spec.collection ~name:"Snapshots"
+        ~of_value:(fun (d : t) -> d.snapshots)
+        ~of_patch:(fun (p : Patch.t) -> p.snapshots)
+        ~build_item:build_snapshot_item
+        ~domain_type:(B.domain_type_of_name "DTSnapshot");
+    ]
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDevice") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDevice") p =
+      B.build_patch_field_views field_specs p ~domain_type
+    let build_item ?(name = "") ?(domain_type = B.domain_type_of_name "DTDevice") c =
+      B.build_item_from_specs ~name ~domain_type ~specs:section_specs c
+  end
 end
 
 
@@ -1305,6 +1520,62 @@ module Max4LiveDevice = struct
   let has_same_id (a : t) (b : t) = a.id = b.id
 
   let diff = max4live_device_diff
+
+  module ViewSpec(B : Alsdiff_view_spec_types.View_spec_types.S) = struct
+    module M4LP = Max4LiveParam.ViewSpec(B)
+    module PR = PresetRef.ViewSpec(B)
+    module PatchR = PatchRef.ViewSpec(B)
+
+    let build_section_name (c : (t, Patch.t) structured_change) : string =
+      match c with
+      | `Added v | `Removed v ->
+        Printf.sprintf "%s (#%d): %s" v.device_name v.id v.display_name
+      | `Modified p ->
+        let display = match p.display_name with
+          | `Modified { newval; _ } -> newval
+          | `Unchanged -> p.device_name
+        in Printf.sprintf "%s (#%d): %s" p.device_name p.id display
+      | `Unchanged -> ""
+
+    let build_param_item (c : (Max4LiveParam.t, Max4LiveParam.Patch.t) structured_change) =
+      let name = match c with
+        | `Added mp -> mp.base.name
+        | `Removed mp -> mp.base.name
+        | `Modified p -> (match p.base with `Modified gp -> gp.name | `Unchanged -> "M4LParam")
+        | `Unchanged -> "M4LParam"
+      in M4LP.build_item ~name c
+
+    let field_specs = [
+      B.make_string "Display Name" (fun (d : t) -> d.display_name) (fun (p : Patch.t) -> p.display_name);
+    ]
+    let section_specs = [
+      B.Spec.inline_fields ~specs:field_specs ~domain_type:(B.domain_type_of_name "DTDevice");
+      B.Spec.child_optional ~name:"Preset"
+        ~of_value:(fun (d : t) -> d.preset)
+        ~of_patch:(fun (p : Patch.t) -> p.preset)
+        ~build_value_children:(fun ct pr -> PR.build_value_fields ct pr)
+        ~build_patch_children:(fun p -> PR.build_patch_fields p)
+        ~domain_type:(B.domain_type_of_name "DTPreset");
+      B.Spec.child ~name:"PatchRef"
+        ~of_value:(fun (d : t) -> d.patch_ref)
+        ~of_patch:(fun (p : Patch.t) ->
+            match p.patch_ref with `Modified pr -> `Modified pr | _ -> `Unchanged)
+        ~build_value_children:(fun ct pr -> PatchR.build_value_fields ct pr)
+        ~build_patch_children:(fun p -> PatchR.build_patch_fields p)
+        ~domain_type:(B.domain_type_of_name "DTPreset");
+      B.Spec.collection ~name:"Parameters"
+        ~of_value:(fun (d : t) -> d.params)
+        ~of_patch:(fun (p : Patch.t) -> p.params)
+        ~build_item:build_param_item
+        ~domain_type:(B.domain_type_of_name "DTParam");
+    ]
+    let build_value_fields ?(domain_type = B.domain_type_of_name "DTDevice") ct v =
+      B.build_value_field_views field_specs ct v ~domain_type
+    let build_patch_fields ?(domain_type = B.domain_type_of_name "DTDevice") p =
+      B.build_patch_field_views field_specs p ~domain_type
+    let build_item ?(name = "") ?(domain_type = B.domain_type_of_name "DTDevice") c =
+      B.build_item_from_specs ~name ~domain_type ~specs:section_specs c
+  end
 end
 
 

@@ -11,11 +11,11 @@ module Routing = struct
   [@@deriving eq]
 
   type t = {
-    route_type : route_type;  [@id.id]
+    route_type : route_type;  [@id.id] [@view.skip]
     target : string;
-    upper_string : string;
-    lower_string : string;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    upper_string : string;    [@view.skip]
+    lower_string : string;    [@view.skip]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   (** Parse route type from XML element name *)
   let parse_route_type xml =
@@ -44,11 +44,11 @@ end
 
 module RoutingSet = struct
   type t = {
-    audio_in : Routing.t;   [@id.ref]
-    audio_out : Routing.t;  [@id.ref]
-    midi_in : Routing.t;    [@id.ref]
-    midi_out : Routing.t;   [@id.ref]
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    audio_in : Routing.t;   [@id.ref] [@view.child "DTRouting"] [@view.label "Audio In"]
+    audio_out : Routing.t;  [@id.ref] [@view.child "DTRouting"] [@view.label "Audio Out"]
+    midi_in : Routing.t;    [@id.ref] [@view.child "DTRouting"] [@view.label "Midi In"]
+    midi_out : Routing.t;   [@id.ref] [@view.child "DTRouting"] [@view.label "Midi Out"]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     let audio_in = Upath.find "AudioInputRouting" xml |> snd |> Routing.create in
@@ -66,9 +66,9 @@ module NameIdGenericParam = Device.NameIdGenericParam
 
 module Send = struct
   type t = {
-    id : int;                   [@id.id] [@patch.skip]
-    amount : GenericParam.t;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    id : int;                   [@id.id] [@patch.skip] [@view.const]
+    amount : GenericParam.t;    [@view.child "DTParam"]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff]
 
   (** Create [Send.t] from XML element.
       @param xml XML element [<TrackHolder Id="N">...</TrackHolder>] *)
@@ -82,12 +82,12 @@ end
 
 module Mixer = struct
   type t = {
-    volume : GenericParam.t;
-    pan : GenericParam.t;
-    mute : GenericParam.t;
-    solo : GenericParam.t;
-    sends : Send.t list;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    volume : GenericParam.t;   [@view.child "DTMixer"] [@view.label "Volume"]
+    pan : GenericParam.t;      [@view.child "DTMixer"] [@view.label "Pan"]
+    mute : GenericParam.t;     [@view.child "DTMixer"] [@view.label "Mute"]
+    solo : GenericParam.t;     [@view.child "DTMixer"] [@view.label "Solo"]
+    sends : Send.t list;       [@view.collection "DTSend"] [@view.label "Sends"]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     let volume = Upath.find "/Volume" xml |> snd |> GenericParam.create_float_manual in
@@ -120,16 +120,16 @@ end
 
 module MidiTrack = struct
   type t = {
-    id : int;                     [@id.id] [@patch.identity]
-    name : string;
-    current_name : string;        [@patch.identity]
-    group_id : int;               (* -1 = no parent *)
-    clips : Clip.MidiClip.t list;
-    automations : Automation.t list;
-    devices : Device.t list;
-    mixer : Mixer.t;
-    routings : RoutingSet.t;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    id : int;                     [@id.id] [@patch.identity] [@view.const] [@view.label "TrackId"]
+    name : string;                [@view.name] [@view.skip]
+    current_name : string;        [@patch.identity] [@view.name_patch]
+    group_id : int;               [@view.label "GroupId"]
+    clips : Clip.MidiClip.t list; [@view.collection "DTClip"] [@view.builder "build_clips"]
+    automations : Automation.t list; [@view.collection "DTAutomation"] [@view.builder "build_automations"]
+    devices : Device.t list;      [@view.collection "DTDevice"] [@view.builder "build_devices"]
+    mixer : Mixer.t;              [@view.child "DTMixer"]
+    routings : RoutingSet.t;      [@view.child "DTRouting"]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff] [@@view.type_label "MidiTrack"]
 
   let create (xml : Xml.t) : t =
     let id = Xml.get_int_attr "Id" xml in
@@ -157,16 +157,16 @@ end
 
 module AudioTrack = struct
   type t = {
-    id : int;                     [@id.id] [@patch.identity]
-    name : string;
-    current_name : string;        [@patch.identity]
-    group_id : int;               (* -1 = no parent *)
-    clips : Clip.AudioClip.t list;
-    automations : Automation.t list;
-    devices : Device.t list;
-    mixer : Mixer.t;
-    routings : RoutingSet.t;
-  } [@@deriving eq, id, patch] [@@patch.generate_diff]
+    id : int;                     [@id.id] [@patch.identity] [@view.const] [@view.label "TrackId"]
+    name : string;                [@view.name] [@view.skip]
+    current_name : string;        [@patch.identity] [@view.name_patch]
+    group_id : int;               [@view.label "GroupId"]
+    clips : Clip.AudioClip.t list; [@view.collection "DTClip"] [@view.builder "build_clips"]
+    automations : Automation.t list; [@view.collection "DTAutomation"] [@view.builder "build_automations"]
+    devices : Device.t list;      [@view.collection "DTDevice"] [@view.builder "build_devices"]
+    mixer : Mixer.t;              [@view.child "DTMixer"]
+    routings : RoutingSet.t;      [@view.child "DTRouting"]
+  } [@@deriving eq, id, patch, view_spec] [@@patch.generate_diff] [@@view.type_label "AudioTrack"]
 
   let create (xml : Xml.t) : t =
     let id = Xml.get_int_attr "Id" xml in
@@ -193,12 +193,12 @@ end
 
 module MainMixer = struct
   type t = {
-    base : Mixer.t;
-    tempo : GenericParam.t;
-    time_signature : GenericParam.t; (* TODO: how to parse the time signature number? *)
-    crossfade : GenericParam.t;
-    global_groove : GenericParam.t;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    base : Mixer.t;                   [@view.child "DTMixer"] [@view.label "Mixer"]
+    tempo : GenericParam.t;           [@view.child "DTMixer"] [@view.label "Tempo"]
+    time_signature : GenericParam.t;  [@view.child "DTMixer"] [@view.label "Time Signature"]
+    crossfade : GenericParam.t;       [@view.child "DTMixer"] [@view.label "Crossfade"]
+    global_groove : GenericParam.t;   [@view.child "DTMixer"] [@view.label "Global Groove"]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
     let base = Mixer.create xml in
@@ -213,13 +213,13 @@ end
 
 module MainTrack = struct
   type t = {
-    name : string;
-    current_name : string;        [@patch.identity]
-    automations : Automation.t list;
-    devices : Device.t list;
-    mixer : MainMixer.t;
-    routings : RoutingSet.t;
-  } [@@deriving eq, patch] [@@patch.generate_diff]
+    name : string;                [@view.name] [@view.skip]
+    current_name : string;        [@patch.identity] [@view.name_patch]
+    automations : Automation.t list; [@view.collection "DTAutomation"] [@view.builder "build_automations"]
+    devices : Device.t list;      [@view.collection "DTDevice"] [@view.builder "build_devices"]
+    mixer : MainMixer.t;          [@view.child "DTMixer"]
+    routings : RoutingSet.t;      [@view.child "DTRouting"]
+  } [@@deriving eq, patch, view_spec] [@@patch.generate_diff] [@@view.type_label "MainTrack"]
 
   let create (xml : Xml.t) : t =
     let name = Upath.get_attr "/Name/EffectiveName" "Value" xml in
