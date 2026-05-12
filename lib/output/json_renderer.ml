@@ -1,4 +1,5 @@
-open View_model
+open Output_types
+open Presentation_model
 open Config
 
 let field_value_to_yojson (v : field_value) : Yojson.Safe.t =

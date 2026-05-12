@@ -210,15 +210,15 @@ let test_create_midi_clip_item () =
 
   (* Check TimeSignature item *)
   let sig_item = get_item (find_view_by_name "TimeSignature" item.children) in
-  let numer_view = get_field (find_view_by_name "Numerator" sig_item.children) in
+  let numer_view = get_field (find_view_by_name "Numer" sig_item.children) in
   (match numer_view.change with
    | Modified ->
      (match numer_view.oldval, numer_view.newval with
       | Some (Fint o), Some (Fint n) ->
         check int "Old numer" 4 o;
         check int "New numer" 3 n
-      | _ -> fail "Invalid values for Numerator field")
-   | _ -> fail "Expected Numerator to be Modified");
+      | _ -> fail "Invalid values for Numer field")
+   | _ -> fail "Expected Numer to be Modified");
 
   (* Check Loop item *)
   let loop_item = get_item (find_view_by_name "Loop" item.children) in
@@ -298,10 +298,10 @@ let build_automation_item_from_event_patch event_patch =
   create_automation_item ~get_pointee_name:(fun _ -> "Target") (`Modified automation_patch)
 
 let get_single_event_item item =
-  check int "single event item" 1 (List.length item.children);
-  let events_collection = get_collection (List.hd item.children) in
-  check int "events in collection" 1 (List.length events_collection.items);
-  get_item (List.hd events_collection.items)
+  check int "single events collection" 1 (List.length item.children);
+  let events_col = get_collection (List.hd item.children) in
+  check int "single event in collection" 1 (List.length events_col.items);
+  get_item (List.hd events_col.items)
 
 let test_create_automation_item_curve_added_summary () =
   let event_patch = {
