@@ -843,7 +843,7 @@ let create_automation_item
 
   let event_children : view list = match c with
     | `Modified patch ->
-      patch.events |> List.mapi (fun i event_change ->
+      let events = patch.events |> List.mapi (fun i event_change ->
           let event_id = match event_change with
             | `Added e -> e.Automation.EnvelopeEvent.id
             | `Removed e -> e.Automation.EnvelopeEvent.id
@@ -855,7 +855,13 @@ let create_automation_item
           | _ ->
             let event_item = create_events_item ~format_time event_change in
             Some (Item { event_item with name = Printf.sprintf "Event[%d]" event_id })
-        ) |> List.filter_map Fun.id
+        ) |> List.filter_map Fun.id in
+      (match events with
+       | [] -> []
+       | _ ->
+         [ Collection
+             { name = "Events"; change = change_type; domain_type = DTEvent; items = events }
+         ])
     | `Added _ | `Removed _ | `Unchanged -> []
   in
 

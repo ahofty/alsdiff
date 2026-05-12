@@ -298,8 +298,10 @@ let build_automation_item_from_event_patch event_patch =
   create_automation_item ~get_pointee_name:(fun _ -> "Target") (`Modified automation_patch)
 
 let get_single_event_item item =
-  check int "single event item" 1 (List.length item.children);
-  get_item (List.hd item.children)
+  check int "single events collection" 1 (List.length item.children);
+  let events_col = get_collection (List.hd item.children) in
+  check int "single event in collection" 1 (List.length events_col.items);
+  get_item (List.hd events_col.items)
 
 let test_create_automation_item_curve_added_summary () =
   let event_patch = {
