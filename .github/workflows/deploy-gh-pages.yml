@@ -86,9 +86,11 @@ jobs:
           ocaml-compiler: 5
 
       - name: Install dependencies
-        run: opam install . --deps-only
+        shell: bash
+        run: source .github/scripts/ci-utils.sh && retry 10 opam install . --deps-only
 
       - name: Build alsdiff.js (release profile)
+        shell: bash
         run: DUNE_BUILD_DIR=_build-pages-release opam exec -- dune build --profile release lib/browser/alsdiff.js
 
       - name: Copy alsdiff.js to webapp

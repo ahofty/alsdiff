@@ -45,31 +45,16 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam install . --deps-only --with-test; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam install . --deps-only --with-test
-          fi
+        run: source .github/scripts/ci-utils.sh && retry 10 opam install . --deps-only --with-test
 
       # Build only the native CLI target; full `dune build` would pull JS targets.
       - name: Build native CLI
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam exec -- dune build bin/alsdiff.exe; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam exec -- dune build bin/alsdiff.exe
-          fi
+        run: opam exec -- dune build bin/alsdiff.exe
 
       - name: Run tests
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam exec -- dune runtest; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam exec -- dune runtest
-          fi
+        run: opam exec -- dune runtest
 
   js:
     strategy:
@@ -113,21 +98,11 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam install . --deps-only --with-test; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam install . --deps-only --with-test
-          fi
+        run: source .github/scripts/ci-utils.sh && retry 10 opam install . --deps-only --with-test
 
       - name: Run JS tests
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam exec -- dune build @runtest-js; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam exec -- dune build @runtest-js
-          fi
+        run: opam exec -- dune build @runtest-js
 
   web:
     runs-on: ubuntu-latest

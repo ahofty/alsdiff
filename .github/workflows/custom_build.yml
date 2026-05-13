@@ -88,21 +88,11 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam install . --deps-only; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam install . --deps-only
-          fi
+        run: source .github/scripts/ci-utils.sh && retry 10 opam install . --deps-only
 
       - name: Build native CLI target
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            until opam exec -- dune build bin/alsdiff.exe; do echo "::warning::Retrying in 10s..."; sleep 10; done
-          else
-            opam exec -- dune build bin/alsdiff.exe
-          fi
+        run: opam exec -- dune build bin/alsdiff.exe
 
       - name: Prepare install tree
         shell: bash
