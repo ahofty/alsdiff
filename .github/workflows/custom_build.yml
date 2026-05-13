@@ -77,9 +77,11 @@ jobs:
           ocaml-compiler: 5
 
       - name: Install dependencies
-        run: opam install . --deps-only
+        shell: bash
+        run: source .github/scripts/ci-utils.sh && retry 10 opam install . --deps-only
 
       - name: Build
+        shell: bash
         run: opam exec -- dune build
 
       - name: Install
