@@ -1,7 +1,7 @@
 import type { ItemView, ViewNode } from "../types";
 import DiffIndicator from "./DiffIndicator";
 import { ViewNodeRow } from "./CollectionList";
-import { For } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 
 interface Props {
   device: ItemView;
@@ -12,6 +12,8 @@ function isItemView(node: ViewNode): node is ItemView {
 }
 
 export default function DeviceCard(props: Props) {
+  const [collapsed, setCollapsed] = createSignal(true);
+
   const deviceName = () => {
     const match = props.device.name.match(/:\s*(.+)/);
     return match ? match[1] : props.device.name;
@@ -82,28 +84,31 @@ export default function DeviceCard(props: Props) {
 
   return (
     <div class={`device-card${isGroupDevice() ? " group-device" : ""}`} data-testid="device-card">
-      <div class="device-name">
+      <div class="device-name" onClick={() => setCollapsed((c) => !c)}>
+        <span class="collapse-icon">{collapsed() ? "▶" : "▼"}</span>
         {deviceName()}
         <DiffIndicator change={props.device.change} showLabel={false} />
       </div>
-      {paramFields().map((p) => (
-        <div class="param-change">
-          <span class="param-name">{p.name}</span>
-          {p.oldVal && <span class="old-value">{p.oldVal}</span>}
-          {p.oldVal && p.newVal && <span class="arrow">&rarr;</span>}
-          {p.newVal && <span class="new-value">{p.newVal}</span>}
-        </div>
-      ))}
-      <For each={nonParamChildren()}>
-        {(child) => <ViewNodeRow node={child} depth={1} />}
-      </For>
-      {branchDevices().length > 0 && (
-        <div class="nested-devices">
-          <For each={branchDevices()}>
-            {(device) => <DeviceCard device={device} />}
-          </For>
-        </div>
-      )}
+      <Show when={!collapsed()}>
+        {paramFields().map((p) => (
+          <div class="param-change">
+            <span class="param-name">{p.name}</span>
+            {p.oldVal && <span class="old-value">{p.oldVal}</span>}
+            {p.oldVal && p.newVal && <span class="arrow">&rarr;</span>}
+            {p.newVal && <span class="new-value">{p.newVal}</span>}
+          </div>
+        ))}
+        <For each={nonParamChildren()}>
+          {(child) => <ViewNodeRow node={child} depth={1} />}
+        </For>
+        {branchDevices().length > 0 && (
+          <div class="nested-devices">
+            <For each={branchDevices()}>
+              {(device) => <DeviceCard device={device} />}
+            </For>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
