@@ -326,7 +326,7 @@ module PatchRef = struct
 
   let create (xml : Xml.t) : t =
     match xml with
-    | Xml.Element { name="MxPatchRef"; childs; _ } ->
+    | Xml.Element { name; childs; _ } when name = "MxPatchRef" || name = "MxDPatchRef" ->
       let id = Xml.get_int_attr "Id" xml in
       let preset_type = PresetRef.UserPreset in (* M4L patches are always user presets *)
 
@@ -1493,7 +1493,7 @@ module Max4LiveDevice = struct
     let enabled = Upath.find "/On" xml |> DeviceParam.create_from_upath_find in
 
     (* Parse PatchSlot/MxPatchRef for patch_ref - must be before device_name *)
-    let patch_ref = Upath.find "/PatchSlot/Value/MxPatchRef" xml |> snd |> PatchRef.create in
+    let patch_ref = Upath.find "/PatchSlot/Value/'MxD?PatchRef'" xml |> snd |> PatchRef.create in
 
     (* Use patch name instead of XML element name *)
     let device_name = patch_ref.PatchRef.name in

@@ -252,7 +252,7 @@ let create (xml : Xml.t) (file_path : string) : t =
   in
 
   let main =
-    Upath.find "/MainTrack" liveset_xml |> snd |> Track.create
+    Upath.find "/'(Main|Master)Track'" liveset_xml |> snd |> Track.create
   in
 
   (* 7. Parse locators *)

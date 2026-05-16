@@ -487,7 +487,7 @@ let create (xml : Xml.t) : t =
   | Xml.Element { name = "AudioTrack"; _ } -> Audio (AudioTrack.create xml)
   | Xml.Element { name = "GroupTrack"; _ } -> Group (AudioTrack.create xml)
   | Xml.Element { name = "ReturnTrack"; _ } -> Return (AudioTrack.create xml)
-  | Xml.Element { name = "MainTrack"; _ } -> Main (MainTrack.create xml)
+  | Xml.Element { name = "MainTrack"; _ } | Xml.Element { name = "MasterTrack"; _ }-> Main (MainTrack.create xml)
   | _ ->
     let name = match xml with
       | Xml.Element { name; _ } -> name
