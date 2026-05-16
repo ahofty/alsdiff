@@ -107,7 +107,10 @@ and process_group_branches (pointees : pointee IntHashtbl.t) (branches : Device.
       (* B. Process Branch Mixer Parameters *)
       (* Branch mixer has: volume, pan, speaker, on *)
       let mixer = branch.mixer in
-      let mixer_params = [mixer.volume; mixer.pan; mixer.speaker; mixer.on] in
+      let mixer_params =
+        let opts = [mixer.volume; mixer.pan] |> List.filter_map Fun.id in
+        mixer.speaker :: mixer.on :: opts
+      in
       List.iter (fun (param : Device.DeviceParam.t) ->
           IntHashtbl.add pointees param.base.automation (DeviceParamPointee param);
           IntHashtbl.add pointees param.base.modulation (DeviceParamPointee param)

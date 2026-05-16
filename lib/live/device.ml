@@ -704,8 +704,8 @@ module MixerDevice = struct
   type t = {
     on : DeviceParam.t;         [@view.child "DTParam"] [@view.label "On"]
     speaker : DeviceParam.t;    [@view.child "DTParam"] [@view.label "Speaker"]
-    volume : DeviceParam.t;     [@view.child "DTParam"] [@view.label "Volume"]
-    pan : DeviceParam.t;        [@view.child "DTParam"] [@view.label "Pan"]
+    volume : DeviceParam.t option;     [@view.optional_child "DTParam"] [@view.label "Volume"]
+    pan : DeviceParam.t option;        [@view.optional_child "DTParam"] [@view.label "Pan"]
   } [@@deriving eq, patch, view_spec] [@@patch.generate_diff]
 
   let create (xml : Xml.t) : t =
@@ -714,8 +714,8 @@ module MixerDevice = struct
       (* Extract On parameter *)
       let on = Upath.find "/On" xml |> DeviceParam.create_from_upath_find in
       let speaker = Upath.find "/Speaker" xml |> DeviceParam.create_from_upath_find in
-      let volume = Upath.find "/Volume" xml |> DeviceParam.create_from_upath_find in
-      let pan = Upath.find "/Panorama" xml |> DeviceParam.create_from_upath_find in
+      let volume = Upath.find_opt "/Volume" xml |> Option.map DeviceParam.create_from_upath_find in
+      let pan = Upath.find_opt "/Panorama" xml |> Option.map DeviceParam.create_from_upath_find in
       { on; speaker; volume; pan }
     | _ -> raise (Xml.Xml_error (xml, "Invalid XML element for creating MixerDevice"))
 

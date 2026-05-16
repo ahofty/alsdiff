@@ -402,17 +402,23 @@ let test_mixer_device_create () =
    | Bool v -> Alcotest.(check bool) "speaker value" true v
    | _ -> Alcotest.fail "speaker should be bool");
   (* Verify Volume parameter *)
-  (match mixer.volume.base.Device.GenericParam.value with
-   | Float v -> Alcotest.(check (float 0.01)) "volume value" 1.0 v
-   | _ -> Alcotest.fail "volume should be float");
-  Alcotest.(check int) "volume automation" 24270 mixer.volume.base.Device.GenericParam.automation;
-  Alcotest.(check int) "volume modulation" 24271 mixer.volume.base.Device.GenericParam.modulation;
+  (match mixer.volume with
+   | Some vol ->
+     (match vol.base.Device.GenericParam.value with
+      | Float v -> Alcotest.(check (float 0.01)) "volume value" 1.0 v
+      | _ -> Alcotest.fail "volume should be float");
+     Alcotest.(check int) "volume automation" 24270 vol.base.Device.GenericParam.automation;
+     Alcotest.(check int) "volume modulation" 24271 vol.base.Device.GenericParam.modulation
+   | None -> Alcotest.fail "volume should be present");
   (* Verify Pan parameter *)
-  (match mixer.pan.base.Device.GenericParam.value with
-   | Float v -> Alcotest.(check (float 0.01)) "pan value" 0.0 v
-   | _ -> Alcotest.fail "pan should be float");
-  Alcotest.(check int) "pan automation" 24272 mixer.pan.base.Device.GenericParam.automation;
-  Alcotest.(check int) "pan modulation" 24273 mixer.pan.base.Device.GenericParam.modulation
+  (match mixer.pan with
+   | Some pan_param ->
+     (match pan_param.base.Device.GenericParam.value with
+      | Float v -> Alcotest.(check (float 0.01)) "pan value" 0.0 v
+      | _ -> Alcotest.fail "pan should be float");
+     Alcotest.(check int) "pan automation" 24272 pan_param.base.Device.GenericParam.automation;
+     Alcotest.(check int) "pan modulation" 24273 pan_param.base.Device.GenericParam.modulation
+   | None -> Alcotest.fail "pan should be present")
 
 let test_mixer_device_has_same_id_and_hash () =
   let xml = read_file test_mixer_device_xml_path in
