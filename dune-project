@@ -2,7 +2,7 @@
 
 (name alsdiff)
 
-(version 0.5.1)
+(version 0.5.2)
 
 (source
  (github krfantasy/alsdiff))
@@ -40,7 +40,7 @@
     ptime
     mosaic)
  (tags
-  ("ableton live" "git" "version control")))
+  ("ableton live" "diff" "git" "version control")))
 
 (generate_opam_files true)
 
