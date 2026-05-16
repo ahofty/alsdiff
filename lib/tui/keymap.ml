@@ -27,6 +27,13 @@ let char_to_msg_diff c =
   | ' ' -> Some ToggleExpand
   | _ -> None
 
+let char_to_msg_export_preview c =
+  match c with
+  | 's' -> Some ExportSaveToFile
+  | 'c' -> Some ExportToClipboard
+  | 'p' -> Some ExportToStdout
+  | _ -> None
+
 let handle_key ~(mode : Model.mode) ~(search_mode : bool) ~(export_selector_active : bool)
     (ev : Mosaic.Event.key) : t option =
   let key_data = Mosaic.Event.Key.data ev in
@@ -38,12 +45,17 @@ let handle_key ~(mode : Model.mode) ~(search_mode : bool) ~(export_selector_acti
       (match mode with
        | Model.Browser -> char_to_msg_browser (Uchar.to_char c)
        | Model.Diff -> char_to_msg_diff (Uchar.to_char c)
+       | Model.Export ->
+         if export_selector_active then None
+         else char_to_msg_export_preview (Uchar.to_char c)
        | Model.Help | Model.Stats -> None)
   | Matrix.Input.Key.Up ->
     if export_selector_active then Some (MoveExportSelection (-1))
+    else if mode = Model.Export && not search_mode then Some (ExportScroll (-1))
     else if search_mode then None else Some MoveUp
   | Matrix.Input.Key.Down ->
     if export_selector_active then Some (MoveExportSelection 1)
+    else if mode = Model.Export && not search_mode then Some (ExportScroll 1)
     else if search_mode then None else Some MoveDown
   | Matrix.Input.Key.Left -> if search_mode then None else Some MoveLeft
   | Matrix.Input.Key.Right -> if search_mode then None else Some MoveRight
@@ -54,28 +66,34 @@ let handle_key ~(mode : Model.mode) ~(search_mode : bool) ~(export_selector_acti
       (match mode with
        | Model.Browser -> Some BrowserActivate
        | Model.Diff -> Some ToggleExpand
-       | Model.Help | Model.Stats -> None)
+       | Model.Export | Model.Help | Model.Stats -> None)
   | Matrix.Input.Key.Escape ->
     if export_selector_active then Some HideExportSelector
+    else if mode = Model.Export then Some HideExport
     else if search_mode then Some ClearSearch
     else
       (match mode with
        | Model.Browser -> Some BrowserGoUp
        | Model.Diff -> Some BackToBrowser
        | Model.Help -> Some HideHelp
-       | Model.Stats -> Some HideStats)
+       | Model.Stats -> Some HideStats
+       | Model.Export -> Some HideExport)
   | Matrix.Input.Key.Backspace ->
     if search_mode then Some (UpdateSearch "\127") else None
   | Matrix.Input.Key.Page_up ->
     if export_selector_active then None
+    else if mode = Model.Export then Some (ExportScroll (-20))
     else if search_mode then None else Some PageUp
   | Matrix.Input.Key.Page_down ->
     if export_selector_active then None
+    else if mode = Model.Export then Some (ExportScroll 20)
     else if search_mode then None else Some PageDown
   | Matrix.Input.Key.Home ->
     if export_selector_active then None
+    else if mode = Model.Export then Some (ExportScroll (-max_int))
     else if search_mode then None else Some MoveToStart
   | Matrix.Input.Key.End ->
     if export_selector_active then None
+    else if mode = Model.Export then Some (ExportScroll max_int)
     else if search_mode then None else Some MoveToEnd
   | _ -> None

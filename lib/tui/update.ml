@@ -358,10 +358,28 @@ let browser_activate (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
     end
 
 let show_export_selector (model : Model.t) : Model.t =
-  { model with export_selector_active = true }
+  { model with
+    mode = Model.Export;
+    previous_mode = Some model.mode;
+    export_selector_active = true;
+  }
 
 let hide_export_selector (model : Model.t) : Model.t =
   { model with export_selector_active = false }
+
+let hide_export (model : Model.t) : Model.t =
+  let return_mode = match model.previous_mode with
+    | Some m -> m
+    | None -> Model.Diff
+  in
+  { model with
+    mode = return_mode;
+    previous_mode = None;
+    export_selector_active = false;
+    export_content = None;
+    export_scroll = 0;
+    export_message = None;
+  }
 
 let move_export_selection (model : Model.t) (direction : int) : Model.t =
   let formats = export_formats in
@@ -390,8 +408,65 @@ let execute_export (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
       Format.eprintf "Export failed: %s\n" (Printexc.to_string e);
       "Export error - see terminal output"
   in
-  export_output_ref := Some output;
-  ({ model with export_selector_active = false }, Mosaic.Cmd.Quit)
+  ({ model with
+     export_selector_active = false;
+     export_content = Some output;
+     export_scroll = 0;
+     export_message = None;
+   }, Mosaic.Cmd.none)
+
+let export_save_to_file (model : Model.t) : Model.t =
+  match model.export_content with
+  | None -> model
+  | Some content ->
+    let ext = match model.export_selected_format with
+      | Model.Text | Model.Statistics -> "txt"
+      | Model.Json -> "json"
+    in
+    let timestamp =
+      let tm = Unix.localtime (Unix.time ()) in
+      Fmt.str "%04d%02d%02d_%02d%02d%02d"
+        (tm.Unix.tm_year + 1900) (tm.Unix.tm_mon + 1) tm.Unix.tm_mday
+        tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec
+    in
+    let filename = Fmt.str "alsdiff_%s.%s" timestamp ext in
+    (try
+       let oc = open_out filename in
+       output_string oc content;
+       close_out oc;
+       { model with export_message = Some (Fmt.str "Saved to %s" filename) }
+     with
+     | Sys_error _ ->
+       { model with export_message = Some (Fmt.str "Error saving to %s" filename) })
+
+let export_to_clipboard (model : Model.t) : Model.t =
+  match model.export_content with
+  | None -> model
+  | Some content ->
+    (try
+       let oc = Unix.open_process_out "pbcopy" in
+       output_string oc content;
+       ignore (Unix.close_process_out oc);
+       { model with export_message = Some "Copied to clipboard" }
+     with _ ->
+       { model with export_message = Some "Clipboard error" })
+
+let export_to_stdout (model : Model.t) : Model.t * Msg.t Mosaic.Cmd.t =
+  (match model.export_content with
+   | Some c -> export_output_ref := Some c
+   | None -> ());
+  (model, Mosaic.Cmd.Quit)
+
+let scroll_export (model : Model.t) (delta : int) : Model.t =
+  match model.export_content with
+  | None -> model
+  | Some content ->
+    let lines = String.split_on_char '\n' content in
+    let max_rows = max 1 (model.viewport_height - 2) in
+    let total = List.length lines in
+    let max_scroll = max 0 (total - max_rows) in
+    let new_scroll = max 0 (min max_scroll (model.export_scroll + delta)) in
+    { model with export_scroll = new_scroll }
 
 let enter_focus (model : Model.t) : Model.t =
   let visible = get_visible_nodes model in
@@ -483,13 +558,6 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
   | Model.Diff ->
     (match msg with
      | Msg.ShowExportSelector -> (show_export_selector model, Mosaic.Cmd.none)
-     | Msg.HideExportSelector -> (hide_export_selector model, Mosaic.Cmd.none)
-     | Msg.MoveExportSelection dir ->
-       if model.export_selector_active
-       then (move_export_selection model dir, Mosaic.Cmd.none)
-       else (model, Mosaic.Cmd.none)
-     | Msg.ExecuteExport ->
-       execute_export model
      | Msg.ShowHelp | Msg.ToggleHelp -> ({ model with mode = Model.Help; previous_mode = Some model.mode }, Mosaic.Cmd.none)
      | Msg.ShowStats | Msg.ToggleStats -> ({ model with mode = Model.Stats; previous_mode = Some model.mode }, Mosaic.Cmd.none)
      | Msg.NavBack -> (nav_back model, Mosaic.Cmd.none)
@@ -542,4 +610,23 @@ let update (model : Model.t) (msg : Msg.t) : Model.t * Msg.t Mosaic.Cmd.t =
              }, Mosaic.Cmd.none)
           else
             (model, Mosaic.Cmd.Quit))
-     | Msg.BrowserActivate | Msg.BrowserGoUp | Msg.HideHelp | Msg.HideStats -> (model, Mosaic.Cmd.none))
+     | Msg.BrowserActivate | Msg.BrowserGoUp | Msg.HideHelp | Msg.HideStats
+     | Msg.HideExportSelector | Msg.ExecuteExport | Msg.MoveExportSelection _
+     | Msg.ExportSaveToFile | Msg.ExportToClipboard | Msg.ExportToStdout
+     | Msg.HideExport | Msg.ExportScroll _ -> (model, Mosaic.Cmd.none))
+  | Model.Export ->
+    (match msg with
+     | Msg.MoveExportSelection dir ->
+       if model.export_selector_active
+       then (move_export_selection model dir, Mosaic.Cmd.none)
+       else (model, Mosaic.Cmd.none)
+     | Msg.ExecuteExport -> execute_export model
+     | Msg.HideExportSelector | Msg.HideExport ->
+       (hide_export model, Mosaic.Cmd.none)
+     | Msg.ExportSaveToFile -> (export_save_to_file model, Mosaic.Cmd.none)
+     | Msg.ExportToClipboard -> (export_to_clipboard model, Mosaic.Cmd.none)
+     | Msg.ExportToStdout -> export_to_stdout model
+     | Msg.ExportScroll delta -> (scroll_export model delta, Mosaic.Cmd.none)
+     | Msg.Resize (w, h) ->
+       ({ model with viewport_width = w; viewport_height = h }, Mosaic.Cmd.none)
+     | _ -> (model, Mosaic.Cmd.none))

@@ -28,6 +28,9 @@ let tui_cmd ~config ~domain_mgr : int =
     Alsdiff_tui_lib.App.run_browser
       ~root:(Sys.getcwd ())
       ~note_name_style:config.note_name_style ();
+    (match !Alsdiff_tui_lib.Update.export_output_ref with
+     | Some output -> print_endline output; flush stdout
+     | None -> ());
     0
   | [f1; f2] ->
     let liveset1, liveset2 = Fiber.pair

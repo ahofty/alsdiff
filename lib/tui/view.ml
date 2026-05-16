@@ -158,6 +158,7 @@ let render_help (model : Model.t) : Msg.t Mosaic.t =
     | Model.Diff -> "Diff View"
     | Model.Help -> "Help"
     | Model.Stats -> "Statistics"
+    | Model.Export -> "Export"
   in
   let title = Mosaic.text ~style:title_style (Fmt.str "alsdiff_tui - Help (%s)" mode_name) in
   let section_style = fg Mosaic.Ansi.Color.cyan default in
@@ -219,7 +220,7 @@ let render_help (model : Model.t) : Msg.t Mosaic.t =
 
   let help_sections = match model.mode with
     | Model.Browser -> browser_sections
-    | Model.Diff | Model.Help | Model.Stats -> diff_sections
+    | Model.Diff | Model.Help | Model.Stats | Model.Export -> diff_sections
   in
 
   let render_section (section_name, bindings) =
@@ -268,6 +269,40 @@ let render_export_selector (model : Model.t) : Msg.t Mosaic.t =
     render_status_bar model;
   ]
 
+let render_export_preview (model : Model.t) : Msg.t Mosaic.t =
+  match model.export_content with
+  | None -> Mosaic.text "No export content"
+  | Some content ->
+    let lines = String.split_on_char '\n' content in
+    let max_rows = max 1 (model.viewport_height - 2) in
+    let total = List.length lines in
+    let max_scroll = max 0 (total - max_rows) in
+    let scroll = min model.export_scroll max_scroll in
+    let visible =
+      List.filteri (fun i _ -> i >= scroll && i < scroll + max_rows) lines
+    in
+    let title_style = fg Mosaic.Ansi.Color.yellow default in
+    let title = Mosaic.text ~style:title_style "Export Preview:" in
+    let content_lines = List.map (fun line -> Mosaic.text line) visible in
+    let status_parts = [
+      "s:save";
+      "c:copy";
+      "p:stdout";
+      "Esc:back";
+      (match model.export_message with
+       | Some msg -> msg
+       | None -> "");
+    ] in
+    let status = String.concat " " (List.filter (fun s -> s <> "") status_parts) in
+    let bar_style = bg Mosaic.Ansi.Color.blue default in
+    let status_bar = Mosaic.text ~style:bar_style (pad_to_width ~width:model.viewport_width status) in
+    Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column [
+      title;
+      Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column
+        ~flex_grow:1. content_lines;
+      status_bar;
+    ]
+
 let render_stats (model : Model.t) : Msg.t Mosaic.t =
   let title_style = fg Mosaic.Ansi.Color.yellow default in
   let title = Mosaic.text ~style:title_style "alsdiff_tui - Statistics" in
@@ -307,39 +342,39 @@ let view (model : Model.t) : Msg.t Mosaic.t =
   | Model.Help -> render_help model
   | Model.Stats -> render_stats model
   | Model.Browser -> view_browser model
-  | Model.Diff ->
+  | Model.Export ->
     if model.export_selector_active then
-      (* Show export selector as full view *)
       render_export_selector model
     else
-      (* Normal diff view *)
-      let visible_nodes = Update.get_visible_nodes model in
-      let total = List.length visible_nodes in
-      let max_rows = max 1 (model.viewport_height - 1) in
-      (* Calculate scroll window to keep cursor visible *)
-      let scroll_offset =
-        if total <= max_rows then 0
-        else
-          let half = max_rows / 2 in
-          max 0 (min (model.cursor_index - half) (total - max_rows))
-      in
-      let visible_slice =
-        List.drop scroll_offset visible_nodes
-        |> List.take max_rows
-      in
-      let nodes_box = List.mapi (fun i node ->
-          let global_i = scroll_offset + i in
-          render_node ~model ~is_cursor:(global_i = model.cursor_index) node
-        ) visible_slice
-      in
-      (* Add blank lines to fill the viewport and keep status bar at bottom *)
-      let num_blank_rows = max_rows - List.length visible_slice in
-      let blank_lines = if num_blank_rows > 0
-        then List.map (fun _ -> Mosaic.text "") (Array.to_list (Array.make num_blank_rows ()))
-        else []
-      in
-      let all_rows = nodes_box @ blank_lines in
-      Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column [
-        Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column all_rows;
-        render_status_bar model;
-      ]
+      render_export_preview model
+  | Model.Diff ->
+    let visible_nodes = Update.get_visible_nodes model in
+    let total = List.length visible_nodes in
+    let max_rows = max 1 (model.viewport_height - 1) in
+    (* Calculate scroll window to keep cursor visible *)
+    let scroll_offset =
+      if total <= max_rows then 0
+      else
+        let half = max_rows / 2 in
+        max 0 (min (model.cursor_index - half) (total - max_rows))
+    in
+    let visible_slice =
+      List.drop scroll_offset visible_nodes
+      |> List.take max_rows
+    in
+    let nodes_box = List.mapi (fun i node ->
+        let global_i = scroll_offset + i in
+        render_node ~model ~is_cursor:(global_i = model.cursor_index) node
+      ) visible_slice
+    in
+    (* Add blank lines to fill the viewport and keep status bar at bottom *)
+    let num_blank_rows = max_rows - List.length visible_slice in
+    let blank_lines = if num_blank_rows > 0
+      then List.map (fun _ -> Mosaic.text "") (Array.to_list (Array.make num_blank_rows ()))
+      else []
+    in
+    let all_rows = nodes_box @ blank_lines in
+    Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column [
+      Mosaic.box ~flex_direction:Mosaic.Flex_direction.Column all_rows;
+      render_status_bar model;
+    ]

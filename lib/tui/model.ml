@@ -3,7 +3,7 @@ open View_model
 
 module StringSet = Set.Make (String)
 
-type mode = Browser | Diff | Help | Stats
+type mode = Browser | Diff | Help | Stats | Export
 
 type export_format_option = Text | Json | Statistics
 
@@ -45,6 +45,9 @@ type t = {
   (* Export selector state *)
   export_selector_active : bool;
   export_selected_format : export_format_option;
+  export_content : string option;
+  export_scroll : int;
+  export_message : string option;
   (* Focus mode - show only descendants of focused node *)
   focused_path : string list option;
   note_name_style : View_model.note_display_style;
@@ -257,6 +260,9 @@ let init_browser ~root ?(note_name_style = View_model.Sharp)
     nav_forward = [];
     export_selector_active = false;
     export_selected_format = Text;
+    export_content = None;
+    export_scroll = 0;
+    export_message = None;
     focused_path = None;
     note_name_style;
     time_format;
@@ -297,6 +303,9 @@ let init ?(detail_config = Config.compact) ?(note_name_style = View_model.Sharp)
     nav_forward = [];
     export_selector_active = false;
     export_selected_format = Text;
+    export_content = None;
+    export_scroll = 0;
+    export_message = None;
     focused_path = None;
     note_name_style;
     time_format;

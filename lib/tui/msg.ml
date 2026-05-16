@@ -32,5 +32,10 @@ type t =
   | HideExportSelector
   | MoveExportSelection of int
   | ExecuteExport
+  | ExportSaveToFile
+  | ExportToClipboard
+  | ExportToStdout
+  | HideExport
+  | ExportScroll of int
   | EnterFocus
   | ExitFocus
