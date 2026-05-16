@@ -45,10 +45,14 @@ let rec filter_nodes_by_change_type
     ) nodes
 
 (* Filter tree nodes to show only descendants of focused path *)
-let filter_nodes_by_focus ~(focus_path:string list) (nodes : Model.tree_node list) : Model.tree_node list =
-  match List.find_opt (fun node -> node.path = focus_path) nodes with
-  | None -> []
-  | Some focus_node -> [focus_node]
+let rec filter_nodes_by_focus ~(focus_path:string list) (nodes : Model.tree_node list) : Model.tree_node list =
+  List.filter_map (fun node ->
+      if node.path = focus_path then Some node
+      else
+        let filtered = filter_nodes_by_focus ~focus_path node.children in
+        match filtered with [] -> None | _ ->
+          Some { node with children = filtered }
+    ) nodes
 
 let get_visible_nodes (model : Model.t) : Model.tree_node list =
   let nodes_after_search = match model.search_query with
@@ -395,7 +399,12 @@ let enter_focus (model : Model.t) : Model.t =
   | None -> model
   | Some node ->
     if node.is_expandable then
-      { model with focused_path = Some node.path; cursor_index = 0 }
+      let path_key = String.concat "/" node.path in
+      { model with
+        focused_path = Some node.path;
+        expanded_paths = StringSet.add path_key model.expanded_paths;
+        cursor_index = 0
+      }
     else model
 
 let exit_focus (model : Model.t) : Model.t =
