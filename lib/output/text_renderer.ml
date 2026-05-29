@@ -233,6 +233,7 @@ let render_to_string cfg view =
   Fmt.str "%a" (pp_view cfg) view
 
 let render config (views : view list) : string =
+  let views = apply_ignore_names config views in
   let buffer = Buffer.create 4096 in
   let ppf = Format.formatter_of_buffer buffer in
   Fmt.set_style_renderer ppf `None;

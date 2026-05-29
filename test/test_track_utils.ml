@@ -8,7 +8,7 @@ let test_get_name_midi_track () =
       MidiTrack.id = 1;
       name = "Midi Track Name";
       current_name = "Midi Track Name";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer;
@@ -23,7 +23,7 @@ let test_get_name_audio_track () =
       AudioTrack.id = 2;
       name = "Audio Track Name";
       current_name = "Audio Track Name";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer;
@@ -38,7 +38,7 @@ let test_get_name_group_track () =
       AudioTrack.id = 3;
       name = "Group Track Name";
       current_name = "Group Track Name";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer;
@@ -53,7 +53,7 @@ let test_get_name_return_track () =
       AudioTrack.id = 4;
       name = "Return Track Name";
       current_name = "Return Track Name";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer;
@@ -83,7 +83,7 @@ let test_type_name_all_track_types () =
       MidiTrack.id = 1;
       name = "Midi";
       current_name = "Midi";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -91,7 +91,7 @@ let test_type_name_all_track_types () =
       AudioTrack.id = 2;
       name = "Audio";
       current_name = "Audio";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -99,7 +99,7 @@ let test_type_name_all_track_types () =
       AudioTrack.id = 3;
       name = "Group";
       current_name = "Group";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -107,7 +107,7 @@ let test_type_name_all_track_types () =
       AudioTrack.id = 4;
       name = "Return";
       current_name = "Return";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -131,21 +131,21 @@ let test_has_same_id_midi_track () =
       MidiTrack.id = 1;
       name = "Track 1";
       current_name = "Track 1";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let track2 = Midi {
       MidiTrack.id = 1;
       name = "Track 2";
       current_name = "Track 2";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let track3 = Midi {
       MidiTrack.id = 2;
       name = "Track 3";
       current_name = "Track 3";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -159,14 +159,14 @@ let test_has_same_id_audio_track () =
       AudioTrack.id = 10;
       name = "Audio 1";
       current_name = "Audio 1";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let track2 = Audio {
       AudioTrack.id = 10;
       name = "Audio 2";
       current_name = "Audio 2";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -179,14 +179,14 @@ let test_has_same_id_group_track () =
       AudioTrack.id = 20;
       name = "Group 1";
       current_name = "Group 1";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let track2 = Group {
       AudioTrack.id = 20;
       name = "Group 2";
       current_name = "Group 2";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -199,14 +199,14 @@ let test_has_same_id_return_track () =
       AudioTrack.id = 30;
       name = "Return 1";
       current_name = "Return 1";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let track2 = Return {
       AudioTrack.id = 30;
       name = "Return 2";
       current_name = "Return 2";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -238,14 +238,14 @@ let test_has_same_id_cross_type () =
       MidiTrack.id = 1;
       name = "Midi";
       current_name = "Midi";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let audio_track = Audio {
       AudioTrack.id = 1;
       name = "Audio";
       current_name = "Audio";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -259,14 +259,14 @@ let test_id_hash_midi_track () =
       MidiTrack.id = 42;
       name = "Track";
       current_name = "Track";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let track2 = Midi {
       MidiTrack.id = 42;
       name = "Other Track";
       current_name = "Other Track";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -304,7 +304,7 @@ let test_patch_is_empty_midi_patch () =
       MidiTrack.id = 1;
       name = "Test";
       current_name = "Test";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let patch = Track.diff track track in
@@ -320,7 +320,7 @@ let test_patch_is_empty_audio_patch () =
       AudioTrack.id = 2;
       name = "Test";
       current_name = "Test";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
   let patch = Track.diff track track in
@@ -352,14 +352,14 @@ let test_patch_is_not_empty () =
       MidiTrack.id = 1;
       name = "Old Name";
       current_name = "Old Name";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer = mixer1; routings = make_empty_routing_set ();
     } in
   let track2 = Midi {
       MidiTrack.id = 1;
       name = "New Name";
       current_name = "New Name";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer = mixer2; routings = make_empty_routing_set ();
     } in
   let patch = Track.diff track1 track2 in

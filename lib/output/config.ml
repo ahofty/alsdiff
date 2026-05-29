@@ -36,6 +36,15 @@ type type_override_entry = {
 }
 [@@deriving yojson, jsonschema]
 
+(* Name-based suppression rule. An item (or collection) whose domain_type matches
+   [domain_type] and whose name matches [name] is removed from the output entirely,
+   regardless of change type. See [name_matches] for the matching semantics. *)
+type ignore_name_entry = {
+  domain_type : domain_type; [@ref "domain_type"]
+  name : string;
+}
+[@@deriving yojson, jsonschema]
+
 type detail_config = {
   added : detail_level; [@ref "detail_level"]
   removed : detail_level; [@ref "detail_level"]
@@ -49,6 +58,10 @@ type detail_config = {
      None means use the base change_type default.
   *)
   type_overrides : type_override_entry list;
+
+  (* Name-based suppression rules. Items/collections matching any rule are dropped
+     from the output entirely. Empty by default; configurable via JSON config. *)
+  ignore_names : ignore_name_entry list; [@default []]
 
   max_collection_items : int option [@default None];
 
@@ -107,7 +120,7 @@ let get_detail_level_by_change (cfg : detail_config) (ct : change_type) : detail
 (* Type-based control takes precedence over change-type control *)
 let get_effective_detail (cfg : detail_config) (ct : change_type) (dt : domain_type) : detail_level =
   (* Step 1: Check type-specific override *)
-  match List.find_opt (fun entry -> entry.domain_type = dt) cfg.type_overrides with
+  match List.find_opt (fun (entry : type_override_entry) -> entry.domain_type = dt) cfg.type_overrides with
   | Some entry ->
     (* Step 2: Check for change-specific override within this type *)
     let overrides = entry.override in
@@ -289,12 +302,70 @@ let count_sub_views_breakdown (_cfg : detail_config) (section : item) : change_b
       | Collection c -> increment_breakdown acc c.change
     ) ({ added = 0; removed = 0; modified = 0 } : change_breakdown) section.children
 
+(* ==================== Name-based suppression ==================== *)
+
+(* [name_matches rule_name item_name] decides whether a configured ignore rule name
+   matches the display name of an item/collection. Item names follow the convention
+   "<type> (#<id>): <display>" (e.g. "DJMFilter (#3): DJMFilter"). The match is exact
+   (no substring-anywhere) against any of:
+   - the leading type/device token (before " (#")  -> matches "DJMFilter"
+   - the trailing display name (after "): ")        -> matches user names like "1 BEAT"
+   - the whole name (when no delimiter is present)   -> matches "Main", "InstrumentGroupDevice"
+     This keeps device suppression predictable while staying generic across domain types. *)
+let name_matches (rule_name : string) (item_name : string) : bool =
+  let target = String.trim rule_name in
+  let leading_token =
+    match String.index_opt item_name '(' with
+    | Some i when i > 0 -> [ String.trim (String.sub item_name 0 i) ]
+    | _ -> []
+  in
+  let trailing_display =
+    (* find the "): " separator and take what follows *)
+    let sep = "): " in
+    let rec find_from idx =
+      if idx + String.length sep > String.length item_name then []
+      else if String.sub item_name idx (String.length sep) = sep then
+        [ String.trim
+            (String.sub item_name (idx + String.length sep)
+               (String.length item_name - idx - String.length sep)) ]
+      else find_from (idx + 1)
+    in
+    find_from 0
+  in
+  let candidates = String.trim item_name :: (leading_token @ trailing_display) in
+  List.exists (fun c -> c = target) candidates
+
+(* [prune_view rules v] removes any Item/Collection whose domain_type and name match a
+   rule, recursing into children. Returns None when the node itself is dropped. *)
+let rec prune_view (rules : ignore_name_entry list) (v : view) : view option =
+  let matches name domain_type =
+    List.exists (fun (r : ignore_name_entry) ->
+        r.domain_type = domain_type && name_matches r.name name) rules
+  in
+  match v with
+  | Field _ -> Some v
+  | Item it ->
+    if matches it.name it.domain_type then None
+    else Some (Item { it with children = List.filter_map (prune_view rules) it.children })
+  | Collection c ->
+    if matches c.name c.domain_type then None
+    else Some (Collection { c with items = List.filter_map (prune_view rules) c.items })
+
+(* [apply_ignore_names cfg views] drops every view subtree matching a configured
+   ignore_names rule. Empty containers left behind are handled by the renderers, which
+   already skip containers with no visible children (same path as detail_level Ignore). *)
+let apply_ignore_names (cfg : detail_config) (views : view list) : view list =
+  match cfg.ignore_names with
+  | [] -> views
+  | rules -> List.filter_map (prune_view rules) views
+
 (* Preset configurations for common use cases *)
 
 (* Compact preset: structure overview with change counts.
    Shows first-level children for key types without expanding field details.
    Uses per-change differentiation for tracks: new tracks show more detail than removed ones. *)
 let compact = {
+  ignore_names = [];
   (* Base: Summary level shows change counts without field details *)
   added = Summary;
   removed = Summary;
@@ -303,6 +374,9 @@ let compact = {
 
   (* Type-specific overrides for structure visibility *)
   type_overrides = [
+    (* Take lanes (recording takes/comps) are noise in a diff - hide them everywhere. *)
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
+
     (* Tracks: per-change differentiation
        - Added tracks: Inline to show key properties at a glance
        - Removed tracks: Summary (just name + change indicator)
@@ -355,14 +429,17 @@ let compact = {
    Useful for thorough code review or debugging diff output.
    Safety limit of 100 items prevents overwhelming output from large note/event collections. *)
 let full = {
+  ignore_names = [];
   (* Base: Full detail for all change types *)
   added = Full;
   removed = Full;
   modified = Full;
   unchanged = Ignore;
 
-  (* No type-specific overrides - treat all types equally *)
-  type_overrides = [];
+  (* Take lanes (recording takes/comps) are noise - hide them even in full. *)
+  type_overrides = [
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
+  ];
 
   (* Safety limit: prevent overwhelming output from large MIDI/automation collections *)
   max_collection_items = Some 100;
@@ -386,6 +463,7 @@ let full = {
    Compact yet informative - good for quick scanning of changes.
    Notes and parameters are naturally inline-friendly. *)
 let inline = {
+  ignore_names = [];
   (* Base: Inline shows name + all fields on one line *)
   added = Inline;
   removed = Inline;
@@ -394,6 +472,8 @@ let inline = {
 
   (* Type-specific overrides for inline-friendly types *)
   type_overrides = [
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
+
     (* Notes: Inline is perfect for MIDI notes (pitch, velocity, duration) *)
     { domain_type = DTNote; override = uniform_override Inline; };
 
@@ -426,6 +506,7 @@ let inline = {
    Shows only top-level change counts with basic structure.
    Good for CI/CD pipelines or quick "did anything change?" checks. *)
 let quiet = {
+  ignore_names = [];
   (* Base: Summary shows change counts only *)
   added = Summary;
   removed = Summary;
@@ -434,7 +515,8 @@ let quiet = {
 
   (* Only LiveSet gets Compact to show top-level sections *)
   type_overrides = [
-    { domain_type = DTLiveset; override = uniform_override Compact; }
+    { domain_type = DTLiveset; override = uniform_override Compact; };
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
   ];
 
   (* Low limit for minimal output *)
@@ -459,6 +541,7 @@ let quiet = {
    Shows the 7 core types that were historically in stats_renderer.
    All other types set to Ignore to exclude from statistics. *)
 let stats_default = {
+  ignore_names = [];
   (* Base: Summary to show counts only *)
   added = Summary;
   removed = Summary;
@@ -477,6 +560,8 @@ let stats_default = {
     { domain_type = DTLocator; override = uniform_override Summary; };
 
     (* Explicitly ignore all other types for stats mode *)
+    { domain_type = DTArrangementClip; override = uniform_override Ignore; };
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
     { domain_type = DTLiveset; override = uniform_override Ignore; };
     { domain_type = DTMixer; override = uniform_override Ignore; };
     { domain_type = DTRouting; override = uniform_override Ignore; };
@@ -513,14 +598,17 @@ let stats_default = {
    Useful for debugging, auditing, or understanding complete file structure.
    No limits - displays all items and all fields. *)
 let verbose = {
+  ignore_names = [];
   (* Base: Full detail for everything, including unchanged *)
   added = Full;
   removed = Full;
   modified = Full;
   unchanged = Full;
 
-  (* No type-specific overrides - treat all types equally *)
-  type_overrides = [];
+  (* Verbose shows everything, but take lanes are recording cruft - keep them hidden. *)
+  type_overrides = [
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
+  ];
 
   (* No limit - show everything *)
   max_collection_items = None;
@@ -545,6 +633,7 @@ let verbose = {
    Clips shown as summary only (stem tracks don't modify clip content).
    MIDI notes ignored (irrelevant for mixing rendered stems). *)
 let mixing = {
+  ignore_names = [];
   (* Base: Summary for overview, highlighting important changes *)
   added = Summary;
   removed = Summary;
@@ -580,6 +669,8 @@ let mixing = {
 
     (* Clips: Ignore - stem tracks don't modify clip content/position *)
     { domain_type = DTClip; override = uniform_override Ignore; };
+    { domain_type = DTArrangementClip; override = uniform_override Ignore; };
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
 
     (* Loop: Ignore - loop settings not relevant for mixing *)
     { domain_type = DTLoop; override = uniform_override Ignore; };
@@ -623,6 +714,7 @@ let mixing = {
    Shows clips, MIDI notes, loop settings, time signatures, and audio samples.
    Hides all mixing/engineering elements (devices, automation, routing, mixer). *)
 let composer = {
+  ignore_names = [];
   (* Base: show summary of structural changes *)
   added = Summary;
   removed = Summary;
@@ -632,6 +724,9 @@ let composer = {
   (* Type-specific overrides for composition workflow *)
   type_overrides = [
     (* === Composition-critical types (Full detail) === *)
+
+    (* Take lanes are recording cruft, irrelevant to composition. *)
+    { domain_type = DTTakeClip; override = uniform_override Ignore; };
 
     (* Clips: full details - the core compositional element *)
     { domain_type = DTClip; override = uniform_override Full; };
@@ -763,7 +858,7 @@ let with_prefixes ~(added:string) ~(removed:string) ~(modified:string) ~(unchang
 (* Note: Pass None (not passing the argument) to preserve existing value *)
 let with_type_override cfg dt
     ~(added:detail_level option option) ~(removed:detail_level option option) ~(modified:detail_level option option) ~(unchanged:detail_level option option) =
-  let existing = match List.find_opt (fun e -> e.domain_type = dt) cfg.type_overrides with
+  let existing = match List.find_opt (fun (e : type_override_entry) -> e.domain_type = dt) cfg.type_overrides with
     | Some entry -> entry.override
     | None -> no_override ()
   in
@@ -776,7 +871,7 @@ let with_type_override cfg dt
       ()
   in
   (* Remove old entry if exists, add new one *)
-  let filtered = List.filter (fun e -> e.domain_type <> dt) cfg.type_overrides in
+  let filtered = List.filter (fun (e : type_override_entry) -> e.domain_type <> dt) cfg.type_overrides in
   { cfg with type_overrides = { domain_type = dt; override = new_override } :: filtered }
 
 (* Helper: Convert domain_type to string for debugging/validation *)
@@ -786,6 +881,8 @@ let domain_type_to_string (dt : domain_type) : string =
   | DTTrack -> "Track"
   | DTDevice -> "Device"
   | DTClip -> "Clip"
+  | DTArrangementClip -> "ArrangementClip"
+  | DTTakeClip -> "TakeClip"
   | DTAutomation -> "Automation"
   | DTMixer -> "Mixer"
   | DTRouting -> "Routing"
@@ -862,6 +959,7 @@ let detail_config_json_schema () : Yojson.Basic.t =
   in
   (* Fields with defaults that should be optional in the JSON schema *)
   let optional_fields_with_defaults = [
+    "ignore_names";
     "prefix_added";
     "prefix_removed";
     "prefix_modified";
@@ -1047,6 +1145,62 @@ let load_and_validate_config (file_path : string) : (detail_config, string) resu
   | Sys_error msg ->
     Error (Printf.sprintf "File error: %s" msg)
 
+(** Serialize a [detail_config] to Basic JSON with all null (None) values dropped.
+    Optional fields are serialized as null by ppx_deriving_yojson, but the JSON schema
+    treats them as absent — dropping nulls keeps the serialized base schema-valid so it
+    can be used as the merge target for a partial config overlay. *)
+let detail_config_to_basic_no_nulls (cfg : detail_config) : Yojson.Basic.t =
+  let basic = Yojson.Safe.to_basic (detail_config_to_yojson cfg) in
+  let rec drop_nulls (json : Yojson.Basic.t) : Yojson.Basic.t =
+    match json with
+    | `Assoc fields ->
+      `Assoc
+        (fields
+         |> List.filter (fun (_, v) -> v <> `Null)
+         |> List.map (fun (k, v) -> (k, drop_nulls v)))
+    | `List items -> `List (List.map drop_nulls items)
+    | other -> other
+  in
+  drop_nulls basic
+
+(** Load a config file as a partial overlay on top of [base].
+
+    The file may specify any subset of [detail_config] fields; every field it provides
+    replaces the corresponding field in [base], and fields it omits are inherited from
+    [base]. This lets a config carry just an [ignore_names] (or a couple of overrides)
+    without restating the required base fields (added/removed/modified/unchanged/...).
+
+    A complete config file overrides every base field, so this is behaviorally identical
+    to loading it standalone — the overlay is strictly more permissive. The merged JSON is
+    validated against the full schema, so type errors in the user's fields are still caught. *)
+let load_and_validate_config_overlay ~(base : detail_config) (file_path : string) :
+  (detail_config, string) result =
+  try
+    let json_str = In_channel.with_open_text file_path In_channel.input_all in
+    let user_basic = filter_schema_metadata_fields (Yojson.Basic.from_string json_str) in
+    match user_basic with
+    | `Assoc user_fields -> (
+        match detail_config_to_basic_no_nulls base with
+        | `Assoc base_fields ->
+          let user_keys = List.map fst user_fields in
+          let merged =
+            `Assoc
+              (List.filter (fun (k, _) -> not (List.mem k user_keys)) base_fields @ user_fields)
+          in
+          (match validate_config_json merged with
+           | Error err ->
+             Error (Printf.sprintf "Config validation failed in %s:\n%s" file_path err.details)
+           | Ok () -> (
+               let json_safe = Yojson.Safe.from_string (Yojson.Basic.to_string merged) in
+               match detail_config_of_yojson json_safe with
+               | Ok cfg -> Ok cfg
+               | Error msg -> Error (Printf.sprintf "Config parsing failed in %s: %s" file_path msg)))
+        | _ -> Error "Internal error: base config did not serialize to a JSON object")
+    | _ -> Error (Printf.sprintf "Config in %s must be a JSON object" file_path)
+  with
+  | Yojson.Json_error msg -> Error (Printf.sprintf "JSON error in %s: %s" file_path msg)
+  | Sys_error msg -> Error (Printf.sprintf "File error: %s" msg)
+
 let resolve_detail_config
     ?(cwd = Sys.getcwd ())
     ?home_dir
@@ -1056,15 +1210,18 @@ let resolve_detail_config
     ~preset_config
     ()
   =
+  (* Priority (see commit "correct config priority"): CLI flags > --preset > --config >
+     auto-discovered > default. A --preset wins outright over any config file. A config file
+     (explicit or auto-discovered) is overlaid onto the mode default, so it may be partial:
+     fields it sets win, omitted fields are inherited from default_config. *)
   match preset_config with
   | Some preset -> Ok preset
   | None ->
     match config_file with
-    | Some config_path ->
-      load_and_validate_config config_path
+    | Some config_path -> load_and_validate_config_overlay ~base:default_config config_path
     | None ->
       match discover_config_file ~cwd ?home_dir ~reference_path () with
-      | Some auto_config -> load_and_validate_config auto_config
+      | Some auto_config -> load_and_validate_config_overlay ~base:default_config auto_config
       | None -> Ok default_config
 
 (** Helper function for backward compatibility with configs that don't have indent_width *)

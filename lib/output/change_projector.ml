@@ -668,6 +668,8 @@ module DeviceViewSpecB : Alsdiff_view_spec_types.View_spec_types.S
     | "DTTrack" -> DTTrack
     | "DTDevice" -> DTDevice
     | "DTClip" -> DTClip
+    | "DTArrangementClip" -> DTArrangementClip
+    | "DTTakeClip" -> DTTakeClip
     | "DTAutomation" -> DTAutomation
     | "DTMixer" -> DTMixer
     | "DTRouting" -> DTRouting
@@ -901,8 +903,11 @@ let create_midi_track_item
     ?(format_time : dual_time_formatter = default_dual_time_formatter)
     (c : (Track.MidiTrack.t, Track.MidiTrack.Patch.t) structured_change)
   : item =
+  let build_midi_clip = create_midi_clip_item ~note_name_style ~format_time in
   MidiTrackVS.build_item
-    ~build_clips:(create_midi_clip_item ~note_name_style ~format_time)
+    ~build_session_clips:build_midi_clip
+    ~build_arrangement_clips:build_midi_clip
+    ~build_take_clips:build_midi_clip
     ~build_automations:(create_automation_item ~get_pointee_name ~format_time)
     ~build_devices:create_device_item
     ~name:(MidiTrackVS.build_section_name c)
@@ -920,8 +925,11 @@ let create_audio_like_track_item
     ~track_type_name
     (c : (Track.AudioTrack.t, Track.AudioTrack.Patch.t) structured_change)
   : item =
+  let build_audio_clip = create_audio_clip_item ~format_time in
   AudioTrackVS.build_item
-    ~build_clips:(create_audio_clip_item ~format_time)
+    ~build_session_clips:build_audio_clip
+    ~build_arrangement_clips:build_audio_clip
+    ~build_take_clips:build_audio_clip
     ~build_automations:(create_automation_item ~get_pointee_name ~format_time)
     ~build_devices:create_device_item
     ~name:(AudioTrackVS.build_section_name ~type_label:track_type_name c)

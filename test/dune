@@ -131,7 +131,7 @@
  (name test_midi_track)
  (modules test_midi_track utils)
  (libraries alsdiff_base alsdiff_live alcotest)
- (deps data/midi_track.xml))
+ (deps data/midi_track.xml data/midi_track_session.xml))
 
 (test
  (name test_audio_track)
@@ -215,6 +215,11 @@
 (test
  (name test_detail_config_json)
  (modules test_detail_config_json utils)
+ (libraries alsdiff_output alcotest))
+
+(test
+ (name test_ignore_names)
+ (modules test_ignore_names)
  (libraries alsdiff_output alcotest))
 
 (test

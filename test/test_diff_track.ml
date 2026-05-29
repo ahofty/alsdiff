@@ -10,7 +10,7 @@ let make_midi_track id name mixer =
     MidiTrack.id = id;
     name = name;
     current_name = name;
-    clips = [];
+    session_clips = []; arrangement_clips = []; take_clips = [];
     automations = [];
     devices = [];
     mixer = mixer;
@@ -77,7 +77,7 @@ let test_audio_track_diff () =
       AudioTrack.id = 10;
       name = "Audio Track";
       current_name = "Audio Track";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer = mixer1;
@@ -89,7 +89,7 @@ let test_audio_track_diff () =
       AudioTrack.id = 10;
       name = "Audio Track";
       current_name = "Audio Track";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer = mixer2;
@@ -126,7 +126,7 @@ let test_group_track_diff () =
       AudioTrack.id = 91;
       name = "Bass";
       current_name = "Bass";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer = mixer1;
@@ -138,7 +138,7 @@ let test_group_track_diff () =
       AudioTrack.id = 91;
       name = "Bass";
       current_name = "Bass";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer = mixer2;
@@ -175,7 +175,7 @@ let test_return_track_diff () =
       AudioTrack.id = 80;
       name = "Reverb";
       current_name = "Reverb";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer = mixer1;
@@ -187,7 +187,7 @@ let test_return_track_diff () =
       AudioTrack.id = 80;
       name = "Reverb";
       current_name = "Reverb";
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
       devices = [];
       mixer = mixer2;
@@ -224,7 +224,7 @@ let test_cross_type_diff_error () =
       MidiTrack.id = 1;
       name = "Midi Track";
       current_name = "Midi Track";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -232,7 +232,7 @@ let test_cross_type_diff_error () =
       AudioTrack.id = 1;
       name = "Audio Track";
       current_name = "Audio Track";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 
@@ -254,7 +254,7 @@ let test_same_track_no_changes () =
       MidiTrack.id = 1;
       name = "Midi Track";
       current_name = "Midi Track";
-      clips = []; automations = []; devices = [];
+      session_clips = []; arrangement_clips = []; take_clips = []; automations = []; devices = [];
       mixer; routings = make_empty_routing_set ();
     } in
 

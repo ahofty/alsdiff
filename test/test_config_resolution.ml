@@ -38,6 +38,29 @@ let test_explicit_config_beats_preset_and_auto () =
   | Ok cfg -> check string "preset beats explicit config" "PRESET" cfg.prefix_added
   | Error msg -> fail msg
 
+let test_partial_config_overlays_onto_default () =
+  (* With no --preset, a partial config file overlays onto default_config: the field it
+     sets wins, omitted fields are inherited from the default. *)
+  let root = make_temp_dir "alsdiff-config-overlay-" in
+  let project = Filename.concat root "project" in
+  ensure_dir project;
+  let explicit_config = Filename.concat root "partial.json" in
+  Out_channel.with_open_text explicit_config (fun oc ->
+      output_string oc {|{ "prefix_added": "PARTIAL" }|});
+  match resolve_detail_config
+          ~cwd:project
+          ~default_config:(with_prefixes ~added:"DEF" ~removed:"DEF-" ~modified:"*" ~unchanged:"=" full)
+          ~reference_path:(Filename.concat project "song.als")
+          ~config_file:(Some explicit_config)
+          ~preset_config:None
+          ()
+  with
+  | Ok cfg ->
+    check string "config field wins over default" "PARTIAL" cfg.prefix_added;
+    check string "inherited prefix_removed from default" "DEF-" cfg.prefix_removed;
+    check bool "inherited added level from default" true (cfg.added = Full)
+  | Error msg -> fail msg
+
 let test_preset_beats_auto_discovery () =
   let root = make_temp_dir "alsdiff-config-preset-" in
   let repo = Filename.concat root "repo" in
@@ -105,6 +128,7 @@ let () =
     "precedence", [
       test_case "preset beats explicit config and auto-discovery" `Quick test_explicit_config_beats_preset_and_auto;
       test_case "preset beats auto-discovery" `Quick test_preset_beats_auto_discovery;
+      test_case "partial config overlays onto default" `Quick test_partial_config_overlays_onto_default;
     ];
     "discovery", [
       test_case "search order stays unchanged" `Quick test_discover_config_file_search_order;

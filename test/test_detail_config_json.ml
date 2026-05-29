@@ -287,7 +287,94 @@ let test_validate_business_logic_warnings () =
       true (Re.execp (Re.compile (Re.str ">= 0")) msg);
     ()
 
+(* ==================== ignore_names Tests ==================== *)
+
+let test_ignore_name_entry_roundtrip () =
+  (* Test ignore_name_entry serializes and deserializes correctly *)
+  let entry = { domain_type = DTDevice; name = "DJMFilter" } in
+  let json = ignore_name_entry_to_yojson entry in
+  match ignore_name_entry_of_yojson json with
+  | Ok parsed ->
+    Alcotest.(check bool) "entry domain_type" (entry.domain_type = parsed.domain_type) true;
+    Alcotest.(check string) "entry name" entry.name parsed.name
+  | Error msg -> Alcotest.failf "ignore_name_entry roundtrip failed: %s" msg
+
+let test_detail_config_with_ignore_names () =
+  (* Test that ignore_names survive a config roundtrip *)
+  let custom_cfg = {
+    full with
+    ignore_names = [
+      { domain_type = DTDevice; name = "DJMFilter" };
+      { domain_type = DTDevice; name = "kHs Gain" };
+    ];
+  } in
+  let json = detail_config_to_yojson custom_cfg in
+  match detail_config_of_yojson json with
+  | Ok parsed ->
+    Alcotest.(check int) "ignore_names length" 2 (List.length parsed.ignore_names);
+    (match parsed.ignore_names with
+     | first :: _ ->
+       Alcotest.(check bool) "first domain_type" (first.domain_type = DTDevice) true;
+       Alcotest.(check string) "first name" "DJMFilter" first.name
+     | [] -> Alcotest.failf "expected ignore_names entries")
+  | Error msg -> Alcotest.failf "detail_config with ignore_names failed: %s" msg
+
+let test_config_without_ignore_names_defaults () =
+  (* Backward compat: a config JSON missing ignore_names parses with the default []. *)
+  let json = detail_config_to_yojson full in
+  let stripped = match Yojson.Safe.to_basic json with
+    | `Assoc fields ->
+      `Assoc (List.filter (fun (k, _) -> k <> "ignore_names") fields)
+    | other -> other
+  in
+  let json_safe = Yojson.Safe.from_string (Yojson.Basic.to_string stripped) in
+  match detail_config_of_yojson json_safe with
+  | Ok parsed ->
+    Alcotest.(check int) "defaulted ignore_names empty" 0 (List.length parsed.ignore_names)
+  | Error msg -> Alcotest.failf "config without ignore_names should parse: %s" msg
+
+let test_validate_config_with_ignore_names () =
+  (* A config containing ignore_names passes JSON schema validation. *)
+  let cfg = {
+    full with
+    ignore_names = [ { domain_type = DTDevice; name = "DJMFilter" } ];
+  } in
+  let json_basic = Yojson.Safe.to_basic (detail_config_to_yojson cfg) in
+  let filtered_json = filter_nulls_recursive json_basic in
+  match validate_config_json filtered_json with
+  | Ok () -> ()
+  | Error err -> Alcotest.failf "config with ignore_names should validate: %s" err.details
+
+let test_partial_config_overlay () =
+  (* A partial config file (only ignore_names) overlays onto the base: ignore_names comes
+     from the file, every other field is inherited from the base preset. *)
+  let temp_file = Filename.temp_file "alsdiff_overlay_" ".json" in
+  let oc = open_out temp_file in
+  output_string oc
+    {|{ "ignore_names": [ { "domain_type": ["DTDevice"], "name": "DJMFilter" } ] }|};
+  close_out oc;
+  let result =
+    Alsdiff_output.Config.resolve_detail_config ~default_config:full ~reference_path:temp_file
+      ~config_file:(Some temp_file) ~preset_config:None ()
+  in
+  (try Sys.remove temp_file with Sys_error _ -> ());
+  match result with
+  | Ok cfg ->
+    Alcotest.(check int) "overlay ignore_names length" 1 (List.length cfg.ignore_names);
+    (match cfg.ignore_names with
+     | first :: _ -> Alcotest.(check string) "overlay ignore name" "DJMFilter" first.name
+     | [] -> Alcotest.failf "expected an ignore_names entry");
+    (* Fields not present in the partial config are inherited from the full base preset. *)
+    Alcotest.(check bool) "inherited added=Full" (cfg.added = Full) true;
+    Alcotest.(check bool) "inherited max_collection_items" (cfg.max_collection_items = Some 100) true
+  | Error msg -> Alcotest.failf "partial overlay should resolve: %s" msg
+
 let tests = [
+  "partial config overlay", `Quick, test_partial_config_overlay;
+  "ignore_name_entry roundtrip", `Quick, test_ignore_name_entry_roundtrip;
+  "detail_config with ignore_names", `Quick, test_detail_config_with_ignore_names;
+  "config without ignore_names defaults", `Quick, test_config_without_ignore_names_defaults;
+  "validate config with ignore_names", `Quick, test_validate_config_with_ignore_names;
   "detail_level roundtrip", `Quick, test_detail_level_roundtrip;
   "change_breakdown roundtrip", `Quick, test_change_breakdown_roundtrip;
   "per_change_override roundtrip", `Quick, test_per_change_override_roundtrip;

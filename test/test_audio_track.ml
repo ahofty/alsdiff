@@ -28,15 +28,15 @@ let test_audio_track_clips () =
   let audio_track = AudioTrack.create xml in
 
   (* Check that we have the expected number of clips *)
-  Alcotest.(check int) "clip count" 7 (List.length audio_track.clips);
+  Alcotest.(check int) "clip count" 7 (List.length audio_track.arrangement_clips);
 
   (* Test first clip details *)
-  let first_clip = List.hd audio_track.clips in
+  let first_clip = List.hd audio_track.arrangement_clips in
   Alcotest.(check int) "first clip id" 22 first_clip.Clip.AudioClip.id;
 
   (* Test all clip IDs are present and in order *)
   let expected_clip_ids = [22; 15; 5; 28; 31; 36; 37] in
-  let actual_clip_ids = List.map (fun clip -> clip.Clip.AudioClip.id) audio_track.clips in
+  let actual_clip_ids = List.map (fun clip -> clip.Clip.AudioClip.id) audio_track.arrangement_clips in
   Alcotest.(check (list int)) "clip IDs order" expected_clip_ids actual_clip_ids;
 
   (* Test clip names are properly parsed - this catches the name parsing bug *)
@@ -49,7 +49,7 @@ let test_audio_track_clips () =
     "Delay Feedback Screamer 1";
     "Delay Feedback Screamer 1"
   ] in
-  let actual_clip_names = List.map (fun clip -> clip.Clip.AudioClip.name) audio_track.clips in
+  let actual_clip_names = List.map (fun clip -> clip.Clip.AudioClip.name) audio_track.arrangement_clips in
   Alcotest.(check (list string)) "clip names" expected_clip_names actual_clip_names
 
 let test_audio_track_automations () =
@@ -117,14 +117,14 @@ let test_audio_track_comprehensive () =
   (* Comprehensive test of all fields together *)
   Alcotest.(check int) "id" 41 audio_track.id;
   Alcotest.(check string) "name" "21-Metal Scrapes Texture 01" audio_track.name;
-  Alcotest.(check int) "clip count" 7 (List.length audio_track.clips);
+  Alcotest.(check int) "clip count" 7 (List.length audio_track.arrangement_clips);
   Alcotest.(check int) "automation count" 0 (List.length audio_track.automations);
   Alcotest.(check int) "device count" 0 (List.length audio_track.devices);
 
   (* Verify first few clip IDs to ensure proper ordering *)
-  let first_clip_id = (List.hd audio_track.clips).Clip.AudioClip.id in
-  let second_clip_id = (List.nth audio_track.clips 1).Clip.AudioClip.id in
-  let third_clip_id = (List.nth audio_track.clips 2).Clip.AudioClip.id in
+  let first_clip_id = (List.hd audio_track.arrangement_clips).Clip.AudioClip.id in
+  let second_clip_id = (List.nth audio_track.arrangement_clips 1).Clip.AudioClip.id in
+  let third_clip_id = (List.nth audio_track.arrangement_clips 2).Clip.AudioClip.id in
   Alcotest.(check int) "first clip ID" 22 first_clip_id;
   Alcotest.(check int) "second clip ID" 15 second_clip_id;
   Alcotest.(check int) "third clip ID" 5 third_clip_id
@@ -180,7 +180,7 @@ let test_audio_track_edge_case_empty_clips () =
   let audio_track = AudioTrack.create empty_clips_xml in
   Alcotest.(check int) "empty track id" 100 audio_track.id;
   Alcotest.(check string) "empty track name" "Empty Track" audio_track.name;
-  Alcotest.(check int) "empty track clip count" 0 (List.length audio_track.clips);
+  Alcotest.(check int) "empty track clip count" 0 (List.length audio_track.arrangement_clips);
   Alcotest.(check int) "empty track automation count" 0 (List.length audio_track.automations);
   Alcotest.(check int) "empty track device count" 0 (List.length audio_track.devices)
 

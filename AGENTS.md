@@ -62,13 +62,20 @@ open Alsdiff_live.Track.AudioTrack
 - Use functional style, avoid mutable state
 - Error pattern: `raise (Xml_error (xml, "descriptive message"))`
 
+## Ambiente OCaml / opam
+- Este projeto usa um switch opam (OCaml 5.4.0).
+- NUNCA prefixe comandos com `eval $(opam env) && ...`.
+  Command substitution gera prompts de confirmação desnecessários.
+- Em vez disso, use `opam exec -- <comando>` para garantir o ambiente do switch.
+
 ## Development Commands
 
-- `dune build` - Build
-- `dune runtest` - Run tests
-- `dune exec alsdiff` - Run main executable
-- `dune build @fmt` - Format code
-- `dune describe pp lib/live/foo.ml` - Inspect PPX-expanded code
+- `opam exec -- dune build` - Build
+- `opam exec -- dune runtest` - Run tests
+- `opam exec -- dune exec alsdiff` - Run main executable
+- `opam exec -- dune build @fmt` - Format code
+- `opam exec -- dune describe pp lib/live/foo.ml` - Inspect PPX-expanded code
+- `scripts/install-local.sh` - Build and install the `alsdiff` CLI into `~/.local/bin` (no `.exe`; replaces only that binary)
 
 **Important**: Dune commands are exclusive (they use a global lock file). Never issue multiple `dune build` or `dune runtest` commands concurrently - serialize them to avoid lock conflicts.
 

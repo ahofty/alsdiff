@@ -36,6 +36,20 @@
         },
         {
           "type": "array",
+          "prefixItems": [ { "const": "DTArrangementClip" } ],
+          "unevaluatedItems": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        {
+          "type": "array",
+          "prefixItems": [ { "const": "DTTakeClip" } ],
+          "unevaluatedItems": false,
+          "minItems": 1,
+          "maxItems": 1
+        },
+        {
+          "type": "array",
           "prefixItems": [ { "const": "DTAutomation" } ],
           "unevaluatedItems": false,
           "minItems": 1,
@@ -265,6 +279,18 @@
     "prefix_removed": { "type": "string" },
     "prefix_added": { "type": "string" },
     "max_collection_items": { "type": "integer" },
+    "ignore_names": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "domain_type": { "$ref": "#/$defs/domain_type" }
+        },
+        "required": [ "name", "domain_type" ],
+        "additionalProperties": false
+      }
+    },
     "type_overrides": {
       "type": "array",
       "items": {
