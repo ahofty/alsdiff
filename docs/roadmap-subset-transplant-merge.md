@@ -26,6 +26,7 @@ Set: `00_Live_..._TesteREODER.prd.als` — Live 12.3.8, 345 cenas, ~280 MB XML.
 | Tracks | 9 principais (`1 BEAT`…`8 SAMPLE`, `RESAMPLE`) + 4 returns (`A-LONG DELAY`…`D-VS2fx`) + 1 `MainTrack` + 1 `PreHearTrack`. Identificáveis por `<Name><EffectiveName>`/`<UserName>`. |
 | ClipSlotLists em lockstep (345 filhos) | **19**: cada track principal expõe **2** (a da track + a do `MainSequencer`); só 1 return (`D-VS2fx`) tem CSL de 345. Todas reordenadas/recortadas juntas (já validado). |
 | `<ClipEnvelope>` dentro de clips de sessão | **676** (661 com `<EnvelopeTarget><PointeeId>`). **Automação interna do clip aponta para um parâmetro de device por id global** (ex.: PointeeId 15842 → `<ControllerTargets.0 Id="15842">`). ⚠️ Este é o calcanhar do transplante. |
+| `<SavedPlayingSlot>` por track (×9, no MainSequencer) | **Índice ABSOLUTO de cena do clip que tocava ao salvar** (+ `SavedPlayingOffset`). 🔴 Se apontar p/ cena removida/realocada, o **engine de áudio crasha ao abrir** (EXC_BAD_ACCESS). **Tem que ser remapeado** em TODA operação (reorder/subset). `-2` = nada tocando (sentinela seguro). **Descoberto via crash do Live, não estava no plano inicial.** |
 
 ---
 
@@ -80,7 +81,12 @@ escolhidos (SEM o cabeçalho fixo). Abre mais rápido, menos risco de o Live tra
   quando o bloco-alvo não é mantido, e o remap acerta quando ambos ficam (91→7, 101→17).
 - ⚠️ `alsdiff` **não** é validador confiável p/ subset: ele alinha clips **por posição**,
   então deleção aparece como "Modified/Removed". A checagem byte-a-byte é a referência.
-- Pendente: fire-test no Ableton (arquivo `..._SUBSET_dd_E4.als` gerado).
+- 🔴 **BUG encontrado via crash do Live e CORRIGIDO:** o subset crashava o Live (audio
+  thread, EXC_BAD_ACCESS em 0x20) porque `SavedPlayingSlot` (índice absoluto da cena que
+  tocava ao salvar, ×9) continuava apontando para cena removida. O reorder não crashava só
+  porque preservava a contagem (o índice continuava válido, embora errado). Fix: remapear
+  `SavedPlayingSlot` (mantida→novo índice; removida→`-2`, zerando offset) em reorder E subset.
+- Pendente: fire-test no Ableton (arquivo `..._SUBSET_dd_E4_v2.als` gerado, com SPS sãos).
 
 ---
 

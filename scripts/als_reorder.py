@@ -364,6 +364,41 @@ def _remap_one_followaction(inner, inv):
     return inner
 
 
+# Cada track principal guarda, no seu MainSequencer, o slot (índice ABSOLUTO de cena) que
+# estava tocando quando o set foi salvo, mais o offset de reprodução. Se esse índice apontar
+# para uma cena removida/realocada, o engine de áudio do Live deref um ponteiro inválido ao
+# abrir → crash (EXC_BAD_ACCESS). -2 = "nada tocando" (sentinela seguro). Precisa ser
+# remapeado junto com a permutação/seleção. (Capturamos slot + offset adjacente juntos.)
+_SPS_RE = re.compile(
+    r'(<SavedPlayingSlot Value=")(-?\d+)("\s*/>\s*<SavedPlayingOffset Value=")(-?[\d.]+)("\s*/>)')
+
+
+def _saved_playing_slot_edits(text, inv):
+    """Retorna edits (start,end,repl) remapeando cada SavedPlayingSlot por `inv`
+    (inv[old]=new, ou None se a cena foi removida → vira -2 e zera o offset)."""
+    total = len(re.findall(r'<SavedPlayingSlot Value="', text))
+    edits = []
+    matched = 0
+    for m in _SPS_RE.finditer(text):
+        matched += 1
+        old = int(m.group(2))
+        off = m.group(4)
+        if old < 0:
+            continue  # já é sentinela "nada tocando"
+        if 0 <= old < len(inv) and inv[old] is not None:
+            new, newoff = inv[old], off
+        else:
+            new, newoff = -2, "0"  # cena removida → nada tocando
+        if new != old or newoff != off:
+            edits.append((m.start(), m.end(),
+                          m.group(1) + str(new) + m.group(3) + newoff + m.group(5)))
+    if matched != total:
+        raise ValueError(
+            "SavedPlayingSlot: casei %d de %d ocorrências (regex não cobriu alguma)"
+            % (matched, total))
+    return edits
+
+
 def reorder_text(ls, new_order):
     """Aplica a permutação ao texto, devolvendo o novo texto completo."""
     inv = [0] * ls.num_scenes  # inv[old_idx] = new_idx
@@ -390,6 +425,9 @@ def reorder_text(ls, new_order):
         gaps = _gaps(ins, spans, ine, text)
         new_inner = _rebuild(slot_strs, gaps, new_order, jump_inv=inv)
         edits.append((ins, ine, new_inner))
+
+    # SavedPlayingSlot por track (fora das regiões acima) — remapear/zerar p/ não crashar.
+    edits.extend(_saved_playing_slot_edits(text, inv))
 
     # Aplica edits da direita pra esquerda (offsets não deslocam)
     edits.sort(key=lambda e: e[0], reverse=True)
@@ -548,6 +586,9 @@ def subset_text(ls, selected):
         gaps = _gaps(ins, spans, ine, text)
         edits.append((ins, ine, _rebuild(slot_strs, gaps, selected, jump_inv=inv)))
 
+    # SavedPlayingSlot por track: cena mantida → novo índice; removida → -2 (nada tocando).
+    edits.extend(_saved_playing_slot_edits(text, inv))
+
     edits.sort(key=lambda e: e[0], reverse=True)
     for start, end, repl in edits:
         text = text[:start] + repl + text[end:]
@@ -613,6 +654,8 @@ SYN = """<?xml version="1.0" encoding="UTF-8"?>
 \t<LiveSet>
 \t\t<Tracks>
 \t\t\t<MidiTrack Id="1">
+\t\t\t\t<SavedPlayingSlot Value="4" />
+\t\t\t\t<SavedPlayingOffset Value="0" />
 \t\t\t\t<ClipSlotList>
 {T1_SLOTS}
 \t\t\t\t</ClipSlotList>
@@ -724,6 +767,11 @@ def cmd_selftest():
     assert others == 0, "clip vazou para outras cenas: %d" % others
     print("selftest: lockstep OK (clip viajou só com sua cena)")
 
+    # SavedPlayingSlot deve ser remapeado no reorder (4 -> inv[4]=2)
+    m_sps = re.search(r'<SavedPlayingSlot Value="(-?\d+)"', new_text)
+    assert m_sps and int(m_sps.group(1)) == inv[4], (m_sps and m_sps.group(1), inv[4])
+    print("selftest: SavedPlayingSlot reorder OK (4 -> %d)" % inv[4])
+
     # ---- subset ----
     # (a) abort: na fixture base, o clip da cena 1 (bloco A) salta p/ a cena 4 (bloco B).
     #     Manter só A => o jump aponta p/ cena removida => deve ser detectado.
@@ -764,6 +812,15 @@ def cmd_selftest():
     sel_drop, chosen_drop, _ = build_selection(lsc, ">>", drop=["B"])
     assert chosen_drop == ["A", "C"] and sel_drop == [1, 2, 5, 6], (chosen_drop, sel_drop)
     print("selftest: subset ordem OK (keep C,A=%s | drop B=%s)" % (sel_keep, sel_drop))
+
+    # SavedPlayingSlot no subset: a fixture aponta p/ cena 4 (no bloco B).
+    # keep B => mantém cena 4 (vira novo índice 1); drop B => remove cena 4 (vira -2).
+    sps_keepB = re.search(r'<SavedPlayingSlot Value="(-?\d+)"',
+                          subset_text(lsc, build_selection(lsc, ">>", keep=["B"])[0]))
+    assert sps_keepB and int(sps_keepB.group(1)) == 1, sps_keepB and sps_keepB.group(1)
+    sps_dropB = re.search(r'<SavedPlayingSlot Value="(-?\d+)"', subset_text(lsc, sel_drop))
+    assert sps_dropB and int(sps_dropB.group(1)) == -2, sps_dropB and sps_dropB.group(1)
+    print("selftest: SavedPlayingSlot subset OK (keep B: 4->1 | drop B: 4->-2)")
 
     print("\nTODOS OS TESTES PASSARAM ✅")
 
