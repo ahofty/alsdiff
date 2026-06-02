@@ -344,6 +344,11 @@ def _set_jump(inner, tag, inv):
     old = int(m.group(2))
     if 0 <= old < len(inv):
         new = inv[old]
+        if new is None:
+            # alvo caiu fora da seleção (cena removida). No subset isso é validado e
+            # abortado ANTES de chegar aqui; se chegou, é bug — falhar alto.
+            raise ValueError(
+                "jump para cena removida (old=%d) deveria ter sido barrado na validação" % old)
         new_open = open_tag[:m.start(2)] + str(new) + open_tag[m.end(2):]
         return inner[:o_start] + new_open + inner[o_gt + 1:]
     return inner
@@ -438,6 +443,144 @@ def cmd_reorder(path, order_csv, output, prefix):
     write_als(output, new_text)
     moved = sum(1 for i, o in enumerate(new_order) if i != o)
     print("OK: %d cenas, %d reposicionadas." % (ls.num_scenes, moved))
+    print("Saída:", output)
+
+
+# --------------------------------------------------------------------------------------
+# subset (gerar um .als enxuto com só alguns blocos)
+# --------------------------------------------------------------------------------------
+
+
+def build_selection(ls, prefix, keep=None, drop=None):
+    """Retorna (selected, chosen, head) para o subset.
+    - selected: lista de índices ANTIGOS de cena na ordem de saída (NÃO inclui cabeçalho).
+    - chosen: rótulos dos blocos escolhidos, na ordem de saída.
+    - head: nº de cenas de cabeçalho do original (sempre EXCLUÍDAS do subset).
+    Modos (exatamente um): keep=[labels] mantém esses blocos NA ORDEM DADA (permite
+    reordenar); drop=[labels] remove esses e mantém o resto NA ORDEM ORIGINAL."""
+    head, blocks = detect_blocks(ls, prefix)
+    by_label = {}
+    order = []  # rótulos na ordem original
+    for label, s, e in blocks:
+        if label in by_label:
+            raise SystemExit("Erro: rótulo de bloco duplicado: %r" % label)
+        by_label[label] = (s, e)
+        order.append(label)
+    if (keep is None) == (drop is None):
+        raise SystemExit("Erro: informe exatamente um entre --keep e --drop.")
+    if keep is not None:
+        want = [x.strip() for x in keep if x.strip()]
+        unknown = [w for w in want if w not in by_label]
+        if unknown:
+            raise SystemExit("Erro: blocos desconhecidos no --keep: %s\nBlocos no set: %s"
+                             % (unknown, order))
+        if len(set(want)) != len(want):
+            raise SystemExit("Erro: --keep tem bloco repetido.")
+        chosen = want  # ordem dada (reordena)
+    else:
+        drp = [x.strip() for x in drop if x.strip()]
+        unknown = [d for d in drp if d not in by_label]
+        if unknown:
+            raise SystemExit("Erro: blocos desconhecidos no --drop: %s\nBlocos no set: %s"
+                             % (unknown, order))
+        keepset = set(drp)
+        chosen = [l for l in order if l not in keepset]  # ordem original
+    if not chosen:
+        raise SystemExit("Erro: a seleção ficaria vazia (nenhum bloco no subset).")
+    selected = []
+    for label in chosen:
+        s, e = by_label[label]
+        selected.extend(range(s, e))
+    return selected, chosen, head
+
+
+def _scan_jumps_in_span(span):
+    """Itera (letter, target_int) para cada FollowAction com FA==JUMP_ACTION no span do clip."""
+    pos = 0
+    while True:
+        fa = find_element(span, "FollowAction", pos)
+        if not fa:
+            break
+        _, in_s, in_e, _end = fa
+        inner = span[in_s:in_e]
+        for letter in ("A", "B"):
+            fav, _ = _get_value(inner, "FollowAction" + letter)
+            if fav == JUMP_ACTION:
+                jv, _ = _get_value(inner, "JumpIndex" + letter)
+                if jv is not None and jv.isdigit():
+                    yield (letter, int(jv))
+        pos = in_e
+
+
+def validate_subset_jumps(ls, selected):
+    """Retorna lista de (old_scene_idx, csl_idx, letter, target) de jumps de clips MANTIDOS
+    que apontam para cenas REMOVIDAS. Vazia => subset seguro."""
+    kept = set(selected)
+    csls = ls.clip_slot_lists()
+    problems = []
+    for old_idx in selected:
+        for ci, (_ins, _ine, spans) in enumerate(csls):
+            a, b = spans[old_idx]
+            span = ls.text[a:b]
+            for letter, tgt in _scan_jumps_in_span(span):
+                if tgt not in kept:
+                    problems.append((old_idx, ci, letter, tgt))
+    return problems
+
+
+def subset_text(ls, selected):
+    """Aplica a seleção ao texto: mantém só os <Scene>/<ClipSlot> de `selected` (nessa
+    ordem) e remapeia os jumps sobreviventes. Pré-requisito: validate_subset_jumps vazio."""
+    inv = [None] * ls.num_scenes  # inv[old_idx] = new_idx (None = removida)
+    for new_idx, old_idx in enumerate(selected):
+        inv[old_idx] = new_idx
+    text = ls.text
+    csls = ls.clip_slot_lists()
+    edits = []  # (region_start, region_end, new_region_text)
+
+    scene_strs = [text[a:b] for (a, b) in ls.scene_spans]
+    gaps = _gaps(ls.scenes_inner_start, ls.scene_spans, ls.scenes_inner_end, text)
+    edits.append((ls.scenes_inner_start, ls.scenes_inner_end,
+                  _rebuild(scene_strs, gaps, selected, jump_inv=None)))
+
+    for ins, ine, spans in csls:
+        slot_strs = [text[a:b] for (a, b) in spans]
+        gaps = _gaps(ins, spans, ine, text)
+        edits.append((ins, ine, _rebuild(slot_strs, gaps, selected, jump_inv=inv)))
+
+    edits.sort(key=lambda e: e[0], reverse=True)
+    for start, end, repl in edits:
+        text = text[:start] + repl + text[end:]
+    return text
+
+
+def cmd_subset(path, keep_csv, drop_csv, output, prefix):
+    text = read_als(path)
+    ls = LiveSet(text)
+    keep = keep_csv.split(",") if keep_csv is not None else None
+    drop = drop_csv.split(",") if drop_csv is not None else None
+    selected, chosen, head = build_selection(ls, prefix, keep=keep, drop=drop)
+    problems = validate_subset_jumps(ls, selected)
+    if problems:
+        lines = [
+            "ERRO: há 'jump to scene' apontando para cena REMOVIDA. Isso não deveria existir",
+            "(pulos devem ficar dentro da mesma música). Abortei SEM gravar nada.",
+            "",
+        ]
+        for old_idx, ci, letter, tgt in problems:
+            nm = ls.scene_name(old_idx).strip()
+            tnm = ls.scene_name(tgt).strip() if 0 <= tgt < ls.num_scenes else "?"
+            lines.append("  cena %d (%r) [CSL#%d] JumpIndex%s -> cena %d (%r) [REMOVIDA]"
+                         % (old_idx, nm, ci + 1, letter, tgt, tnm))
+        raise SystemExit("\n".join(lines))
+    new_text = subset_text(ls, selected)
+    if output is None:
+        base = path[:-4] if path.endswith(".als") else path
+        output = base + ".subset.als"
+    write_als(output, new_text)
+    print("OK: %d blocos mantidos, %d cenas (de %d). Cabeçalho (%d cenas) removido."
+          % (len(chosen), len(selected), ls.num_scenes, head))
+    print("Blocos:", ", ".join(chosen))
     print("Saída:", output)
 
 
@@ -580,6 +723,48 @@ def cmd_selftest():
             others += 1
     assert others == 0, "clip vazou para outras cenas: %d" % others
     print("selftest: lockstep OK (clip viajou só com sua cena)")
+
+    # ---- subset ----
+    # (a) abort: na fixture base, o clip da cena 1 (bloco A) salta p/ a cena 4 (bloco B).
+    #     Manter só A => o jump aponta p/ cena removida => deve ser detectado.
+    sel_a, chosen_a, head_a = build_selection(ls, ">>", keep=["A"])
+    assert sel_a == [1, 2] and chosen_a == ["A"] and head_a == 1, (sel_a, chosen_a, head_a)
+    probs = validate_subset_jumps(ls, sel_a)
+    assert len(probs) == 1 and probs[0][3] == 4, probs
+    print("selftest: subset abort OK (jump p/ cena removida detectado: %s)" % (probs[0],))
+
+    # (b) happy path com remap: fixture com clip na cena 4 saltando p/ cena 5 (ambas no bloco B).
+    names2 = ["", ">>A", "", ">>B", "", ""]
+    jumps2 = {4: 5}
+    text2 = SYN.format(
+        T1_SLOTS="\n".join(_syn_slot(i, jumps2.get(i)) for i in range(6)),
+        SCENES="\n".join(_syn_scene(i, names2[i]) for i in range(6)))
+    lsb = LiveSet(text2)
+    sel_b, _, _ = build_selection(lsb, ">>", keep=["B"])
+    assert sel_b == [3, 4, 5], sel_b
+    assert validate_subset_jumps(lsb, sel_b) == [], "jump 4->5 está dentro de B, não deve acusar"
+    ntb = subset_text(lsb, sel_b)
+    lsb2 = LiveSet(ntb)
+    assert lsb2.num_scenes == 3, lsb2.num_scenes
+    assert [lsb2.scene_name(i).strip() for i in range(3)] == [">>B", "", ""]
+    # clip estava na cena 4 (nova pos 1); jump 5 -> nova pos inv[5]=2
+    a2, b2 = lsb2.clip_slot_lists()[0][2][1]
+    m2 = re.search(r'JumpIndexA Value="(\d+)"', ntb[a2:b2])
+    assert m2 and int(m2.group(1)) == 2, m2 and m2.group(1)
+    print("selftest: subset keep+remap OK (3 cenas, jump 5 -> 2)")
+
+    # (c) ordem: keep reordena na ordem dada; drop preserva a original.
+    names3 = ["", ">>A", "", ">>B", "", ">>C", ""]  # head1 + A[1,3) B[3,5) C[5,7)
+    text3 = SYN.format(
+        T1_SLOTS="\n".join(_syn_slot(i) for i in range(7)),
+        SCENES="\n".join(_syn_scene(i, names3[i]) for i in range(7)))
+    lsc = LiveSet(text3)
+    sel_keep, chosen_keep, _ = build_selection(lsc, ">>", keep=["C", "A"])
+    assert chosen_keep == ["C", "A"] and sel_keep == [5, 6, 1, 2], (chosen_keep, sel_keep)
+    sel_drop, chosen_drop, _ = build_selection(lsc, ">>", drop=["B"])
+    assert chosen_drop == ["A", "C"] and sel_drop == [1, 2, 5, 6], (chosen_drop, sel_drop)
+    print("selftest: subset ordem OK (keep C,A=%s | drop B=%s)" % (sel_keep, sel_drop))
+
     print("\nTODOS OS TESTES PASSARAM ✅")
 
 
@@ -602,6 +787,14 @@ def main(argv=None):
     pr.add_argument("--output", default=None)
     pr.add_argument("--prefix", default=DEFAULT_PREFIX)
 
+    pss = sub.add_parser("subset", help="gera um .als enxuto com só alguns blocos (sem cabeçalho)")
+    pss.add_argument("input")
+    grp = pss.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--keep", help='blocos a MANTER, na ordem desejada, ex.: "T01,space jam"')
+    grp.add_argument("--drop", help='blocos a REMOVER (mantém o resto na ordem original)')
+    pss.add_argument("--output", default=None)
+    pss.add_argument("--prefix", default=DEFAULT_PREFIX)
+
     sub.add_parser("selftest", help="roda testes internos numa fixture sintética")
 
     args = ap.parse_args(argv)
@@ -609,6 +802,8 @@ def main(argv=None):
         cmd_inspect(args.input, args.prefix)
     elif args.cmd == "reorder":
         cmd_reorder(args.input, args.order, args.output, args.prefix)
+    elif args.cmd == "subset":
+        cmd_subset(args.input, args.keep, args.drop, args.output, args.prefix)
     elif args.cmd == "selftest":
         cmd_selftest()
 
