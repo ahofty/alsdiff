@@ -292,12 +292,54 @@ o Live).
 2. **A Extensions SDK é o lar natural de longo prazo do transplante/merge**, por terceirizar
    ao Live as partes mais perigosas (ids, pontees, fidelidade). Vale um **spike** quando
    tivermos acesso à doc/beta do SDK.
-3. **Bloqueio para avaliar a fundo:** a referência de API está atrás do download beta. Para
-   ir além, preciso que você entre no programa beta e compartilhe a doc do SDK (ou instale),
-   aí avalio com precisão `Scene.reorder`/move e o escopo de `fs`.
 
-> **Decisão pendente sua:** seguimos a **Fase A (subset) em Python agora** (desbloqueado), e
-> em paralelo você decide se quer entrar na beta do Suite p/ explorarmos o SDK no transplante?
+### 4.1. Análise do SDK instalado (v1.0.0-beta.0) — API real
+
+SDK em `~/Downloads/extensions-sdk-1.0.0-beta.0/`; tipos em `dist/index.d.mts`. JS/TS +
+Node (exemplos usam `import * as fs from "node:fs"` → **fs completo disponível**).
+
+**O que a API EXPÕE (data model do set ABERTO):**
+- `Song`: `tracks`/`returnTracks`/`mainTrack`, `scenes`, `cuePoints`, tempo, escala/grid.
+  Mutações: `createScene(index)`, `deleteScene`, `duplicateScene`, `create/deleteTrack`,
+  `duplicateTrack`, `create/deleteCuePoint`.
+- `Track`: name, mute/solo/arm, `clipSlots`, `takeLanes`, `arrangementClips`, `devices`,
+  `mixer`; insert/delete/duplicateDevice; `clearClipsInRange`.
+- `ClipSlot`: `clip`, `deleteClip`, `createMidiClip(len)`, `createAudioClip({filePath,…})`.
+- `Clip`: name/start/end/markers/loop/color/muted. `MidiClip.notes` (get/set).
+  `AudioClip`: filePath, warping, warpMode, `warpMarkers` (get).
+- `Device`/`DeviceParameter`: nomes, parâmetros, `getValue/setValue`. Mixer: volume/pan/sends.
+- `Resources.importIntoProject(path)`, `renderPreFxAudio`. `Ui` (context menu/dialogs).
+
+**LIMITAÇÕES decisivas (o que NÃO existe na v1.0.0):**
+- 🔴 **Sem API de automação de clip (`ClipEnvelope`)** — os 661 envelopes/`PointeeId` que são
+  o coração do transplante são **invisíveis e intransferíveis** pela SDK.
+- 🔴 **Sem API de follow action / jump** (nem cena nem clip).
+- 🔴 **Sem "mover/copiar clip"**: para mover um clip recria-se (`notes` p/ MIDI; `filePath`+
+  loop p/ áudio) — **perde envelopes, follow actions, warp markers detalhados**.
+- 🔴 **Um único set** (`application.song`): não abre/lê o modelo do projeto A.
+- 🔴 **Sem reorder/move de cena** (só create(index)/delete/duplicate).
+- 🔴 **Sem save/export** programático (usuário salva manual; muta o set aberto in-place).
+
+**Veredito por problema (revisado com a API real):**
+- **Subset (P1):** via SDK seria robusto (`song.deleteScene()` → Live cuida de ids,
+  SavedPlayingSlot, follow actions nativamente). Mas muta o set aberto (precisa "Save As"),
+  exige beta, e não reordena (modo --keep reordena). **Nosso Python já faz, offline, gerando
+  arquivo novo, validado. Mantém Python; SDK fica como alternativa opcional.**
+- **Transplante (P2):** ⚠️ **a SDK NÃO resolve o problema central.** Justamente a parte que
+  importa — mover clips **com a automação interna e follow actions** — não é expressável pela
+  API (lossy). A vantagem prometida (Live gerencia ids/pontees) só vale se criarmos os objetos
+  pela API, o que **dropa a automação**. Logo, **o transplante fiel continua sendo cirurgia de
+  texto em Python** (preserva tudo byte-a-byte; nós cuidamos da renumeração de ids + remap de
+  PointeeId + SavedPlayingSlot).
+- **Onde a SDK AJUDA no transplante:** como **oráculo de validação read-only** — ler as cadeias
+  de device de A e de B (nomes de track/device + lista de parâmetros) e confirmar que são
+  idênticas antes de transplantar (atende ao Q4 "validar sem confiar"). Como é 1 set por vez,
+  o fluxo é: rodar extensão em A → exporta JSON; rodar em B → exporta JSON; Python compara.
+
+> **Decisão:** Fase A (subset) em Python — **FEITA**. Transplante (Fase B) **fica em Python**
+> (a SDK é lossy onde dói). A SDK entra, se quisermos, só como validador read-only das cadeias
+> de device. Próximo passo concreto: começar o **validador de transplante em Python** (match de
+> track A↔B + comparação posicional das cadeias de device/alvos de parâmetro).
 
 ---
 
