@@ -124,6 +124,9 @@ só referenciam parâmetros que precisam existir no DST. Logo, se P3 = P1 + devi
 - ⚠️ Contenção por subsequência é proxy ESTRUTURAL (conservador). A garantia rigorosa virá do
   remap por **identidade (device-path + parâmetro)** na mutação, com verificação final por-clip.
   (Atende ao Q4 "validar sem confiar" sem precisar da SDK.)
+- Também imprime uma seção **Músicas (blocos)** comparando os blocos por NOME (`--prefix`):
+  em comum, só em A, só em B. Útil p/ escolher o que mover e ver divergências de nome
+  (ex.: `dirty discotecno`↔`dirty discotechno`).
 
 ### 2.2. Casamento de tracks A↔B (a dificuldade que você citou)
 - Casar por **(tipo, EffectiveName)** das tracks que possuem CSL de lockstep, na ordem.

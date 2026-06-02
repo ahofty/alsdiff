@@ -187,6 +187,31 @@ def compare(a_text, b_text, a_name="A", b_name="B"):
     return (safe_ab or safe_ba), lines
 
 
+def block_report(a_text, b_text, prefix=A.DEFAULT_PREFIX, a_name="A", b_name="B"):
+    """Compara as MÚSICAS (blocos, pelo prefixo de nome) de A e B, só por NOME.
+    Retorna lista de linhas: comuns, só em A, só em B."""
+    la = A.detect_blocks(A.LiveSet(a_text), prefix)[1]
+    lb = A.detect_blocks(A.LiveSet(b_text), prefix)[1]
+    names_a = [b[0] for b in la]
+    names_b = [b[0] for b in lb]
+    sa, sb = set(names_a), set(names_b)
+    lines = ["Músicas (blocos '%s') — %s: %d | %s: %d" % (prefix, a_name, len(names_a),
+                                                          b_name, len(names_b))]
+    for nm, names in ((a_name, names_a), (b_name, names_b)):
+        dups = sorted({x for x in names if names.count(x) > 1})
+        if dups:
+            lines.append("  ⚠ nomes repetidos em %s: %s" % (nm, dups))
+    common = [n for n in names_a if n in sb]
+    only_a = [n for n in names_a if n not in sb]
+    only_b = [n for n in names_b if n not in sa]
+    lines.append("  Em comum (%d): %s" % (len(common), ", ".join(common) if common else "—"))
+    lines.append("  Só em %s (%d): %s" % (a_name, len(only_a),
+                                          ", ".join(only_a) if only_a else "—"))
+    lines.append("  Só em %s (%d): %s" % (b_name, len(only_b),
+                                          ", ".join(only_b) if only_b else "—"))
+    return lines
+
+
 def _dev_label(d):
     tag, uname = d
     return tag + (("/" + uname) if uname else "")
@@ -219,7 +244,7 @@ def _top(counter, n):
     return ", ".join(items) + (" …(+%d tipos)" % extra if extra > 0 else "")
 
 
-def cmd_compare(a_path, b_path):
+def cmd_compare(a_path, b_path, prefix=A.DEFAULT_PREFIX):
     a_text = A.read_als(a_path)
     b_text = A.read_als(b_path)
     a_name, b_name = "A", "B"
@@ -227,6 +252,8 @@ def cmd_compare(a_path, b_path):
     print("B:", os.path.basename(b_path))
     ok, lines = compare(a_text, b_text, a_name, b_name)
     print("\n".join(lines))
+    print("")
+    print("\n".join(block_report(a_text, b_text, prefix, a_name, b_name)))
     return 0 if ok else 1
 
 
@@ -285,13 +312,14 @@ def cmd_selftest():
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Utilitários de transplante entre projetos .als")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pc = sub.add_parser("compare", help="compara tracks/devices de A e B (pré-condição)")
+    pc = sub.add_parser("compare", help="compara tracks/devices de A e B (pré-condição) + músicas")
     pc.add_argument("a")
     pc.add_argument("b")
+    pc.add_argument("--prefix", default=A.DEFAULT_PREFIX, help="prefixo de nome de bloco (def: >>)")
     sub.add_parser("selftest", help="testes internos em fixtures sintéticas")
     args = ap.parse_args(argv)
     if args.cmd == "compare":
-        sys.exit(cmd_compare(args.a, args.b))
+        sys.exit(cmd_compare(args.a, args.b, args.prefix))
     elif args.cmd == "selftest":
         cmd_selftest()
 
