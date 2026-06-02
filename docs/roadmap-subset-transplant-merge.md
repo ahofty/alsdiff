@@ -86,7 +86,8 @@ escolhidos (SEM o cabeçalho fixo). Abre mais rápido, menos risco de o Live tra
   tocava ao salvar, ×9) continuava apontando para cena removida. O reorder não crashava só
   porque preservava a contagem (o índice continuava válido, embora errado). Fix: remapear
   `SavedPlayingSlot` (mantida→novo índice; removida→`-2`, zerando offset) em reorder E subset.
-- Pendente: fire-test no Ableton (arquivo `..._SUBSET_dd_E4_v2.als` gerado, com SPS sãos).
+- ✅ **Fire-test no Ableton PASSOU** (`..._SUBSET_dd_E4_v2.als`): abriu sem crash e tocou.
+  **Fase A (subset) está FECHADA.**
 
 ---
 
