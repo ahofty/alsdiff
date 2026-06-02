@@ -110,13 +110,20 @@ das dificuldades; há outras mais profundas que quebram o formato.
 7. Gravar B novo.
 
 ### 2.1.1. Validador (FEITO ✅) — `als_transplant.py compare A.als B.als`
-Pré-condição de segurança implementada: compara o **roster de tracks** (tipo+nome, na ordem)
-e, por track casada, a **assinatura de devices** (todos os containers `<Devices>` aninhados +
-UserName) e a **contagem de alvos de automação** (`AutomationTarget`/`ControllerTargets.N`).
-Recusa e aponta divergências; `exit 1` se incompatível. Validado na matriz real: **P1↔P2
-COMPATÍVEL**; **P1↔P3** acusa devices a mais em `3 BASS`/`5 HARM`; **P1↔P0** acusa roster
-diferente (tracks add/removidas) + devices alterados. `selftest` cobre identidade, device
-extra, rename e troca de ordem. (Atende ao Q4 "validar sem confiar" sem precisar da SDK.)
+Pré-condição de segurança. **A compatibilidade é DIRECIONAL** (insight do usuário): mover
+clips de SRC→DST é seguro se **a cadeia de device de SRC estiver CONTIDA na de DST** (DST =
+SRC + devices adicionados; relação de subsequência), pois os `<ClipEnvelope>` do clip da SRC
+só referenciam parâmetros que precisam existir no DST. Logo, se P3 = P1 + devices adicionados,
+**P1→P3 é seguro mas P3→P1 não**. O comparador reporta as duas direções separadamente.
+- Casa tracks por **nome** (ordem das tracks NÃO importa p/ transplante).
+- Por track: assinatura de devices (containers `<Devices>` aninhados + UserName); checa
+  contenção SRC⊆DST. Aponta os devices que faltam no destino.
+- Validado na matriz real: **P1↔P2** idênticos (2 sentidos); **P1↔P3** "só P1→P3 seguro"
+  (P3 tem 2 `Roar` em `3 BASS` e 1 `AuPlugin` em `5 HARM`); **P1↔P0** incompatível nos 2
+  sentidos (devices alterados/reordenados). `selftest` cobre os 4 casos.
+- ⚠️ Contenção por subsequência é proxy ESTRUTURAL (conservador). A garantia rigorosa virá do
+  remap por **identidade (device-path + parâmetro)** na mutação, com verificação final por-clip.
+  (Atende ao Q4 "validar sem confiar" sem precisar da SDK.)
 
 ### 2.2. Casamento de tracks A↔B (a dificuldade que você citou)
 - Casar por **(tipo, EffectiveName)** das tracks que possuem CSL de lockstep, na ordem.

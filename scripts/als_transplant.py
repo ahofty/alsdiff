@@ -100,65 +100,91 @@ def track_profile(text, t):
     }
 
 
-def compare(a_text, b_text):
-    """Compara A e B. Retorna (compatible: bool, lines: [str])."""
+def _is_subsequence(small, big):
+    """True se `small` é subsequência de `big` (big = small com inserções, ordem preservada).
+    Casamento guloso — alvos idênticos repetidos podem casar de forma não-única, mas isso não
+    afeta a verdade da relação de contenção."""
+    it = iter(big)
+    return all(x in it for x in small)
+
+
+def _direction_report(src_name, dst_name, src_tracks, dst_profiles, src_profiles):
+    """Avalia se é seguro mover clips de SRC para DST: todas as tracks de SRC existem em DST e,
+    por track, a cadeia de device de SRC está CONTIDA na de DST (subsequência). Retorna
+    (safe, lines)."""
+    lines = []
+    safe = True
+    dst_keys = set(dst_profiles)
+    # roster: toda track de SRC tem que existir em DST (DST pode ter extras)
+    missing = [k for k in src_tracks if k not in dst_keys]
+    if missing:
+        safe = False
+        lines.append("    ✗ tracks de %s ausentes em %s: %s"
+                     % (src_name, dst_name, [n for _, n in missing]))
+    # devices: por track casada, SRC ⊆ DST
+    bad = 0
+    for k in src_tracks:
+        if k not in dst_keys:
+            continue
+        s, d = src_profiles[k]["devices"], dst_profiles[k]["devices"]
+        if not _is_subsequence(s, d):
+            safe = False
+            bad += 1
+            from collections import Counter
+            extra = Counter(map(_dev_label, s)) - Counter(map(_dev_label, d))
+            lines.append("    ✗ [%s] %s: %s tem devices que %s não tem: %s"
+                         % (k[0], k[1], src_name, dst_name,
+                            _top(extra, 8) if extra else "(ordem incompatível)"))
+    if safe:
+        lines.append("    ✓ todas as tracks de %s existem em %s e suas cadeias estão contidas"
+                     % (src_name, dst_name))
+    return safe, lines
+
+
+def compare(a_text, b_text, a_name="A", b_name="B"):
+    """Compara A e B de forma DIRECIONAL p/ transplante. Retorna (compatible_any, lines).
+    compatible_any = True se ao menos uma direção (A→B ou B→A) é segura."""
     ta = collect_tracks(a_text)
     tb = collect_tracks(b_text)
-    lines = []
-    ok = True
 
     def key(t):
         return (t[0], t[1])  # (type, name)
 
+    pa = {key(t): track_profile(a_text, t) for t in ta}
+    pb = {key(t): track_profile(b_text, t) for t in tb}
     ka = [key(t) for t in ta]
     kb = [key(t) for t in tb]
 
-    lines.append("Tracks em A: %d | em B: %d" % (len(ta), len(tb)))
+    lines = ["Tracks em %s: %d | em %s: %d" % (a_name, len(ta), b_name, len(tb))]
 
-    # 1) Roster: mesmo conjunto e mesma ordem?
-    set_a, set_b = set(ka), set(kb)
-    only_a = [k for k in ka if k not in set_b]
-    only_b = [k for k in kb if k not in set_a]
-    if only_a:
-        ok = False
-        lines.append("  ✗ Só em A (faltam em B): %s" % only_a)
-    if only_b:
-        ok = False
-        lines.append("  ✗ Só em B (extra, não existem em A): %s" % only_b)
-    if not only_a and not only_b and ka != kb:
-        ok = False
-        lines.append("  ✗ Mesmo conjunto de tracks, mas ORDEM diferente:")
-        lines.append("      A: %s" % [n for _, n in ka])
-        lines.append("      B: %s" % [n for _, n in kb])
+    identical = (ka == kb) and all(pa[k]["devices"] == pb[k]["devices"] for k in ka)
+    if identical:
+        lines.append("  ✓ Projetos idênticos em tracks e cadeias de device — seguro nos 2 sentidos.")
+        return True, lines
 
-    # 2) Por track casada (mesmo type+name): cadeia de device idêntica?
-    pa = {key(t): track_profile(a_text, t) for t in ta}
-    pb = {key(t): track_profile(b_text, t) for t in tb}
-    matched = [k for k in ka if k in set_b]
-    dev_diffs = 0
-    for k in matched:
-        a, b = pa[k], pb[k]
-        msgs = []
-        if a["devices"] != b["devices"]:
-            msgs.append(_describe_device_diff(a["devices"], b["devices"]))
-        if (a["auto_targets"], a["ctrl_targets"]) != (b["auto_targets"], b["ctrl_targets"]):
-            msgs.append("nº de alvos de automação difere (A=%d auto/%d ctrl | B=%d auto/%d ctrl)"
-                        % (a["auto_targets"], a["ctrl_targets"],
-                           b["auto_targets"], b["ctrl_targets"]))
-        if msgs:
-            ok = False
-            dev_diffs += 1
-            lines.append("  ✗ [%s] %s:" % (k[0], k[1]))
-            for m in msgs:
-                lines.append("      - " + m)
-    if matched and dev_diffs == 0:
-        lines.append("  ✓ %d tracks casadas: cadeias de device e contagem de alvos idênticas"
-                     % len(matched))
+    safe_ab, lines_ab = _direction_report(a_name, b_name, ka, pb, pa)
+    safe_ba, lines_ba = _direction_report(b_name, a_name, kb, pa, pb)
 
     lines.append("")
-    lines.append("RESULTADO: %s" % ("COMPATÍVEL para transplante ✓" if ok
-                                     else "INCOMPATÍVEL — não prosseguir ✗"))
-    return ok, lines
+    lines.append("Direção %s→%s (mover clips de %s para %s): %s"
+                 % (a_name, b_name, a_name, b_name, "SEGURO ✓" if safe_ab else "INSEGURO ✗"))
+    lines += lines_ab
+    lines.append("")
+    lines.append("Direção %s→%s (mover clips de %s para %s): %s"
+                 % (b_name, a_name, b_name, a_name, "SEGURO ✓" if safe_ba else "INSEGURO ✗"))
+    lines += lines_ba
+
+    lines.append("")
+    if safe_ab and safe_ba:
+        verdict = "COMPATÍVEL nos dois sentidos ✓"
+    elif safe_ab:
+        verdict = "Só %s→%s é seguro" % (a_name, b_name)
+    elif safe_ba:
+        verdict = "Só %s→%s é seguro" % (b_name, a_name)
+    else:
+        verdict = "INCOMPATÍVEL nos dois sentidos ✗"
+    lines.append("RESULTADO: " + verdict)
+    return (safe_ab or safe_ba), lines
 
 
 def _dev_label(d):
@@ -196,9 +222,10 @@ def _top(counter, n):
 def cmd_compare(a_path, b_path):
     a_text = A.read_als(a_path)
     b_text = A.read_als(b_path)
+    a_name, b_name = "A", "B"
     print("A:", os.path.basename(a_path))
     print("B:", os.path.basename(b_path))
-    ok, lines = compare(a_text, b_text)
+    ok, lines = compare(a_text, b_text, a_name, b_name)
     print("\n".join(lines))
     return 0 if ok else 1
 
@@ -225,30 +252,33 @@ def cmd_selftest():
         ("ReturnTrack", "A-DELAY", [("Delay", "")]),
     ]
     a = _syn(base)
-    # idênticos -> compatível
-    ok, _ = compare(a, _syn(base))
-    assert ok, "esperava COMPATÍVEL p/ projetos idênticos"
-    print("selftest: A vs A idêntico -> COMPATÍVEL ✓")
+    # idênticos -> seguro nos dois sentidos
+    ok, lines = compare(a, _syn(base))
+    assert ok and any("idênticos" in l for l in lines), lines
+    print("selftest: A vs A idêntico -> seguro nos 2 sentidos ✓")
 
-    # device a mais numa track -> incompatível, apontando a track
-    mod = [t if t[1] != "DRUMS" else ("MidiTrack", "DRUMS",
-           t[2] + [("Saturator", "")]) for t in base]
-    ok2, lines2 = compare(a, _syn(mod))
-    assert not ok2, "esperava INCOMPATÍVEL com device a mais"
-    assert any("DRUMS" in l for l in lines2) and any("devices diferem" in l for l in lines2), lines2
-    print("selftest: device extra em DRUMS -> INCOMPATÍVEL apontando a track ✓")
+    # B = A + device adicionado no FIM da chain de DRUMS -> A→B seguro, B→A inseguro
+    bigger = [t if t[1] != "DRUMS" else ("MidiTrack", "DRUMS",
+              t[2] + [("Saturator", "")]) for t in base]
+    ok2, lines2 = compare(a, _syn(bigger), "A", "B")
+    txt = "\n".join(lines2)
+    assert ok2, "esperava ao menos uma direção segura"
+    assert "Direção A→B (mover clips de A para B): SEGURO ✓" in txt, txt
+    assert "Direção B→A (mover clips de B para A): INSEGURO ✗" in txt, txt
+    assert "Saturator" in txt, txt
+    print("selftest: device extra em B -> só A→B seguro (direcional) ✓")
 
-    # track renomeada/removida -> roster diff
-    ren = [("MidiTrack", "BEATS", base[0][2])] + base[1:]
-    ok3, lines3 = compare(a, _syn(ren))
-    assert not ok3 and any("Só em A" in l for l in lines3), lines3
-    print("selftest: roster diff (DRUMS->BEATS) detectado ✓")
+    # track removida em B -> A→B inseguro (track de A ausente em B)
+    fewer = base[1:]
+    ok3, lines3 = compare(a, _syn(fewer), "A", "B")
+    assert any("ausentes em B" in l for l in lines3), lines3
+    print("selftest: track de A ausente em B detectada (direcional) ✓")
 
-    # ordem trocada -> detecta ordem diferente
+    # ordem trocada (mesmas tracks/devices) -> ORDEM NÃO importa p/ transplante: seguro
     swp = [base[1], base[0], base[2]]
     ok4, lines4 = compare(a, _syn(swp))
-    assert not ok4 and any("ORDEM diferente" in l for l in lines4), lines4
-    print("selftest: ordem de tracks diferente detectada ✓")
+    assert ok4 and any("dois sentidos" in l for l in lines4), lines4
+    print("selftest: ordem de tracks diferente NÃO reprova (casa por nome) ✓")
     print("\nTODOS OS TESTES PASSARAM ✅")
 
 
