@@ -18,6 +18,7 @@ Uso:
 """
 
 import argparse
+import bisect
 import re
 import sys
 import os
@@ -212,6 +213,113 @@ def block_report(a_text, b_text, prefix=A.DEFAULT_PREFIX, a_name="A", b_name="B"
     return lines
 
 
+# --------------------------------------------------------------------------------------
+# Remap de PointeeId (alvos de automação) entre projetos — núcleo da correção do transplante
+# --------------------------------------------------------------------------------------
+
+TARGET_TAGS = ("AutomationTarget", "ModulationTarget", "Pointee")
+_TARGET_RE = re.compile(r'<(?:AutomationTarget|ModulationTarget|Pointee) [^>]*\bId="(\d+)"')
+
+
+def _target_ids_ordered(span):
+    """Ids de alvo (AutomationTarget/ModulationTarget/Pointee) em ordem de documento."""
+    return [(int(m.group(1)), m.start()) for m in _TARGET_RE.finditer(span)]
+
+
+def _param_context(text, tid, n=5):
+    """Assinatura do parâmetro que tem Id=tid: as últimas n tags abertas antes dele.
+    Serve para CONFIRMAR que um remap candidato aponta para o mesmo tipo de parâmetro."""
+    m = re.search(r'<[A-Za-z0-9_.]+[^>]*\bId="%d"' % tid, text)
+    if not m:
+        return None
+    before = text[max(0, m.start() - 300):m.start()]
+    return tuple(re.findall(r'<([A-Za-z0-9_.]+)[ >]', before)[-n:])
+
+
+def flatten_devices_spans(track_span):
+    """Como device_signature, mas devolve (tag, uname, start, end) — span completo de cada
+    device, em ordem de documento (filhos diretos de cada container <Devices>, aninhados incl.)."""
+    devs = []
+    for m in re.finditer(r"<Devices(?=[\s/>])", track_span):
+        lt = m.start()
+        gt = A._tag_end(track_span, lt)
+        if track_span[gt - 1] == "/":
+            continue
+        el = A.find_element(track_span, "Devices", lt)
+        if not el:
+            continue
+        _, ins, ine, _ = el
+        inner = track_span[ins:ine]
+        for (name, a, b) in A.child_elements(inner):
+            uname = _first_value(inner[a:b], "UserName") or ""
+            devs.append((name, uname, ins + a, ins + b))
+    return devs
+
+
+def _per_device_targets(track_span):
+    """Devolve (devs, dev_targets): devs=[(tag,uname,start,end)] e dev_targets[i]=lista de ids
+    de alvo cujo device INNERMOST é devs[i] (em ordem de documento)."""
+    devs = flatten_devices_spans(track_span)
+    targets = _target_ids_ordered(track_span)
+    dev_targets = [[] for _ in devs]
+    order = sorted(range(len(devs)), key=lambda i: devs[i][2])  # por start asc
+    for tid, pos in targets:
+        best, bests = -1, -1
+        for i in order:
+            s, e = devs[i][2], devs[i][3]
+            if s > pos:
+                break
+            if s <= pos < e and s > bests:
+                best, bests = i, s
+        if best >= 0:
+            dev_targets[best].append(tid)
+    return devs, dev_targets
+
+
+def build_track_pointee_map(a_span, b_span):
+    """Mapa id_de_alvo_A -> id_de_alvo_B para uma track casada. Cadeia idêntica => zip
+    posicional; divergente => alinha devices (subsequência A⊆B) e faz zip por device casado.
+    Lança SystemExit se não der p/ casar com segurança."""
+    sig_a, sig_b = device_signature(a_span), device_signature(b_span)
+    ta = [t for t, _ in _target_ids_ordered(a_span)]
+    tb = [t for t, _ in _target_ids_ordered(b_span)]
+    if sig_a == sig_b:
+        if len(ta) != len(tb):
+            raise SystemExit("Cadeias idênticas mas nº de alvos difere (%d vs %d)" % (len(ta), len(tb)))
+        return dict(zip(ta, tb))
+    # divergente: alinhamento por device. LENIENTE: devices casados com nº de alvos
+    # diferente (ex.: rack onde se adicionou um device interno → muda alvos do mixer da
+    # chain) ficam AMBÍGUOS e seus alvos NÃO entram no mapa. O transplante só aborta se um
+    # pointee REALMENTE USADO cair num device ambíguo (verificação no remap).
+    devs_a, dta = _per_device_targets(a_span)
+    devs_b, dtb = _per_device_targets(b_span)
+
+    def key(d):
+        return (d[0], d[1])
+
+    mapping, ambiguous = {}, 0
+    j = 0
+    for i, da in enumerate(devs_a):
+        jj = j
+        while jj < len(devs_b) and key(devs_b[jj]) != key(da):
+            jj += 1
+        if jj >= len(devs_b):
+            ambiguous += 1  # não achou (não deveria, com A⊆B); deixa alvos sem mapa
+            continue
+        j = jj
+        la, lb = dta[i], dtb[j]
+        if len(la) == len(lb):
+            mapping.update(zip(la, lb))
+        else:
+            # device casado mas com nº de alvos diferente (ex.: rack com chain adicionada →
+            # mixers de chain extras no FIM da lista de alvos do rack; macros/params ficam no
+            # início). Mapeia o PREFIXO comum (estáveis) e deixa o excedente sem mapa.
+            ambiguous += 1
+            mapping.update(zip(la, lb))  # zip já trunca no menor → mapeia o prefixo comum
+        j += 1
+    return mapping
+
+
 def _dev_label(d):
     tag, uname = d
     return tag + (("/" + uname) if uname else "")
@@ -242,6 +350,236 @@ def _top(counter, n):
              for k, v in sorted(counter.items(), key=lambda kv: -kv[1])[:n]]
     extra = len(counter) - n
     return ", ".join(items) + (" …(+%d tipos)" % extra if extra > 0 else "")
+
+
+# --------------------------------------------------------------------------------------
+# transplant (mutação): mover blocos de SRC para DST, antes de um bloco-âncora
+# --------------------------------------------------------------------------------------
+
+
+def lockstep_csls(text, ls):
+    """{(track_type, track_name, occ): (ins, ine, [slot_spans])} para TODAS as ClipSlotLists
+    com nº de filhos == num_scenes. Usa o scan global confiável (als_reorder) e associa cada
+    CSL à track imediatamente anterior no documento (sua dona), contando a ordem por track."""
+    opens = [(m.start(), m.group(1)) for m in _TRACK_OPEN_RE.finditer(text)]
+    starts = [o[0] for o in opens]
+    out, occ_counter = {}, {}
+    for ins, ine, spans in ls.clip_slot_lists():
+        i = bisect.bisect_right(starts, ins) - 1
+        if i < 0:
+            continue
+        tstart, ttype = opens[i]
+        en = re.search(r'<EffectiveName Value="([^"]*)"', text[tstart:tstart + 4000])
+        name = en.group(1) if en else "?"
+        occ = occ_counter.get((ttype, name), 0)
+        occ_counter[(ttype, name)] = occ + 1
+        out[(ttype, name, occ)] = (ins, ine, spans)
+    return out
+
+
+def transplant_text(src, dst, move_labels, before_label, prefix=A.DEFAULT_PREFIX):
+    """Move os blocos `move_labels` (nessa ordem) de SRC para DST, inseridos antes do bloco
+    `before_label` em DST. Retorna (novo_dst_text, report dict). Aborta (SystemExit) se inseguro."""
+    lss, lsd = A.LiveSet(src), A.LiveSet(dst)
+
+    # blocos da origem -> índices de cena movidos (na ordem pedida)
+    sby = {b[0]: b for b in A.detect_blocks(lss, prefix)[1]}
+    moved = []
+    for lab in move_labels:
+        if lab not in sby:
+            raise SystemExit("bloco %r não existe na origem" % lab)
+        _, s, e = sby[lab]
+        moved += list(range(s, e))
+    nmoved = len(moved)
+
+    # âncora no destino
+    dby = {b[0]: b for b in A.detect_blocks(lsd, prefix)[1]}
+    if before_label not in dby:
+        raise SystemExit("bloco-âncora %r não existe no destino" % before_label)
+    insertion = dby[before_label][1]
+
+    # casar tracks por (tipo, nome) e construir mapa global de PointeeId
+    tracks_s = {(t[0], t[1]): t for t in collect_tracks(src)}
+    tracks_d = {(t[0], t[1]): t for t in collect_tracks(dst)}
+    pmap = {}
+    for k, ts in tracks_s.items():
+        if k not in tracks_d:
+            raise SystemExit("track %s da origem não existe no destino — direção insegura" % (k,))
+        td = tracks_d[k]
+        pmap.update(build_track_pointee_map(src[ts[2]:ts[3]], dst[td[2]:td[3]]))
+
+    # nova posição (índice de cena em DST) de cada cena movida; inv p/ remap de jumps dos clips movidos
+    inv_moved = [None] * lss.num_scenes
+    for i, old in enumerate(moved):
+        inv_moved[old] = insertion + i
+
+    # pré-checagem: clips movidos com "jump to scene" (FA==9) p/ FORA dos blocos movidos.
+    # Esses pulos ficariam pendurados no destino → abortar com relatório (como no subset).
+    moved_set = set(moved)
+    s_lock_pre = lockstep_csls(src, lss)
+    dangling = []
+    for k, (ins, ine, spans) in s_lock_pre.items():
+        for old in moved:
+            x, y = spans[old]
+            for letter, tgt in A._scan_jumps_in_span(src[x:y]):
+                if tgt not in moved_set:
+                    dangling.append((old, tgt))
+    if dangling:
+        sby_lbl = {}
+        for lab, s, e in A.detect_blocks(lss, prefix)[1]:
+            for idx in range(s, e):
+                sby_lbl[idx] = lab
+        msg = ["%d clip(s) movido(s) têm 'jump to scene' para FORA dos blocos movidos"
+               " (pulo ficaria pendurado). Abortei sem gravar:" % len(dangling)]
+        for old, tgt in sorted(set(dangling)):
+            msg.append("  cena %d (%s) -> cena %d (%s)"
+                       % (old, sby_lbl.get(old, "?"), tgt, sby_lbl.get(tgt, "?")))
+        msg.append("Corrija esse follow action na origem (ou peça --disable-dangling, a implementar).")
+        raise SystemExit("\n".join(msg))
+
+    # ids novos (namespace pequeno) p/ cenas e colunas de clipslot importadas
+    dmax = max([int(x) for x in re.findall(r'<Scene Id="(\d+)"', dst)]
+               + [int(x) for x in re.findall(r'<ClipSlot Id="(\d+)"', dst)])
+    scene_new_id = [dmax + 1 + i for i in range(nmoved)]
+    col_new_id = [dmax + 1 + nmoved + i for i in range(nmoved)]
+
+    s_lock, d_lock = lockstep_csls(src, lss), lockstep_csls(dst, lsd)
+    for k in s_lock:
+        if k not in d_lock:
+            raise SystemExit("ClipSlotList %s da origem não casada no destino" % (k,))
+
+    # Pointees realmente usados pelos clips movidos → resolver mapa FINAL verificado por
+    # contexto. Preferimos IDENTIDADE (mesmo id, mesmo parâmetro em B — comum quando os
+    # projetos compartilham linhagem) e só caímos no candidato device-aligned se o contexto
+    # bater. Abortamos se algum pointee usado não resolver com segurança.
+    used = set()
+    for k, (ins, ine, spans) in s_lock.items():
+        for old in moved:
+            x, y = spans[old]
+            used.update(int(p) for p in re.findall(r'<PointeeId Value="(\d+)"', src[x:y]))
+    final, unresolved = {}, []
+    for p in used:
+        ca = _param_context(src, p)
+        if ca is not None and _param_context(dst, p) == ca:
+            final[p] = p  # identidade (contexto confere)
+        elif p in pmap and _param_context(dst, pmap[p]) == ca:
+            final[p] = pmap[p]  # device-aligned (contexto confere)
+        else:
+            unresolved.append(p)
+    if unresolved:
+        msg = ["Não consegui mapear com SEGURANÇA %d PointeeId usados por clips movidos"
+               " (parâmetro que mudou no destino). Abortei sem gravar:" % len(unresolved)]
+        for p in sorted(unresolved):
+            msg.append("  %d  contexto-origem=%s  (mesmo-id-no-destino=%s)"
+                       % (p, _param_context(src, p), _param_context(dst, p)))
+        raise SystemExit("\n".join(msg))
+
+    def remap_pointees(span):
+        def _sub(m):
+            return '<PointeeId Value="%d"' % final[int(m.group(1))]
+        return re.sub(r'<PointeeId Value="(\d+)"', _sub, span)
+
+    # textos das cenas movidas
+    moved_scene_texts = []
+    for i, old in enumerate(moved):
+        a, b = lss.scene_spans[old]
+        sc = src[a:b]
+        sc = re.sub(r'<Scene Id="\d+"', '<Scene Id="%d"' % scene_new_id[i], sc, count=1)
+        sc = A.remap_jumps_in_clipspan(sc, inv_moved)  # FA==9 de cena (raro); aborta se cruzar
+        moved_scene_texts.append(sc)
+
+    # textos dos slots movidos, por CSL casada
+    moved_slots = {}
+    for k, (ins, ine, spans) in s_lock.items():
+        lst = []
+        for i, old in enumerate(moved):
+            x, y = spans[old]
+            sl = src[x:y]
+            sl = re.sub(r'<ClipSlot Id="\d+"', '<ClipSlot Id="%d"' % col_new_id[i], sl, count=1)
+            sl = remap_pointees(sl)
+            sl = A.remap_jumps_in_clipspan(sl, inv_moved)
+            lst.append(sl)
+        moved_slots[k] = lst
+
+    # FASE 1: deslocar +nmoved os jumps de clip e SavedPlayingSlot do DST que apontam p/ cena >= insertion
+    inv_dst = [o if o < insertion else o + nmoved for o in range(lsd.num_scenes)]
+    edits1 = []
+    for k, (ins, ine, spans) in d_lock.items():
+        for x, y in spans:
+            sl = dst[x:y]
+            if any(t >= insertion for _, t in A._scan_jumps_in_span(sl)):
+                ns = A.remap_jumps_in_clipspan(sl, inv_dst)
+                if ns != sl:
+                    edits1.append((x, y, ns))
+    for m in re.finditer(r'(<SavedPlayingSlot Value=")(-?\d+)("\s*/>)', dst):
+        v = int(m.group(2))
+        if v >= insertion:
+            edits1.append((m.start(), m.end(), m.group(1) + str(v + nmoved) + m.group(3)))
+    edits1.sort(key=lambda e: e[0], reverse=True)
+    d2 = dst
+    for s, e, r in edits1:
+        d2 = d2[:s] + r + d2[e:]
+
+    # FASE 2: recomputar offsets e inserir cenas + slots antes da âncora
+    lsd2 = A.LiveSet(d2)
+    d2_lock = lockstep_csls(d2, lsd2)
+
+    def gap_before(prev_end, cur_start, region_start):
+        return d2[prev_end:cur_start] if insertion > 0 else d2[region_start:cur_start]
+
+    edits2 = []
+    # cenas
+    P = lsd2.scene_spans[insertion][0]
+    prev = lsd2.scene_spans[insertion - 1][1] if insertion > 0 else lsd2.scenes_inner_start
+    gap = d2[prev:P]
+    edits2.append((P, P, "".join(t + gap for t in moved_scene_texts)))
+    # cada CSL casada
+    for k, (ins, ine, spans) in d2_lock.items():
+        if k not in moved_slots:
+            continue
+        Pp = spans[insertion][0]
+        prevp = spans[insertion - 1][1] if insertion > 0 else ins
+        gp = d2[prevp:Pp]
+        edits2.append((Pp, Pp, "".join(t + gp for t in moved_slots[k])))
+    edits2.sort(key=lambda e: e[0], reverse=True)
+    for s, e, r in edits2:
+        d2 = d2[:s] + r + d2[e:]
+
+    report = {
+        "moved_blocks": list(move_labels),
+        "moved_scenes": nmoved,
+        "insertion_scene_index": insertion,
+        "csls": len(moved_slots),
+        "pointees_used": sorted(final),
+        "pointee_remaps": {p: final[p] for p in sorted(final)},
+        "pointee_changed": {p: final[p] for p in sorted(final) if final[p] != p},
+        "scene_ids": (scene_new_id[0], scene_new_id[-1]) if nmoved else None,
+    }
+    return d2, report
+
+
+def cmd_transplant(src_path, dst_path, move_csv, before, output, prefix):
+    src = A.read_als(src_path)
+    dst = A.read_als(dst_path)
+    move_labels = [x.strip() for x in move_csv.split(",") if x.strip()]
+    new_dst, rep = transplant_text(src, dst, move_labels, before, prefix)
+    if output is None:
+        base = dst_path[:-4] if dst_path.endswith(".als") else dst_path
+        output = base + ".transplanted.als"
+    A.write_als(output, new_dst)
+    print("OK: movidos %d blocos (%d cenas) de SRC p/ DST, antes de %r."
+          % (len(rep["moved_blocks"]), rep["moved_scenes"], before))
+    print("Blocos:", ", ".join(rep["moved_blocks"]))
+    print("ClipSlotLists casadas:", rep["csls"])
+    print("Scene Ids novos:", rep["scene_ids"])
+    print("PointeeId usados pelos clips movidos: %d (identidade: %d | remapeados: %d)"
+          % (len(rep["pointee_remaps"]),
+             len(rep["pointee_remaps"]) - len(rep["pointee_changed"]),
+             len(rep["pointee_changed"])))
+    for old, new in rep["pointee_changed"].items():
+        print("    remap %d -> %d" % (old, new))
+    print("Saída:", output)
+    return 0
 
 
 def cmd_compare(a_path, b_path, prefix=A.DEFAULT_PREFIX):
@@ -306,6 +644,35 @@ def cmd_selftest():
     ok4, lines4 = compare(a, _syn(swp))
     assert ok4 and any("dois sentidos" in l for l in lines4), lines4
     print("selftest: ordem de tracks diferente NÃO reprova (casa por nome) ✓")
+
+    # ---- build_track_pointee_map ----
+    def trk(devs):
+        # devs = [(tag, [target_ids])]
+        s = '<MidiTrack Id="0"><Name><EffectiveName Value="T" /></Name>'
+        s += "<DeviceChain><DeviceChain><Devices>"
+        for tag, tids in devs:
+            s += "<%s>" % tag
+            for t in tids:
+                s += '<P><AutomationTarget Id="%d" /></P>' % t
+            s += "</%s>" % tag
+        s += "</Devices></DeviceChain></DeviceChain></MidiTrack>"
+        return s
+    # cadeia idêntica (ids diferentes entre projetos) -> zip posicional
+    a1 = trk([("Eq8", [10, 11]), ("Compressor2", [12])])
+    b1 = trk([("Eq8", [20, 21]), ("Compressor2", [22])])
+    m1 = build_track_pointee_map(a1, b1)
+    assert m1 == {10: 20, 11: 21, 12: 22}, m1
+    print("selftest: pointee map cadeia idêntica (zip) OK %s" % m1)
+    # cadeia divergente: B tem device EXTRA no fim -> alvos do extra são ignorados
+    b2 = trk([("Eq8", [20, 21]), ("Compressor2", [22]), ("Roar", [23, 24])])
+    m2 = build_track_pointee_map(a1, b2)
+    assert m2 == {10: 20, 11: 21, 12: 22}, m2
+    print("selftest: pointee map device EXTRA no destino (alinhado) OK %s" % m2)
+    # divergente: device extra NO MEIO -> alinhamento por device ainda acerta
+    b3 = trk([("Eq8", [20, 21]), ("Saturator", [99]), ("Compressor2", [22])])
+    m3 = build_track_pointee_map(a1, b3)
+    assert m3 == {10: 20, 11: 21, 12: 22}, m3
+    print("selftest: pointee map device extra NO MEIO (alinhado) OK %s" % m3)
     print("\nTODOS OS TESTES PASSARAM ✅")
 
 
@@ -316,10 +683,21 @@ def main(argv=None):
     pc.add_argument("a")
     pc.add_argument("b")
     pc.add_argument("--prefix", default=A.DEFAULT_PREFIX, help="prefixo de nome de bloco (def: >>)")
+
+    pt = sub.add_parser("transplant", help="move blocos de SRC para DST antes de um bloco-âncora")
+    pt.add_argument("src")
+    pt.add_argument("dst")
+    pt.add_argument("--move", required=True, help='blocos a mover, na ordem: "caught up,heaven"')
+    pt.add_argument("--before", required=True, help="nome do bloco-âncora no destino")
+    pt.add_argument("--output", default=None)
+    pt.add_argument("--prefix", default=A.DEFAULT_PREFIX)
+
     sub.add_parser("selftest", help="testes internos em fixtures sintéticas")
     args = ap.parse_args(argv)
     if args.cmd == "compare":
         sys.exit(cmd_compare(args.a, args.b, args.prefix))
+    elif args.cmd == "transplant":
+        sys.exit(cmd_transplant(args.src, args.dst, args.move, args.before, args.output, args.prefix))
     elif args.cmd == "selftest":
         cmd_selftest()
 

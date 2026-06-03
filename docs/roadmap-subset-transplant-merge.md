@@ -128,6 +128,28 @@ só referenciam parâmetros que precisam existir no DST. Logo, se P3 = P1 + devi
   em comum, só em A, só em B. Útil p/ escolher o que mover e ver divergências de nome
   (ex.: `dirty discotecno`↔`dirty discotechno`).
 
+### 2.1.2. Mutação (FEITO ✅) — `als_transplant.py transplant SRC DST --move "a,b" --before "x"`
+Move blocos de SRC para DST antes do bloco-âncora. Implementado e validado (P1n→P3,
+`caught up,heaven` antes de `gruta`): saída com 360 cenas, **19 CSLs todas com 360 slots
+(lockstep intacto)**, Scene Ids únicos, jumps/SavedPlayingSlot no range, 0 pointees novos
+pendurados. Detalhes/decisões aprendidas:
+- **Renumeração de id**: clips só *referenciam* o pool grande (não definem) → não alocamos id
+  grande. Apenas `Scene Id` e `ClipSlot Id` (namespace pequeno ≤1011; ClipSlot Id é
+  **compartilhado por coluna**) ganham ids novos >max p/ não colidir. `NextPointeeId` não muda.
+- **Remap de PointeeId** (a parte crítica): para cada pointee USADO pelos clips movidos,
+  prefere **IDENTIDADE** (mesmo id, se existir em DST com o **mesmo contexto de parâmetro** —
+  comum quando os projetos têm linhagem comum), senão usa o candidato **device-aligned**; e
+  sempre **verifica o contexto**. Aborta se algum pointee usado não resolver com segurança.
+  (No caso real, os 12 pointees resolveram por identidade.)
+- **Shift de índice no destino**: jumps de clip e `SavedPlayingSlot` de DST que apontam p/
+  cena ≥ ponto de inserção levam `+nmoved`.
+- **Jumps dos clips movidos**: remapeados p/ a nova posição; **aborta** (relatório limpo) se um
+  clip movido salta p/ FORA dos blocos movidos (achado real: `play that funky music` cena 118
+  → `falta organizar` 326 — follow action solto; bloqueou mover esse bloco).
+- ⚠️ **Lockstep**: há **19** CSLs de 345 (inclui o return `D-VS2fx`); o associador CSL→track
+  por scan global+track-mais-próxima é o confiável (a versão por-span perdia o return → teria
+  quebrado o lockstep). Toda CSL recebe os slots inseridos.
+
 ### 2.2. Casamento de tracks A↔B (a dificuldade que você citou)
 - Casar por **(tipo, EffectiveName)** das tracks que possuem CSL de lockstep, na ordem.
   Incluir returns (sends dependem deles).
