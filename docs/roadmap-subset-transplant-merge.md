@@ -149,6 +149,9 @@ pendurados. Detalhes/decisões aprendidas:
 - ⚠️ **Lockstep**: há **19** CSLs de 345 (inclui o return `D-VS2fx`); o associador CSL→track
   por scan global+track-mais-próxima é o confiável (a versão por-span perdia o return → teria
   quebrado o lockstep). Toda CSL recebe os slots inseridos.
+- ✅ **Fire-test no Ableton PASSOU** (saída P1n→P3 gerada em 2026-06-02): abriu no Live sem
+  recovery/crash e tocou. **Fase B (transplante) está FECHADA.** (Projeto sincronizado entre
+  as duas máquinas; testado em ambas.)
 
 ### 2.2. Casamento de tracks A↔B (a dificuldade que você citou)
 - Casar por **(tipo, EffectiveName)** das tracks que possuem CSL de lockstep, na ordem.
@@ -386,9 +389,9 @@ Node (exemplos usam `import * as fs from "node:fs"` → **fs completo disponíve
 
 ## 6. Sequência sugerida de execução
 
-1. **Fase A — Subset (Python).** Baixo risco; entrega rápida; reaproveita a engine atual.
-2. **Fase B — Transplante (Python), com pré-condições rígidas.** Primeiro o **validador**
-   (match de track + cadeia de device + versão) que **recusa e aponta** divergências; só
-   então a mutação (insert + renumeração de ids + remap de PointeeId + remap de jumps).
-   Começar exigindo template idêntico (resposta da Q4).
-3. **Fase C — Merge.** Só depois; reavaliar Python vs OCaml à luz do que aprendermos em B.
+1. **Fase A — Subset (Python).** ✅ **FECHADA** (fire-test no Live passou).
+2. **Fase B — Transplante (Python), com pré-condições rígidas.** ✅ **FECHADA.** Validador
+   (`compare`, contenção direcional de device chain) + mutação (`transplant`: insert +
+   renumeração de ids + remap de PointeeId + remap de jumps/SavedPlayingSlot). Fire-test no
+   Live passou (P1n→P3).
+3. **Fase C — Merge.** ◀️ **PRÓXIMA.** Reavaliar Python vs OCaml à luz do que aprendemos em B.
