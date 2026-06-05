@@ -19,13 +19,18 @@ Correção (o que a ferramenta garante):
   - Sempre grava um arquivo NOVO; nunca sobrescreve o original.
 
 Uso:
-  als_reorder.py inspect  ENTRADA.als
-  als_reorder.py reorder  ENTRADA.als --order "B,A,E,D,C" [--output SAIDA.als] [--prefix ">>"]
+  als_reorder.py inspect  ENTRADA.als [--force]
+      (lista os blocos E grava ENTRADA.playlist — uma música por linha, na ordem atual)
+  als_reorder.py reorder  ENTRADA.als [--order "B,A,E"] [--playlist P] [--output SAIDA.als]
+      (ordem nova: --order > --playlist > auto <projeto>.playlist; precisa de TODOS os blocos)
+  als_reorder.py subset   ENTRADA.als [--keep "A,B" | --drop "X" | --playlist P]
+      (sem --keep/--drop usa a playlist como lista de blocos a MANTER, na ordem do arquivo)
   als_reorder.py selftest
 """
 
 import argparse
 import gzip
+import os
 import re
 import sys
 
@@ -247,7 +252,7 @@ def scene_clip_count(ls, idx, csls):
     return cnt
 
 
-def cmd_inspect(path, prefix):
+def cmd_inspect(path, prefix, force=False):
     text = read_als(path)
     ls = LiveSet(text)
     csls = ls.clip_slot_lists()
@@ -266,6 +271,19 @@ def cmd_inspect(path, prefix):
         print("  [%3d..%3d] (%2d cenas, %2d c/ clips)  %r" % (s, e - 1, e - s, clips, label))
     # checagem de jumps que cruzam blocos
     print("\nJumps de clip ativos (FollowActionA/B==%s): use 'reorder' para remapear." % JUMP_ACTION)
+
+    # grava a playlist (uma música por linha, na ordem atual) ao lado do .als
+    if blocks:
+        pp = playlist_path(path)
+        status = write_playlist(pp, [label for label, _, _ in blocks], force=force)
+        if status == "created":
+            print("\nPlaylist gerada (%d músicas, uma por linha): %s" % (len(blocks), pp))
+            print("  Reordene as linhas e rode 'reorder', ou apague linhas e rode 'subset'.")
+        elif status == "overwritten":
+            print("\nPlaylist regenerada na ordem atual (--force): %s" % pp)
+        else:  # skipped
+            print("\nPlaylist já existe, mantive a sua (não sobrescrevi): %s" % pp)
+            print("  Edite-a e use com 'reorder'/'subset', ou passe --force para regenerar.")
 
 
 # --------------------------------------------------------------------------------------
@@ -468,10 +486,30 @@ def _rebuild(elem_strs, gaps, new_order, jump_inv):
     return "".join(out)
 
 
-def cmd_reorder(path, order_csv, output, prefix):
+def resolve_order_labels(path, order_csv, playlist):
+    """Resolve a lista de rótulos da nova ordem. Precedência: --order (CSV) > --playlist
+    (caminho) > auto <projeto>.playlist. Retorna (labels, fonte_legivel)."""
+    if order_csv is not None:
+        return [s.strip() for s in order_csv.split(",") if s.strip()], "--order"
+    pp = playlist if playlist is not None else playlist_path(path)
+    if not os.path.exists(pp):
+        if playlist is not None:
+            raise SystemExit("Playlist não encontrada: %s" % pp)
+        raise SystemExit(
+            "Nenhuma ordem informada e a playlist não existe:\n  %s\n"
+            "Rode 'als_reorder.py inspect \"%s\"' para gerá-la (e então reordene as linhas),"
+            " ou passe --order." % (pp, path))
+    return read_playlist(pp), "playlist %s" % pp
+
+
+def cmd_reorder(path, order_csv, output, prefix, playlist=None):
     text = read_als(path)
     ls = LiveSet(text)
-    new_order = build_permutation(ls, prefix, order_csv.split(","))
+    labels, source = resolve_order_labels(path, order_csv, playlist)
+    new_order = build_permutation(ls, prefix, labels)
+    if new_order == list(range(ls.num_scenes)):
+        print("Ordem já igual à do projeto (fonte: %s); nada a fazer, não gravei nada." % source)
+        return
     new_text = reorder_text(ls, new_order)
     if output is None:
         if path.endswith(".als"):
@@ -480,7 +518,7 @@ def cmd_reorder(path, order_csv, output, prefix):
             output = path + ".reordered.als"
     write_als(output, new_text)
     moved = sum(1 for i, o in enumerate(new_order) if i != o)
-    print("OK: %d cenas, %d reposicionadas." % (ls.num_scenes, moved))
+    print("OK: %d cenas, %d reposicionadas (fonte: %s)." % (ls.num_scenes, moved, source))
     print("Saída:", output)
 
 
@@ -595,11 +633,23 @@ def subset_text(ls, selected):
     return text
 
 
-def cmd_subset(path, keep_csv, drop_csv, output, prefix):
+def cmd_subset(path, keep_csv, drop_csv, output, prefix, playlist=None):
     text = read_als(path)
     ls = LiveSet(text)
-    keep = keep_csv.split(",") if keep_csv is not None else None
-    drop = drop_csv.split(",") if drop_csv is not None else None
+    keep = drop = None
+    if keep_csv is not None:
+        keep = keep_csv.split(",")
+    elif drop_csv is not None:
+        drop = drop_csv.split(",")
+    else:
+        # sem --keep/--drop: a playlist vira a lista de blocos a MANTER (na ordem do arquivo)
+        pp = playlist if playlist is not None else playlist_path(path)
+        if not os.path.exists(pp):
+            raise SystemExit(
+                "Sem --keep/--drop e a playlist não existe:\n  %s\n"
+                "Rode 'als_reorder.py inspect \"%s\"', edite a playlist (apague as músicas que"
+                " não quer manter), ou use --keep/--drop." % (pp, path))
+        keep = read_playlist(pp)
     selected, chosen, head = build_selection(ls, prefix, keep=keep, drop=drop)
     problems = validate_subset_jumps(ls, selected)
     if problems:
@@ -643,6 +693,44 @@ def write_als(path, text):
     raw = text.encode("utf-8")
     with gzip.open(path, "wb") as f:
         f.write(raw)
+
+
+# --------------------------------------------------------------------------------------
+# Playlist (.playlist): SÓ os nomes das músicas (blocos), um por linha, na ordem desejada.
+# Sem sintaxe de comentário — nomes de bloco podem começar com qualquer caractere (ex.: o
+# bloco real "#1 crush" começa com '#'), então não há marcador de comentário que não colida.
+# Só linhas em branco são ignoradas (tolerância a espaçamento manual).
+# --------------------------------------------------------------------------------------
+
+
+def playlist_path(als_path):
+    """Caminho da playlist derivado do .als (mesma base, extensão .playlist), ao lado dele."""
+    base = als_path[:-4] if als_path.endswith(".als") else als_path
+    return base + ".playlist"
+
+
+def write_playlist(path, labels, force=False):
+    """Grava os rótulos (um por linha, só os nomes) em `path`. Se já existe e force=False,
+    NÃO sobrescreve. Retorna 'created'|'skipped'|'overwritten'."""
+    exists = os.path.exists(path)
+    if exists and not force:
+        return "skipped"
+    with open(path, "w", encoding="utf-8") as f:
+        for lab in labels:
+            f.write(lab + "\n")
+    return "overwritten" if exists else "created"
+
+
+def read_playlist(path):
+    """Lê os rótulos de uma playlist, preservando a ordem. Ignora só linhas em branco
+    (NÃO há comentários: um nome de bloco pode começar com '#', como '#1 crush')."""
+    labels = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if s:
+                labels.append(s)
+    return labels
 
 
 # --------------------------------------------------------------------------------------
@@ -822,6 +910,27 @@ def cmd_selftest():
     assert sps_dropB and int(sps_dropB.group(1)) == -2, sps_dropB and sps_dropB.group(1)
     print("selftest: SavedPlayingSlot subset OK (keep B: 4->1 | drop B: 4->-2)")
 
+    # ---- playlist: round-trip, no-clobber, --force; nomes com '#' preservados ----
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        pp = os.path.join(d, "proj.playlist")
+        # nome real que começa com '#' tem que sobreviver ao round-trip (não é comentário)
+        assert write_playlist(pp, ["#1 crush", "A"]) == "created"
+        assert write_playlist(pp, ["B", "A"]) == "skipped"  # não sobrescreve
+        assert read_playlist(pp) == ["#1 crush", "A"], read_playlist(pp)
+        assert write_playlist(pp, ["B", "A"], force=True) == "overwritten"
+        assert read_playlist(pp) == ["B", "A"], read_playlist(pp)
+        # só linhas em branco são ignoradas; espaços nas pontas são aparados
+        with open(pp, "w") as f:
+            f.write("\n#1 crush\n  A  \n\n")
+        assert read_playlist(pp) == ["#1 crush", "A"], read_playlist(pp)
+    print("selftest: playlist OK (create/skip/force; nome '#1 crush' preservado)")
+
+    # ---- reorder no-op: ordem == projeto vira permutação identidade ----
+    noop = build_permutation(ls, ">>", ["A", "B"])
+    assert noop == list(range(6)), noop
+    print("selftest: reorder no-op OK (ordem igual à do projeto = identidade)")
+
     print("\nTODOS OS TESTES PASSARAM ✅")
 
 
@@ -834,21 +943,27 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Reordena blocos de música (cenas) num .als")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    pi = sub.add_parser("inspect", help="lista blocos detectados")
+    pi = sub.add_parser("inspect", help="lista blocos detectados e gera <projeto>.playlist")
     pi.add_argument("input")
     pi.add_argument("--prefix", default=DEFAULT_PREFIX)
+    pi.add_argument("--force", action="store_true",
+                    help="regenera a playlist na ordem atual mesmo se já existir")
 
     pr = sub.add_parser("reorder", help="gera um novo .als com os blocos reordenados")
     pr.add_argument("input")
-    pr.add_argument("--order", required=True, help='nova ordem dos rótulos, ex.: "B,A,E"')
+    grp_o = pr.add_mutually_exclusive_group()
+    grp_o.add_argument("--order", help='nova ordem dos rótulos, ex.: "B,A,E"')
+    grp_o.add_argument("--playlist", help="caminho de uma playlist (default: <projeto>.playlist)")
     pr.add_argument("--output", default=None)
     pr.add_argument("--prefix", default=DEFAULT_PREFIX)
 
     pss = sub.add_parser("subset", help="gera um .als enxuto com só alguns blocos (sem cabeçalho)")
     pss.add_argument("input")
-    grp = pss.add_mutually_exclusive_group(required=True)
+    grp = pss.add_mutually_exclusive_group()
     grp.add_argument("--keep", help='blocos a MANTER, na ordem desejada, ex.: "T01,space jam"')
     grp.add_argument("--drop", help='blocos a REMOVER (mantém o resto na ordem original)')
+    grp.add_argument("--playlist",
+                     help="playlist com os blocos a MANTER (default: <projeto>.playlist se nada for passado)")
     pss.add_argument("--output", default=None)
     pss.add_argument("--prefix", default=DEFAULT_PREFIX)
 
@@ -856,11 +971,11 @@ def main(argv=None):
 
     args = ap.parse_args(argv)
     if args.cmd == "inspect":
-        cmd_inspect(args.input, args.prefix)
+        cmd_inspect(args.input, args.prefix, args.force)
     elif args.cmd == "reorder":
-        cmd_reorder(args.input, args.order, args.output, args.prefix)
+        cmd_reorder(args.input, args.order, args.output, args.prefix, args.playlist)
     elif args.cmd == "subset":
-        cmd_subset(args.input, args.keep, args.drop, args.output, args.prefix)
+        cmd_subset(args.input, args.keep, args.drop, args.output, args.prefix, args.playlist)
     elif args.cmd == "selftest":
         cmd_selftest()
 

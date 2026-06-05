@@ -62,7 +62,7 @@ Blocos detectados: 29
 
 Jumps de clip ativos (FollowActionA/B==9): use 'reorder' para remapear.
 ```
->>> (seus comentários aqui)
+> saída pra console ok. acho que podemos gerar um arquivo ("nome_do_projeto.playlist") com as músicas em ordem pra que eu possa reordenar num editor de texto e usar como input do comando reorder. esse arquivo pode conter apenas os nomes das musicas, uma em cada linha.
 
 ---
 
@@ -77,7 +77,7 @@ $ als_reorder.py reorder F1.als --order "falta organizar,staying alive,T01,...,m
 OK: 345 cenas, 345 reposicionadas.
 Saída: /tmp/catalogo/r2_out.als
 ```
->>> (seus comentários aqui)
+> saída pra console ok. mas vale alterar o comando para ler um arquivo de playlist gerado pelo comando inspect. e pode assumir que o nome do arquivo segue o padrao "nome_do_projeto.playlist" pra nao precisar passar como argumento. se a ordem das musicas pasadas pelo arquivo ou pelo argumento --order for a mesma ordem do projeto não precisa fazer nada. 
 
 ---
 
@@ -93,7 +93,7 @@ Erro: a ordem deve ser uma permutação dos blocos.
   Blocos no set: ['staying alive', 'T01', 'T02', 'space jam', 'E2', 'a disaster', 'pale pale moon', 'breath in', 'OW', 'H1', 'OZ', 'dirty discotechno', 'E4', '#1 crush', 'the jungle drum', 'you make me feel', 'gonna make you sweat', 'WW', 'payback', 'combate', 'E5', 'ZZ clap your spoons', 'stand up', 'stop this flame', 'we are family', 'gruta', 'justify my love', 'moaners', 'falta organizar']
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok.
 
 ---
 
@@ -107,7 +107,7 @@ OK: 2 blocos mantidos, 16 cenas (de 345). Cabeçalho (0 cenas) removido.
 Blocos: space jam, T01
 Saída: /tmp/catalogo/r4_out.als
 ```
->>> (seus comentários aqui)
+> saída pra console ok. pode ler um arquivo de playlist igual o reorder.
 
 ---
 
@@ -121,7 +121,7 @@ OK: 28 blocos mantidos, 210 cenas (de 345). Cabeçalho (0 cenas) removido.
 Blocos: staying alive, T01, T02, space jam, E2, a disaster, pale pale moon, breath in, OW, H1, OZ, dirty discotechno, E4, #1 crush, the jungle drum, you make me feel, gonna make you sweat, WW, payback, combate, E5, ZZ clap your spoons, stand up, stop this flame, we are family, gruta, justify my love, moaners
 Saída: /tmp/catalogo/r5_out.als
 ```
->>> (seus comentários aqui)
+> saída pra console ok. e só pra deixar claro, esse comando nao faz sentido ler o arquivo de playlist. 
 
 ---
 
@@ -141,7 +141,7 @@ ERRO: há 'jump to scene' apontando para cena REMOVIDA. Isso não deveria existi
   cena 90 ('') [CSL#11] JumpIndexB -> cena 101 ('') [REMOVIDA]
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok.
 
 ---
 
@@ -155,7 +155,7 @@ Erro: blocos desconhecidos no --keep: ['naoexiste']
 Blocos no set: ['staying alive', 'T01', 'T02', 'space jam', 'E2', 'a disaster', 'pale pale moon', 'breath in', 'OW', 'H1', 'OZ', 'dirty discotechno', 'E4', '#1 crush', 'the jungle drum', 'you make me feel', 'gonna make you sweat', 'WW', 'payback', 'combate', 'E5', 'ZZ clap your spoons', 'stand up', 'stop this flame', 'we are family', 'gruta', 'justify my love', 'moaners', 'falta organizar']
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok.
 
 ---
 
@@ -171,7 +171,7 @@ usage: als_reorder.py subset [-h] (--keep KEEP | --drop DROP)
 als_reorder.py subset: error: argument --drop: not allowed with argument --keep
 ```
 (exit 2)
->>> (seus comentários aqui)
+> saída pra console ok.
 
 ---
 
@@ -195,7 +195,7 @@ Músicas (blocos '>>') — A: 29 | B: 31
   Só em A (0): —
   Só em B (2): caught up, heaven
 ```
->>> (seus comentários aqui)
+> saída pra console ok por equanto, acho que preciso usar mais pra indicar o que poderia melhorar.
 
 ---
 
@@ -224,7 +224,7 @@ Músicas (blocos '>>') — A: 3 | B: 3
   Só em A (1): chorus
   Só em B (1): bridge
 ```
->>> (seus comentários aqui)
+> saída pra console ok por equanto, acho que preciso usar mais pra indicar o que poderia melhorar.
 
 ---
 
@@ -253,7 +253,7 @@ Músicas (blocos '>>') — A: 2 | B: 2
   Só em B (0): —
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok por equanto, acho que preciso usar mais pra indicar o que poderia melhorar.
 
 ---
 
@@ -274,7 +274,7 @@ Saída: /tmp/catalogo/t4_out.als
 (exit 0) — confere com o roadmap: 15 cenas movidas, 19 CSLs em lockstep, 12 pointees resolvidos
 por **identidade** (mesma linhagem F1/F2). Quando há remap de id, cada um aparece numa linha
 `remap OLD -> NEW` abaixo (aqui não houve).
->>> (seus comentários aqui)
+> saída pra console ok por equanto, acho que preciso usar mais pra indicar o que poderia melhorar.
 
 ---
 
@@ -291,7 +291,7 @@ $ als_transplant.py transplant t5_src.als t5_dst.als --move "aaa" --before "targ
 Corrija esse follow action na origem (ou peça --disable-dangling, a implementar).
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok.
 
 ---
 
@@ -307,7 +307,7 @@ Não consegui mapear com SEGURANÇA 1 PointeeId usados por clips movidos (parâm
   777  contexto-origem=('DeviceChain', 'Devices', 'Eq8', 'UserName', 'P')  (mesmo-id-no-destino=None)
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok por equanto, acho que preciso usar mais pra indicar o que poderia melhorar.
 
 ---
 
@@ -321,7 +321,7 @@ $ als_transplant.py transplant F2.als F1.als --move "xyz" --before "gruta"
 bloco 'xyz' não existe na origem
 ```
 (exit 1)
->>> (seus comentários aqui)
+> saída pra console ok por equanto, acho que preciso usar mais pra indicar o que poderia melhorar.
 
 ---
 
@@ -329,8 +329,64 @@ bloco 'xyz' não existe na origem
 
 - **R2 (reorder):** exige listar **todos** os 29 blocos na ordem nova, mesmo movendo só um.
   Talvez valha um modo "mover bloco X para antes/depois de Y" (como o `--before` do transplant).
+  → **✅ resolvido pelo fluxo de playlist** (abaixo): você edita um arquivo de texto em vez de
+  passar a ordem inteira na linha de comando.
 - **R6 / T5 / T6 (aborts):** nomes de cena vazios aparecem como `('')`. No R6 dá pra mostrar a
   qual **bloco** a cena pertence (como o T5 já faz: `cena 1 (aaa)`), o que seria mais legível.
+  → ainda pendente (não mexido nesta rodada).
 - **Saída de sucesso (R4/R5):** lista os blocos mas não o intervalo de cenas resultante; o
   transplant (T4) é mais verboso. Vale alinhar o nível de detalhe entre as ferramentas?
+  → ainda pendente.
 - **Exit codes:** consistentes (0 ok / 1 erro de domínio / 2 erro de argparse).
+
+---
+
+## Novidades implementadas — fluxo de playlist (`als_reorder.py`)
+
+Atende suas notas em R1/R2/R4/R5. Resumo: `inspect` gera um `<projeto>.playlist` (um nome de
+música por linha, na ordem atual); `reorder` e `subset` leem esse arquivo.
+
+🐞 **Bug achado e corrigido no caminho:** a 1ª versão usava `#` como comentário na playlist, mas
+o bloco real **`#1 crush`** começa com `#` e era **descartado silenciosamente** (a playlist saía
+com 28 de 29 blocos). Decisão: a playlist contém **só nomes** (sem sintaxe de comentário, que
+colidiria com nomes reais); só linhas em branco são ignoradas.
+
+### N1 — `inspect` gera a playlist (não sobrescreve a sua) · real F1
+```
+$ als_reorder.py inspect proj.als
+...
+Playlist gerada (29 músicas, uma por linha): /tmp/catalogo/proj.playlist
+  Reordene as linhas e rode 'reorder', ou apague linhas e rode 'subset'.
+
+$ als_reorder.py inspect proj.als          # 2ª vez: respeita sua edição
+Playlist já existe, mantive a sua (não sobrescrevi): /tmp/catalogo/proj.playlist
+  Edite-a e use com 'reorder'/'subset', ou passe --force para regenerar.
+```
+
+### N2 — `reorder` lê a playlist (auto-descoberta) + **no-op** quando a ordem não mudou · real F1
+Precedência da ordem: `--order` › `--playlist CAMINHO` › auto `<projeto>.playlist`.
+```
+$ als_reorder.py reorder proj.als          # playlist na ordem do projeto
+Ordem já igual à do projeto (fonte: playlist .../proj.playlist); nada a fazer, não gravei nada.
+
+$ als_reorder.py reorder proj.als          # após mover 'falta organizar' p/ o topo na playlist
+OK: 345 cenas, 345 reposicionadas (fonte: playlist .../proj.playlist).
+Saída: /tmp/catalogo/reord_out.als
+```
+
+### N3 — `subset` lê a playlist como lista a MANTER (inclui `#1 crush`) · real F1
+`--drop` continua explícito e **não** lê playlist (conforme sua nota no R5).
+```
+$ als_reorder.py subset proj.als --playlist sub.playlist   # sub.playlist = space jam / #1 crush / T01
+OK: 3 blocos mantidos, 24 cenas (de 345). Cabeçalho (0 cenas) removido.
+Blocos: space jam, #1 crush, T01
+```
+
+### N4 — erros novos com mensagem acionável · real F1
+```
+$ als_reorder.py reorder proj.als          # sem --order e sem playlist ao lado
+Nenhuma ordem informada e a playlist não existe:
+  .../proj.playlist
+Rode 'als_reorder.py inspect ".../proj.als"' para gerá-la (e então reordene as linhas), ou passe --order.
+```
+>>> (seus comentários sobre o fluxo de playlist aqui)
