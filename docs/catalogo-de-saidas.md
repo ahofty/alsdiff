@@ -104,10 +104,14 @@ $ als_reorder.py subset F1.als --keep "space jam,T01"
 ```
 ```
 OK: 2 blocos mantidos, 16 cenas (de 345). Cabeçalho (0 cenas) removido.
-Blocos: space jam, T01
+Blocos (intervalo de cenas na saída):
+  [  0..  6] ( 7 cenas)  space jam
+  [  7.. 15] ( 9 cenas)  T01
 Saída: /tmp/catalogo/r4_out.als
 ```
 > saída pra console ok. pode ler um arquivo de playlist igual o reorder.
+→ **✅ feito** (lê playlist, ver N3) e **✅ saída mais detalhada**: agora lista o intervalo de
+cenas de cada bloco na saída (estilo `inspect`), em vez de só os nomes.
 
 ---
 
@@ -118,10 +122,17 @@ $ als_reorder.py subset F1.als --drop "falta organizar"
 ```
 ```
 OK: 28 blocos mantidos, 210 cenas (de 345). Cabeçalho (0 cenas) removido.
-Blocos: staying alive, T01, T02, space jam, E2, a disaster, pale pale moon, breath in, OW, H1, OZ, dirty discotechno, E4, #1 crush, the jungle drum, you make me feel, gonna make you sweat, WW, payback, combate, E5, ZZ clap your spoons, stand up, stop this flame, we are family, gruta, justify my love, moaners
+Blocos (intervalo de cenas na saída):
+  [  0..  7] ( 8 cenas)  staying alive
+  [  8.. 16] ( 9 cenas)  T01
+  [ 17.. 23] ( 7 cenas)  T02
+  ...(25 blocos omitidos)...
+  [205..209] ( 5 cenas)  moaners
 Saída: /tmp/catalogo/r5_out.als
 ```
-> saída pra console ok. e só pra deixar claro, esse comando nao faz sentido ler o arquivo de playlist. 
+> saída pra console ok. e só pra deixar claro, esse comando nao faz sentido ler o arquivo de playlist.
+→ **✅ confirmado:** `--drop` continua **não** lendo playlist. Saída agora também lista o
+intervalo de cenas por bloco.
 
 ---
 
@@ -136,12 +147,14 @@ $ als_reorder.py subset F1.als --keep "dirty discotechno"
 ERRO: há 'jump to scene' apontando para cena REMOVIDA. Isso não deveria existir
 (pulos devem ficar dentro da mesma música). Abortei SEM gravar nada.
 
-  cena 87 ('') [CSL#11] JumpIndexB -> cena 101 ('') [REMOVIDA]
-  cena 89 ('') [CSL#11] JumpIndexB -> cena 101 ('') [REMOVIDA]
-  cena 90 ('') [CSL#11] JumpIndexB -> cena 101 ('') [REMOVIDA]
+  cena 87 (dirty discotechno) [CSL#11] JumpIndexB -> cena 101 (E4) [REMOVIDA]
+  cena 89 (dirty discotechno) [CSL#11] JumpIndexB -> cena 101 (E4) [REMOVIDA]
+  cena 90 (dirty discotechno) [CSL#11] JumpIndexB -> cena 101 (E4) [REMOVIDA]
 ```
 (exit 1)
 > saída pra console ok.
+→ **✅ melhorado:** agora mostra o **bloco-dono** de cada cena (`dirty discotechno`, `E4`) em vez
+de `('')` — fica claro que `dirty discotechno` tem um clip que pula para `E4`.
 
 ---
 
@@ -333,10 +346,11 @@ bloco 'xyz' não existe na origem
   passar a ordem inteira na linha de comando.
 - **R6 / T5 / T6 (aborts):** nomes de cena vazios aparecem como `('')`. No R6 dá pra mostrar a
   qual **bloco** a cena pertence (como o T5 já faz: `cena 1 (aaa)`), o que seria mais legível.
-  → ainda pendente (não mexido nesta rodada).
+  → **✅ resolvido no R6** (subset): `cena 87 (dirty discotechno) -> cena 101 (E4)`. (T5/T6 são
+  do transplant e já usavam o bloco-dono.)
 - **Saída de sucesso (R4/R5):** lista os blocos mas não o intervalo de cenas resultante; o
   transplant (T4) é mais verboso. Vale alinhar o nível de detalhe entre as ferramentas?
-  → ainda pendente.
+  → **✅ resolvido no subset:** a saída lista o intervalo de cenas de cada bloco (estilo `inspect`).
 - **Exit codes:** consistentes (0 ok / 1 erro de domínio / 2 erro de argparse).
 
 ---

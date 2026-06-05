@@ -235,6 +235,15 @@ def detect_blocks(ls, prefix):
     return head_count, blocks
 
 
+def block_of_scene(blocks, idx):
+    """Rótulo do bloco que contém a cena `idx`, ou None se for cabeçalho/fora de bloco.
+    `blocks` é o segundo retorno de detect_blocks: [(label, start, end_excl), ...]."""
+    for label, s, e in blocks:
+        if s <= idx < e:
+            return label
+    return None
+
+
 # --------------------------------------------------------------------------------------
 # inspect
 # --------------------------------------------------------------------------------------
@@ -653,25 +662,34 @@ def cmd_subset(path, keep_csv, drop_csv, output, prefix, playlist=None):
     selected, chosen, head = build_selection(ls, prefix, keep=keep, drop=drop)
     problems = validate_subset_jumps(ls, selected)
     if problems:
+        _, blocks = detect_blocks(ls, prefix)
         lines = [
             "ERRO: há 'jump to scene' apontando para cena REMOVIDA. Isso não deveria existir",
             "(pulos devem ficar dentro da mesma música). Abortei SEM gravar nada.",
             "",
         ]
         for old_idx, ci, letter, tgt in problems:
-            nm = ls.scene_name(old_idx).strip()
-            tnm = ls.scene_name(tgt).strip() if 0 <= tgt < ls.num_scenes else "?"
-            lines.append("  cena %d (%r) [CSL#%d] JumpIndex%s -> cena %d (%r) [REMOVIDA]"
-                         % (old_idx, nm, ci + 1, letter, tgt, tnm))
+            src_blk = block_of_scene(blocks, old_idx) or "cabeçalho"
+            tgt_blk = (block_of_scene(blocks, tgt) or "?") if 0 <= tgt < ls.num_scenes else "?"
+            lines.append("  cena %d (%s) [CSL#%d] JumpIndex%s -> cena %d (%s) [REMOVIDA]"
+                         % (old_idx, src_blk, ci + 1, letter, tgt, tgt_blk))
         raise SystemExit("\n".join(lines))
     new_text = subset_text(ls, selected)
     if output is None:
         base = path[:-4] if path.endswith(".als") else path
         output = base + ".subset.als"
     write_als(output, new_text)
+    _, blocks = detect_blocks(ls, prefix)
+    by_label = {label: (s, e) for label, s, e in blocks}
     print("OK: %d blocos mantidos, %d cenas (de %d). Cabeçalho (%d cenas) removido."
           % (len(chosen), len(selected), ls.num_scenes, head))
-    print("Blocos:", ", ".join(chosen))
+    print("Blocos (intervalo de cenas na saída):")
+    pos = 0
+    for label in chosen:
+        s, e = by_label[label]
+        n = e - s
+        print("  [%3d..%3d] (%2d cenas)  %s" % (pos, pos + n - 1, n, label))
+        pos += n
     print("Saída:", output)
 
 
@@ -813,7 +831,9 @@ def cmd_selftest():
     assert head == 1, head
     assert [b[0] for b in blocks] == ["A", "B"], blocks
     assert blocks[0][1:] == (1, 3) and blocks[1][1:] == (3, 6), blocks
-    print("selftest: detecção de blocos OK (head=1, A=[1,3), B=[3,6))")
+    assert block_of_scene(blocks, 0) is None  # cabeçalho
+    assert block_of_scene(blocks, 1) == "A" and block_of_scene(blocks, 4) == "B"
+    print("selftest: detecção de blocos OK (head=1, A=[1,3), B=[3,6); block_of_scene OK)")
 
     # Reordena para B, A
     new_order = build_permutation(ls, ">>", ["B", "A"])
