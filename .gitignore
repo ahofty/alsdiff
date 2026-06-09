@@ -11,6 +11,14 @@ install
 .vscode
 .claude
 
+# JetBrains IDEs
+.idea/
+*.iml
+
+# Python
+__pycache__/
+*.pyc
+
 .gemini/
 gha-creds-*.json
 
