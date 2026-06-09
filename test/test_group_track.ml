@@ -126,7 +126,7 @@ let test_group_track_clips_empty () =
   (match track with
    | Track.Group group_track ->
      (* Group tracks shouldn't have audio clips *)
-     Alcotest.(check int) "clip count" 0 (List.length group_track.clips)
+     Alcotest.(check int) "clip count" 0 (List.length group_track.arrangement_clips)
    | _ -> Alcotest.fail "Expected Group track variant")
 
 

@@ -29,10 +29,10 @@ let test_midi_track_clips_and_notes () =
   let midi_track = MidiTrack.create xml in
 
   (* Check that we have clips *)
-  Alcotest.(check (int)) "clip count" 1 (List.length midi_track.clips);
+  Alcotest.(check (int)) "clip count" 1 (List.length midi_track.arrangement_clips);
 
   (* Get first clip for detailed note checking *)
-  let first_clip = List.hd midi_track.clips in
+  let first_clip = List.hd midi_track.arrangement_clips in
 
   (* Check basic clip properties *)
   Alcotest.(check int) "first clip id" 9 first_clip.Clip.MidiClip.id;
@@ -132,12 +132,28 @@ let  test_midi_track_Mixer_properties () =
   Alcotest.(check (float 0.001)) "Device.Mixer pan" 0.0 pan
 
 
+let test_midi_track_session_clips () =
+  (* Session-view clips live in ClipSlotList; their stable identity is the ClipSlot (scene)
+     Id, not the inner clip Id. Empty slots are skipped. This guards the parsing path that
+     must descend past the outer ClipSlot wrapper (the "./" path quirk). *)
+  let xml = read_file (Utils.resolve_test_data_path "midi_track_session.xml") in
+  let midi_track = MidiTrack.create xml in
+  Alcotest.(check int) "session clip count (empty slot skipped)" 1
+    (List.length midi_track.session_clips);
+  Alcotest.(check int) "arrangement clips empty" 0 (List.length midi_track.arrangement_clips);
+  Alcotest.(check int) "take clips empty" 0 (List.length midi_track.take_clips);
+  let clip = List.hd midi_track.session_clips in
+  (* Identity is the ClipSlot Id (42), not the inner MidiClip Id (0). *)
+  Alcotest.(check int) "session clip identity is scene id" 42 clip.Clip.MidiClip.id;
+  Alcotest.(check string) "session clip name" "Session Clip A" clip.Clip.MidiClip.name
+
 let () =
   Alcotest.run "MidiTrack" [
     "track_creation", [
       Alcotest.test_case "parse basic MidiTrack properties" `Quick test_midi_track_basic_properties;
       Alcotest.test_case "parse MidiTrack clips and notes" `Quick test_midi_track_clips_and_notes;
       Alcotest.test_case "parse MidiTrack devices order" `Quick test_midi_track_devices_order;
-      Alcotest.test_case "parse MidiTrack Device.Mixer properties" `Quick test_midi_track_Mixer_properties
+      Alcotest.test_case "parse MidiTrack Device.Mixer properties" `Quick test_midi_track_Mixer_properties;
+      Alcotest.test_case "parse MidiTrack session clips (scene identity)" `Quick test_midi_track_session_clips
     ]
   ]

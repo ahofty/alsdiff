@@ -35,6 +35,8 @@ type domain_type =
   | DTTrack
   | DTDevice
   | DTClip
+  | DTArrangementClip
+  | DTTakeClip
   | DTAutomation
   | DTMixer
   | DTRouting

@@ -320,7 +320,7 @@ let test_external_input_node_created_for_audioin_external () =
         sends = [];
       };
       devices = [];
-      clips = [];
+      session_clips = []; arrangement_clips = []; take_clips = [];
       automations = [];
     } in
   let liveset = {

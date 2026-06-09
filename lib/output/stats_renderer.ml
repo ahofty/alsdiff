@@ -9,7 +9,7 @@ let display_name (dt : domain_type) : string =
 let stats_from_config (cfg : detail_config) : (domain_type * change_breakdown) list =
   (* All domain types we might track - check if they're not Ignored *)
   let all_types = [
-    DTLiveset; DTTrack; DTDevice; DTClip; DTNote;
+    DTLiveset; DTTrack; DTDevice; DTClip; DTArrangementClip; DTTakeClip; DTNote;
     DTAutomation; DTMixer; DTRouting; DTLocator;
     DTParam; DTEvent; DTSend; DTPreset; DTMacro;
     DTSnapshot; DTLoop; DTSignature; DTSampleRef;
@@ -67,6 +67,7 @@ let render_line (dt : domain_type) (b : change_breakdown) : string option =
     Some (Printf.sprintf "%s: %s" (display_name dt) (String.concat ", " parts))
 
 let render (cfg : detail_config) (views : view list) : string =
+  let views = apply_ignore_names cfg views in
   let stats = collect cfg views in
   let lines =
     List.filter_map (fun (dt, b) -> render_line dt b) stats

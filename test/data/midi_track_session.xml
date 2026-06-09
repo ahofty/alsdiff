@@ -1,0 +1,84 @@
+<MidiTrack Id="200">
+  <Name>
+    <EffectiveName Value="Session Test Track" />
+  </Name>
+  <AutomationEnvelopes>
+    <Envelopes />
+  </AutomationEnvelopes>
+  <DeviceChain>
+    <Devices />
+    <Mixer>
+      <Volume>
+        <Manual Value="1.0" />
+      </Volume>
+      <Pan>
+        <Manual Value="0.0" />
+      </Pan>
+      <On>
+        <Manual Value="true" />
+      </On>
+      <SoloSink Value="false" />
+      <Sends />
+    </Mixer>
+    <AudioInputRouting>
+      <Target Value="" />
+      <UpperDisplayString Value="" />
+      <LowerDisplayString Value="" />
+    </AudioInputRouting>
+    <AudioOutputRouting>
+      <Target Value="" />
+      <UpperDisplayString Value="" />
+      <LowerDisplayString Value="" />
+    </AudioOutputRouting>
+    <MidiInputRouting>
+      <Target Value="" />
+      <UpperDisplayString Value="" />
+      <LowerDisplayString Value="" />
+    </MidiInputRouting>
+    <MidiOutputRouting>
+      <Target Value="" />
+      <UpperDisplayString Value="" />
+      <LowerDisplayString Value="" />
+    </MidiOutputRouting>
+    <MainSequencer>
+      <ClipSlotList>
+        <ClipSlot Id="42">
+          <LomId Value="0" />
+          <ClipSlot>
+            <Value>
+              <MidiClip Id="0">
+                <Name Value="Session Clip A" />
+                <CurrentStart Value="0" />
+                <CurrentEnd Value="4" />
+                <Loop>
+                  <LoopStart Value="0" />
+                  <LoopEnd Value="4" />
+                  <LoopOn Value="true" />
+                </Loop>
+                <TimeSignature>
+                  <TimeSignatures>
+                    <RemoteableTimeSignature>
+                      <Numerator Value="4" />
+                      <Denominator Value="4" />
+                    </RemoteableTimeSignature>
+                  </TimeSignatures>
+                </TimeSignature>
+                <Notes>
+                  <KeyTracks />
+                </Notes>
+              </MidiClip>
+            </Value>
+          </ClipSlot>
+          <HasStop Value="true" />
+        </ClipSlot>
+        <ClipSlot Id="43">
+          <LomId Value="0" />
+          <ClipSlot>
+            <Value />
+          </ClipSlot>
+          <HasStop Value="true" />
+        </ClipSlot>
+      </ClipSlotList>
+    </MainSequencer>
+  </DeviceChain>
+</MidiTrack>

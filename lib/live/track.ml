@@ -123,7 +123,11 @@ module MidiTrack = struct
     id : int;                     [@id.id] [@patch.identity] [@view.skip]
     name : string;                [@view.name] [@view.skip]
     current_name : string;        [@patch.identity] [@view.name_patch]
-    clips : Clip.MidiClip.t list; [@view.collection "DTClip"] [@view.builder "build_clips"]
+    (* Clips come from three distinct places in the .als XML; each is its own collection so
+       they can be shown/hidden independently. See [Clip] origins note. *)
+    session_clips : Clip.MidiClip.t list;     [@view.collection "DTClip"] [@view.builder "build_session_clips"] [@view.label "Session Clips"]
+    arrangement_clips : Clip.MidiClip.t list; [@view.collection "DTArrangementClip"] [@view.builder "build_arrangement_clips"] [@view.label "Arrangement Clips"]
+    take_clips : Clip.MidiClip.t list;        [@view.collection "DTTakeClip"] [@view.builder "build_take_clips"] [@view.label "Take Lanes"]
     automations : Automation.t list; [@view.collection "DTAutomation"] [@view.builder "build_automations"]
     devices : Device.t list;      [@view.collection "DTDevice"] [@view.builder "build_devices"]
     mixer : Mixer.t;              [@view.child "DTMixer"]
@@ -137,8 +141,31 @@ module MidiTrack = struct
       Upath.find_all_seq "/AutomationEnvelopes/*/AutomationEnvelope" xml
       |> Seq.map (fun x -> x |> snd |> Automation.create)
       |> List.of_seq in
-    let clips = Upath.find_all_seq "/**/ClipTimeable/ArrangerAutomation/Events/MidiClip" xml
+    (* Arrangement view: clips laid out on the timeline. Scope to MainSequencer so we don't
+       also pick up FreezeSequencer clips. *)
+    let arrangement_clips =
+      Upath.find_all_seq "/DeviceChain/MainSequencer/ClipTimeable/ArrangerAutomation/Events/MidiClip" xml
       |> Seq.map (fun x -> x |> snd |> Clip.MidiClip.create)
+      |> List.of_seq in
+    (* Session view: one ClipSlot per scene. The clip's own Id is not unique across slots,
+       so the stable identity is the ClipSlot (scene) Id — override it here. Empty slots have
+       no MidiClip and are skipped. *)
+    let session_clips =
+      Upath.find_all_seq "/DeviceChain/MainSequencer/ClipSlotList/ClipSlot" xml
+      |> Seq.filter_map (fun (_, slot) ->
+          (* Leading "./" so Upath doesn't match the outer ClipSlot (the root here) against
+             the first path segment; we want the inner ClipSlot/Value/MidiClip. *)
+          match Upath.find_opt "./ClipSlot/Value/MidiClip" slot with
+          | Some (_, mc) ->
+            let scene_id = Xml.get_int_attr "Id" slot in
+            Some { (Clip.MidiClip.create mc) with id = scene_id }
+          | None -> None)
+      |> List.of_seq in
+    (* Take lanes: recording takes / comping. Often thousands of clips; identity within a take
+       lane is not meaningful, so use a positional id for stable matching. *)
+    let take_clips =
+      Upath.find_all_seq "/TakeLanes/TakeLanes/TakeLane/ClipAutomation/Events/MidiClip" xml
+      |> Seq.mapi (fun i (_, mc) -> { (Clip.MidiClip.create mc) with id = i })
       |> List.of_seq in
     let devices = Upath.find_all_seq "/DeviceChain/*/Devices" xml
       |> Seq.map snd
@@ -148,7 +175,8 @@ module MidiTrack = struct
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> Mixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
 
-    { id; name; current_name = name; clips; automations; devices; mixer; routings }
+    { id; name; current_name = name; session_clips; arrangement_clips; take_clips;
+      automations; devices; mixer; routings }
 
 end
 
@@ -158,7 +186,10 @@ module AudioTrack = struct
     id : int;                     [@id.id] [@patch.identity] [@view.skip]
     name : string;                [@view.name] [@view.skip]
     current_name : string;        [@patch.identity] [@view.name_patch]
-    clips : Clip.AudioClip.t list; [@view.collection "DTClip"] [@view.builder "build_clips"]
+    (* See MidiTrack: three clip sources, each its own collection. *)
+    session_clips : Clip.AudioClip.t list;     [@view.collection "DTClip"] [@view.builder "build_session_clips"] [@view.label "Session Clips"]
+    arrangement_clips : Clip.AudioClip.t list; [@view.collection "DTArrangementClip"] [@view.builder "build_arrangement_clips"] [@view.label "Arrangement Clips"]
+    take_clips : Clip.AudioClip.t list;        [@view.collection "DTTakeClip"] [@view.builder "build_take_clips"] [@view.label "Take Lanes"]
     automations : Automation.t list; [@view.collection "DTAutomation"] [@view.builder "build_automations"]
     devices : Device.t list;      [@view.collection "DTDevice"] [@view.builder "build_devices"]
     mixer : Mixer.t;              [@view.child "DTMixer"]
@@ -172,8 +203,26 @@ module AudioTrack = struct
       Upath.find_all_seq "/AutomationEnvelopes/*/AutomationEnvelope" xml
       |> Seq.map (fun x -> x |> snd |> Automation.create)
       |> List.of_seq in
-    let clips = Upath.find_all_seq "/**/AudioClip" xml
+    (* Arrangement view: audio clips live under MainSequencer/Sample/ArrangerAutomation. *)
+    let arrangement_clips =
+      Upath.find_all_seq "/DeviceChain/MainSequencer/Sample/ArrangerAutomation/Events/AudioClip" xml
       |> Seq.map (fun x -> x |> snd |> Clip.AudioClip.create)
+      |> List.of_seq in
+    (* Session view: one ClipSlot per scene; identity = ClipSlot (scene) Id. *)
+    let session_clips =
+      Upath.find_all_seq "/DeviceChain/MainSequencer/ClipSlotList/ClipSlot" xml
+      |> Seq.filter_map (fun (_, slot) ->
+          (* See MidiTrack: leading "./" avoids matching the outer ClipSlot root. *)
+          match Upath.find_opt "./ClipSlot/Value/AudioClip" slot with
+          | Some (_, ac) ->
+            let scene_id = Xml.get_int_attr "Id" slot in
+            Some { (Clip.AudioClip.create ac) with id = scene_id }
+          | None -> None)
+      |> List.of_seq in
+    (* Take lanes: positional id for stable matching. *)
+    let take_clips =
+      Upath.find_all_seq "/TakeLanes/TakeLanes/TakeLane/ClipAutomation/Events/AudioClip" xml
+      |> Seq.mapi (fun i (_, ac) -> { (Clip.AudioClip.create ac) with id = i })
       |> List.of_seq in
     let devices = Upath.find_all_seq "/DeviceChain/*/Devices" xml
       |> Seq.map snd
@@ -182,7 +231,8 @@ module AudioTrack = struct
       |> List.of_seq in
     let mixer = Upath.find "/DeviceChain/Mixer" xml |> snd |> Mixer.create in
     let routings = Upath.find "/DeviceChain" xml |> snd |> RoutingSet.create in
-    { id; name; current_name = name; clips; automations; devices; mixer; routings }
+    { id; name; current_name = name; session_clips; arrangement_clips; take_clips;
+      automations; devices; mixer; routings }
 
 end
 

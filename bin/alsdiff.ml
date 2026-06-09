@@ -191,11 +191,15 @@ let git_mode =
   Arg.(value & flag & info ["git"] ~doc)
 
 let config_file =
-  let doc = "Load configuration from JSON file. Overrides --preset, individual CLI options override config values." in
+  let doc = "Load configuration from JSON file. $(b,--preset) takes precedence over --config; \
+             the config is overlaid onto the mode default, so it may be partial (fields it \
+             sets win, omitted fields are inherited). Individual CLI options override config \
+             values. Supports $(b,ignore_names) to suppress items by name, \
+             e.g. [{\"domain_type\":[\"DTDevice\"],\"name\":\"DJMFilter\"}]." in
   Arg.(value & opt (some string) None & info ["config"] ~docv:"CONFIG.json" ~doc)
 
 let preset =
-  let doc = "Output detail preset. Ignored when --config is specified. $(b,compact)=show structure only, $(b,full)=show all details (multiline), $(b,inline)=show all details (single line), $(b,mixing)=optimized for stem track mixing, $(b,composer)=MIDI composition only, $(b,quiet)=minimal output, $(b,verbose)=show everything including unchanged" in
+  let doc = "Output detail preset. Takes precedence over --config when both are given. $(b,compact)=show structure only, $(b,full)=show all details (multiline), $(b,inline)=show all details (single line), $(b,mixing)=optimized for stem track mixing, $(b,composer)=MIDI composition only, $(b,quiet)=minimal output, $(b,verbose)=show everything including unchanged" in
   Arg.(value & opt (some (enum ["compact", `Compact; "composer", `Composer; "full", `Full; "inline", `Inline; "mixing", `Mixing; "quiet", `Quiet; "verbose", `Verbose])) None & info ["preset"] ~docv:"PRESET" ~doc)
 
 let dump_preset =
@@ -319,8 +323,8 @@ let cmd =
     `P ("$(b,--mode MODE) selects the output mode. $(b,tree) (default) shows a hierarchical tree view of changes. \
          $(b,stats) shows a flat summary of change counts by type (e.g., Tracks: 1 Added, 3 Modified). \
          $(b,json) outputs structured JSON for programmatic consumption. " ^ stats_mode_doc);
-    `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery. The --preset option is ignored when --config is specified. Individual CLI options override values from config file.";
-    `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over auto-discovery but ignored when --config is specified.";
+    `P "$(b,--config FILE) loads configuration from JSON file. Takes precedence over auto-discovery, but $(b,--preset) takes precedence over it. The config is overlaid onto the mode default, so it may be partial (e.g. only $(b,ignore_names)): fields the config sets win, omitted fields are inherited from the default. Individual CLI options override values from config file.";
+    `P "$(b,--preset PRESET) sets the output detail preset. Available presets: $(b,compact), $(b,composer), $(b,full), $(b,mixing), $(b,quiet) (default), $(b,verbose). Takes precedence over --config and auto-discovery.";
     `P "$(b,--prefix-added PREFIX) overrides prefix for added items from config file.";
     `P "$(b,--prefix-removed PREFIX) overrides prefix for removed items from config file.";
     `P "$(b,--prefix-modified PREFIX) overrides prefix for modified items from config file.";

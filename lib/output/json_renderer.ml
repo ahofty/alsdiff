@@ -89,6 +89,7 @@ and view_to_yojson (cfg : detail_config) (view : view) : Yojson.Safe.t option =
   | Collection col -> collection_to_yojson cfg col
 
 let render (cfg : detail_config) (views : view list) : string =
+  let views = apply_ignore_names cfg views in
   let entries = List.filter_map (view_to_yojson cfg) views in
   let json = `Assoc [("diff", `List entries)] in
   Yojson.Safe.pretty_to_string json

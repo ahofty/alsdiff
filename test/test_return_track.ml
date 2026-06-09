@@ -126,7 +126,7 @@ let test_return_track_clips_empty () =
   (match track with
    | Track.Return return_track ->
      (* Return tracks shouldn't have audio clips *)
-     Alcotest.(check int) "clip count" 0 (List.length return_track.clips)
+     Alcotest.(check int) "clip count" 0 (List.length return_track.arrangement_clips)
    | _ -> Alcotest.fail "Expected Return track variant")
 
 

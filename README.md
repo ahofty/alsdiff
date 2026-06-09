@@ -371,6 +371,9 @@ Configuration files use JSON format with the following structure:
       }
     }
   ],
+  "ignore_names": [
+    { "domain_type": ["DTDevice"], "name": "DJMFilter" }
+  ],
   "max_collection_items": 20,
   "prefix_added": "+",
   "prefix_removed": "-",
@@ -390,6 +393,7 @@ Configuration files use JSON format with the following structure:
 | `modified` | detail_level | varies | Detail level for modified items |
 | `unchanged` | detail_level | varies | Detail level for unchanged items |
 | `type_overrides` | array | `[]` | Per-type detail level overrides (see below) |
+| `ignore_names` | array | `[]` | Suppress items/collections by name (see [Name-Based Suppression](#name-based-suppression)) |
 | `max_collection_items` | integer/null | varies | Maximum items to show in collections (0 = none, omitted = unlimited) |
 | `prefix_added` | string | `"+"` | Prefix symbol for added items |
 | `prefix_removed` | string | `"-"` | Prefix symbol for removed items |
@@ -402,6 +406,22 @@ Configuration files use JSON format with the following structure:
 - Detail levels and enums use JSON array format: `["Full"]`, `["Sharp"]`
 - `max_collection_items` can be `null` for unlimited, or omitted to use preset default
 - Preset defaults vary: `quiet` uses 0, `compact` uses 20, `full` uses 100, `verbose` uses null
+
+**Partial configs (overlay):** A config file may specify only the fields you want to change;
+omitted fields are inherited from the mode default. So a minimal config is enough to, say,
+suppress one device without restating the required detail-level fields:
+
+```json
+{ "ignore_names": [ { "domain_type": ["DTDevice"], "name": "DJMFilter" } ] }
+```
+
+```bash
+alsdiff a.als b.als --config only-ignore.json   # default detail levels, minus DJMFilter
+```
+
+> `--preset` takes precedence over `--config` (priority: CLI flags > `--preset` > `--config` >
+> auto-discovered > default), so a config file is **not** combined with a `--preset`. To tweak a
+> preset, dump it (`alsdiff --dump-preset full > my.json`), edit, and pass it via `--config`.
 
 ### Detail Levels
 
@@ -447,7 +467,9 @@ You can customize display behavior for specific types of elements using `type_ov
 | `DTLiveset` | Root level of the Live set |
 | `DTTrack` | MIDI/Audio/Group tracks |
 | `DTDevice` | Plugin, Group, and Max for Live devices |
-| `DTClip` | Audio and MIDI clips |
+| `DTClip` | **Session-view** clips (clip slots) |
+| `DTArrangementClip` | **Arrangement-view** clips (timeline) |
+| `DTTakeClip` | Take-lane clips (recording takes/comping); hidden by default |
 | `DTAutomation` | Automation envelopes |
 | `DTMixer` | Track mixer settings |
 | `DTRouting` | Input/output routing |
@@ -464,6 +486,26 @@ You can customize display behavior for specific types of elements using `type_ov
 | `DTSampleRef` | Audio sample references |
 | `DTVersion` | File version |
 | `DTOther` | Any other elements |
+
+#### Clip Sources (Session / Arrangement / Take Lanes)
+
+Ableton stores a track's clips in three separate places, and `alsdiff` parses each into its
+own collection with a distinct domain type:
+
+- **Session Clips** (`DTClip`) — the clip slots in Session view.
+- **Arrangement Clips** (`DTArrangementClip`) — clips placed on the Arrangement timeline.
+- **Take Lanes** (`DTTakeClip`) — recording takes / comping lanes. These are recording cruft
+  and are **hidden by default** in every preset.
+
+Because each source is its own domain type, you control them independently via
+`type_overrides`. For example, to see only Session-view clip changes (hiding the Arrangement
+timeline), add to your config:
+
+```json
+"type_overrides": [
+  { "domain_type": ["DTArrangementClip"], "override": { "added": ["Ignore"], "removed": ["Ignore"], "modified": ["Ignore"], "unchanged": ["Ignore"] } }
+]
+```
 
 #### Override Format
 
@@ -488,6 +530,31 @@ You can customize display behavior for specific types of elements using `type_ov
   }
 ]
 ```
+
+### Name-Based Suppression
+
+While `type_overrides` controls detail by *type*, `ignore_names` removes specific items by
+*name*. Each rule pairs a `domain_type` with a `name`; any item or collection of that type whose
+name matches is dropped from the output entirely (for every change type), in all output modes
+(tree, JSON, stats). This is handy for hiding a recurring device that changes across many tracks
+without losing the rest of those tracks' diffs.
+
+```json
+"ignore_names": [
+  { "domain_type": ["DTDevice"], "name": "DJMFilter" },
+  { "domain_type": ["DTDevice"], "name": "kHs Gain" }
+]
+```
+
+Matching is **exact** (not substring) against any of:
+
+- the leading type/device token, before `" (#"` — e.g. `"DJMFilter"` matches `DJMFilter (#3): DJMFilter`;
+- the trailing display name, after `"): "` — e.g. `"1 BEAT"` matches `MidiTrack (#12): 1 BEAT`;
+- the whole name, when there is no `(#...)` marker — e.g. `"Main"`.
+
+For devices the leading token is the device name; for tracks/clips it is the type, while the
+trailing segment is the user-given name. Removing every item from a collection leaves no orphan
+header — the emptied collection is omitted, just like a `type_overrides` set to `Ignore`.
 
 </details>
 
